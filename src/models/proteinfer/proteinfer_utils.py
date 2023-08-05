@@ -25,5 +25,4 @@ _ADDITIONAL_AA_VOCABULARY = [
 # Vocab of all possible tokens in a valid input sequence
 FULL_RESIDUE_VOCAB = AMINO_ACID_VOCABULARY + _ADDITIONAL_AA_VOCABULARY
 
-# Map AA characters to their index in FULL_RESIDUE_VOCAB.
-_RESIDUE_TO_INT = {aa: idx for idx, aa in enumerate(FULL_RESIDUE_VOCAB)}
+
