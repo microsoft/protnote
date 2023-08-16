@@ -10,6 +10,14 @@ def set_padding_to_sentinel(padded_representations, sequence_lengths, sentinel):
     # Use broadcasting to expand the mask to match the shape of padded_representations
     return torch.where(seq_mask.unsqueeze(-1), padded_representations, sentinel)
 
+class SequentialMultiInput(torch.nn.Sequential):
+	def forward(self, *inputs):
+		for module in self._modules.values():
+			if type(inputs) == tuple:
+				inputs = module(*inputs)
+			else:
+				inputs = module(inputs)
+		return inputs
 
 class MaskedConv1D(torch.nn.Conv1d):
     def forward(self,x,sequence_lengths):
@@ -87,7 +95,8 @@ class ProteInfer(torch.nn.Module):
                                   stride=1,
                                   dilation=1
                                 )
-        self.resnet_blocks = []
+        self.resnet_blocks = torch.nn.ModuleList()
+
         for i in range(num_resnet_blocks):
             self.resnet_blocks.append(
                 Residual(input_channels=output_channels,
@@ -96,16 +105,15 @@ class ProteInfer(torch.nn.Module):
                         bottleneck_factor=bottleneck_factor,
                         activation = activation)
                      )
-
         self.output_layer = torch.nn.Linear(in_features=output_channels,out_features=num_labels)
 
     def forward(self,x,sequence_lengths):
         features = self.conv1(x,sequence_lengths)
-        
+
         #Sequential doesn't work here because of multiple inputs
         for resnet_block in self.resnet_blocks:
             features = resnet_block(features,sequence_lengths)
-        
+
         features = (torch.sum(features,dim=-1)/sequence_lengths.unsqueeze(-1)) #Works because convs are masked
         logits = self.output_layer(features)
         return logits
