@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import Dataset
-from src.utils.data import read_fasta, read_json, get_vocab_mappings, ints_to_multihot
+from src.utils.data import read_fasta, read_json, get_vocab_mappings
 from typing import Optional,List,Text
 
 
@@ -50,17 +50,21 @@ class ProteinDataset(Dataset):
     def __len__(self):
         return len(self.data)
 
+    def process_example(self,sequence,labels):
+        sequence_id, labels = labels[0], labels[1:]
+
+        sequence_ints = torch.tensor([self.aminoacid2int[aa] for aa in sequence],dtype=torch.long)
+        sequence_length = len(sequence_ints)
+        labels_ints =torch.tensor([self.label2int[l] for l in labels],dtype=torch.long)
+
+        sequence_onehots = torch.nn.functional.one_hot(sequence_ints,num_classes =self.sequence_vocabulary_size ).permute(1,0)        
+        labels_multihot =  torch.nn.functional.one_hot(labels_ints,num_classes = self.label_vocabulary_size ).sum(dim=0)
+
+        return sequence_onehots, labels_multihot,sequence_length
+
     def __getitem__(self, idx):
         sequence, labels = self.data[idx]
-
-        sequence_id, labels = labels[0], labels[1:]
-        sequence_ints = [self.aminoacid2int[aa] for aa in sequence]
-        
-        labels_ints = [self.label2int[l] for l in labels]
-        labels_multihot = ints_to_multihot(int_list=labels_ints,
-                                           num_labels=self.label_vocabulary_size)
-
-        return torch.tensor(sequence_ints,dtype=torch.int64), torch.tensor(labels_multihot,dtype=torch.int64)
+        return self.process_example(sequence,labels)
 
 
 

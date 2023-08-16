@@ -2,6 +2,7 @@ from Bio import SeqIO
 import json
 import numpy as np
 from typing import Optional,List
+import pickle
 
 def read_fasta(data_path:str,sep=" "):
     sequences_with_labels = []
@@ -27,13 +28,15 @@ def get_vocab_mappings(vocabulary):
     int2term = {idx:term for term,idx in term2int.items()}
     return term2int, int2term
 
-def ints_to_multihot(int_list: list,num_labels: list )->List:
-    multihot = [0]*num_labels
-    for i in int_list:
-        multihot[i] = 1
-    return multihot
 
-def multihot_to_ints(multihot:List)->List:
-    return [idx for idx,val in enumerate(multihot) if val==1]
+def save_to_pickle(item,file_path: str):
+    with open(file_path,'wb') as p:
+        pickle.dump(item,p)
+
+def read_pickle(file_path: str):
+    with open(file_path,'rb') as p:
+        item = pickle.load(p)
+    return item
+
 
     
