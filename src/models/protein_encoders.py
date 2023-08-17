@@ -10,14 +10,6 @@ def set_padding_to_sentinel(padded_representations, sequence_lengths, sentinel):
     # Use broadcasting to expand the mask to match the shape of padded_representations
     return torch.where(seq_mask.unsqueeze(-1), padded_representations, sentinel)
 
-class SequentialMultiInput(torch.nn.Sequential):
-	def forward(self, *inputs):
-		for module in self._modules.values():
-			if type(inputs) == tuple:
-				inputs = module(*inputs)
-			else:
-				inputs = module(inputs)
-		return inputs
 
 class MaskedConv1D(torch.nn.Conv1d):
     def forward(self,x,sequence_lengths):
