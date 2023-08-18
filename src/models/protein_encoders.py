@@ -1,15 +1,7 @@
 import torch
 from typing import Literal,Text,Optional
 import numpy as np
-
-
-def set_padding_to_sentinel(padded_representations, sequence_lengths, sentinel):
-    # Create a sequence mask
-    seq_mask = torch.arange(padded_representations.size(1)).to(sequence_lengths.device) < sequence_lengths[:, None]
-
-    # Use broadcasting to expand the mask to match the shape of padded_representations
-    return torch.where(seq_mask.unsqueeze(-1), padded_representations, sentinel)
-
+from ..data.datasets import set_padding_to_sentinel
 
 class MaskedConv1D(torch.nn.Conv1d):
     def forward(self,x,sequence_lengths):

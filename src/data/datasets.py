@@ -54,7 +54,7 @@ class ProteinDataset(Dataset):
         sequence_id, labels = labels[0], labels[1:]
 
         sequence_ints = torch.tensor([self.aminoacid2int[aa] for aa in sequence],dtype=torch.long)
-        sequence_length = len(sequence_ints)
+        sequence_length = torch.tensor(len(sequence_ints))
         labels_ints =torch.tensor([self.label2int[l] for l in labels],dtype=torch.long)
 
         sequence_onehots = torch.nn.functional.one_hot(sequence_ints,num_classes =self.sequence_vocabulary_size ).permute(1,0)        
@@ -65,9 +65,21 @@ class ProteinDataset(Dataset):
     def __getitem__(self, idx):
         sequence, labels = self.data[idx]
         return self.process_example(sequence,labels)
+    
+    @classmethod
+    def create_multiple_datasets(cls,
+                                 data_paths:list,
+                                 sequence_vocabulary_path: str,
+                                 label_vocabulary_path: Optional[Text] = None):
+        return [cls(data_path,sequence_vocabulary_path,label_vocabulary_path) for data_path in data_paths]
 
 
+def set_padding_to_sentinel(padded_representations, sequence_lengths, sentinel):
+    # Create a sequence mask
+    seq_mask = torch.arange(padded_representations.size(1)).to(sequence_lengths.device) < sequence_lengths[:, None]
 
+    # Use broadcasting to expand the mask to match the shape of padded_representations
+    return torch.where(seq_mask.unsqueeze(-1), padded_representations, sentinel)
 
 
 
