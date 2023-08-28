@@ -27,7 +27,7 @@ class Residual(torch.nn.Module):
 
         bottleneck_out_channels = int(np.floor(input_channels * bottleneck_factor))
         self.bn_activation_1 = torch.nn.Sequential(
-            torch.nn.BatchNorm1d(input_channels),
+            torch.nn.BatchNorm1d(input_channels,eps=0.001,momentum=0.01),
             activation())
         
         self.masked_conv1 = MaskedConv1D(in_channels=input_channels,
@@ -38,7 +38,7 @@ class Residual(torch.nn.Module):
                             dilation=dilation
                             )
         self.bn_activation_2 = torch.nn.Sequential(
-            torch.nn.BatchNorm1d(bottleneck_out_channels),
+            torch.nn.BatchNorm1d(bottleneck_out_channels,eps=0.001,momentum=0.01),
             activation())
             
         self.masked_conv2 = MaskedConv1D(in_channels=bottleneck_out_channels,

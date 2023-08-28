@@ -78,6 +78,9 @@ def set_padding_to_sentinel(padded_representations, sequence_lengths, sentinel):
     # Create a sequence mask
     seq_mask = torch.arange(padded_representations.size(1)).to(sequence_lengths.device) < sequence_lengths[:, None]
 
+    #Sentinel and padded_representations should be same dtype
+    sentinel = torch.tensor(sentinel, dtype=padded_representations.dtype, device=padded_representations.device)
+                            
     # Use broadcasting to expand the mask to match the shape of padded_representations
     return torch.where(seq_mask.unsqueeze(-1), padded_representations, sentinel)
 
