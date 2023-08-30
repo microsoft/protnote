@@ -3,7 +3,7 @@ from src.data.datasets import ProteinDataset
 from torch.utils.data import DataLoader
 from src.data.collators import collate_variable_sequence_length
 from src.models.protein_encoders import Residual,ProteInfer
-import torchmetrics
+from torchmetrics.classification import BinaryPrecision,BinaryRecall
 import torch
 from tqdm import tqdm
 import logging
@@ -16,9 +16,13 @@ AMINO_ACID_VOCAB_PATH = '/home/samirchar/ProteinFunctions/data/vocabularies/amin
 GO_LABEL_VOCAB_PATH = '/home/samirchar/ProteinFunctions/data/vocabularies/GO_label_vocab.json'
 NUM_LABELS = 32102
 TEST_BATCH_SIZE = 8
-DECISION_TH =  0.5 #0.3746
-METRIC_AVERAGE = 'micro'
+DECISION_TH =  0.99
 DEBUG = False
+
+logging.basicConfig(filename='myapp.log', level=logging.INFO)
+
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+logging.info(f"Using device = {device}")
 
 
 #TODO: Add GPU and prediction function with threshold
@@ -45,12 +49,6 @@ test_loader = DataLoader(dataset=test_dataset,
                           num_workers=2,
                           collate_fn=collate_variable_sequence_length)
 
-f1 = torchmetrics.F1Score(num_labels= NUM_LABELS,
-                          task='multilabel',
-                          threshold = DECISION_TH,
-                          average = METRIC_AVERAGE)
-
-
 model = ProteInfer(num_labels=NUM_LABELS,
                       input_channels=20,
                       output_channels=1100,
@@ -60,21 +58,31 @@ model = ProteInfer(num_labels=NUM_LABELS,
                       num_resnet_blocks=5,
                       bottleneck_factor=0.5)
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
 model.to(device)
 
+precisions = []
+recalls = []
+at_least_one_positive_pred = torch.tensor(0,dtype=int).to(device)#seqs with at least one positive label prediction
+n = torch.tensor(0,dtype=int).to(device)
+seqwise_precision = BinaryPrecision(threshold = DECISION_TH,
+                                    multidim_average='samplewise').to(device)
+seqwise_recall = BinaryRecall(threshold = DECISION_TH,
+                            multidim_average='samplewise').to(device)
 #For debugging
 with torch.no_grad():
-    for batch_idx, (sequences,sequence_lengths,labels) in tqdm(enumerate(test_loader)):
+    for batch_idx, (sequences,sequence_lengths,labels) in tqdm(enumerate(test_loader),total=len(test_loader)):
         sequences,sequence_lengths,labels = (sequences.to(device),
                                         sequence_lengths.to(device),
                                         labels.to(device))
         
+        n+=len(labels)
         logits = model(sequences,sequence_lengths)
         probabilities = torch.sigmoid(logits)
-        f1(probabilities,labels)
-        
 
+        at_least_one_positive_pred+=(probabilities>DECISION_TH).any(axis=1).sum()
+        seqwise_precision(probabilities,labels)
+        seqwise_recall(probabilities,labels)
         
         if DEBUG:
             if batch_idx>=3:
@@ -85,4 +93,7 @@ with torch.no_grad():
             print("| Sequences mask shape:",sequence_lengths.shape,end="\t")
             print("| Labels shape:",labels.shape,end="\t")
     
-    print('F1 =',f1)
+    average_precision = seqwise_precision.compute().sum()/at_least_one_positive_pred
+    average_recall = seqwise_recall.compute().mean()
+    average_f1_score = 2*average_precision*average_recall/(average_precision+average_recall)
+    print(average_f1_score,average_precision,average_recall)
