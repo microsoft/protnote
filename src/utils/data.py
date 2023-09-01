@@ -3,6 +3,7 @@ import json
 import numpy as np
 from typing import Optional,List
 import pickle
+import gzip
 
 def read_fasta(data_path:str,sep=" "):
     sequences_with_labels = []
@@ -37,6 +38,11 @@ def read_pickle(file_path: str):
     with open(file_path,'rb') as p:
         item = pickle.load(p)
     return item
+
+def load_gz_json(path):
+  with open(path, 'rb') as f:
+    with gzip.GzipFile(fileobj=f, mode='rb') as gzip_file:
+      return json.load(gzip_file)
 
 
     

@@ -1,5 +1,6 @@
 from src.utils.data import read_pickle
 import numpy as np
+import collections
 import torch
 
 def transfer_tf_weights_to_torch(torch_model:torch.nn.Module, tf_weights_path:str):
@@ -36,3 +37,72 @@ def transfer_tf_weights_to_torch(torch_model:torch.nn.Module, tf_weights_path:st
             state_dict[name] = torch.from_numpy(tf_param)
     
     torch_model.load_state_dict(state_dict)
+
+
+def reverse_map(
+    applicable_label_dict,
+    label_vocab = None):
+  """Flip parenthood dict to map parents to children.
+
+  Args:
+    applicable_label_dict: e.g. output of get_applicable_label_dict.
+    label_vocab: e.g. output of inference_lib.vocab_from_model_base_path
+
+  Returns:
+    collections.defaultdict of k, v where:
+    k: originally the values in applicable_label_dict
+    v: originally the keys in applicable_label_dict.
+    The defaultdict returns an empty frozenset for keys that are not found.
+    This behavior is desirable for lifted clan label normalizers, where
+    keys may not imply themselves.
+  """
+  # This is technically the entire transitive closure, so it is safe for DAGs
+  # (e.g. GO labels).
+
+  children = collections.defaultdict(set)
+  for child, parents in applicable_label_dict.items():
+    # Avoid adding children which don't appear in the vocab.
+    if label_vocab is None or child in label_vocab:
+      for parent in parents:
+        children[parent].add(child)
+  children = {k: frozenset(v) for k, v in children.items()}
+  return collections.defaultdict(frozenset, children.items())
+
+def normalize_confidences(
+    predictions, label_vocab,
+    applicable_label_dict):
+  """Set confidences of parent labels to the max of their children.
+
+  Args:
+    predictions: [num_sequences, num_labels] ndarray.
+    label_vocab: list of vocab strings in an order that corresponds to
+      `predictions`.
+    applicable_label_dict: Mapping from labels to their parents (including
+      indirect parents).
+
+  Returns:
+    A numpy array [num_sequences, num_labels] with confidences where:
+    if label_vocab[k] in applicable_label_dict[label_vocab[j]],
+    then arr[i, j] >= arr[i, k] for all i.
+  """
+  vocab_indices = {v: i for i, v in enumerate(label_vocab)}
+  children = reverse_map(applicable_label_dict,
+                                        set(vocab_indices.keys()))
+
+  # Only vectorize this along the sequences dimension as the number of children
+  # varies between labels.
+  label_confidences = []
+  for label in label_vocab:
+    child_indices = np.array(
+        [vocab_indices[child] for child in children[label]])
+    if child_indices.size > 1:
+      confidences = np.max(predictions[:, child_indices], axis=1)
+      label_confidences.append(confidences)
+    else:
+      label_confidences.append(predictions[:, vocab_indices[label]])
+
+  return np.stack(label_confidences, axis=1)
+
+
+def get_applicable_label_dict(path):
+  return utils.load_gz_json(path)

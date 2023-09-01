@@ -1,0 +1,74 @@
+sequence_name	predicted_label	confidence	description
+sp|P69891|HBG1_HUMAN	GO:0017001	1.0	antibiotic catabolic process
+sp|P69891|HBG1_HUMAN	GO:0016999	1.0	antibiotic metabolic process
+sp|P69891|HBG1_HUMAN	GO:0005488	1.0	binding
+sp|P69891|HBG1_HUMAN	GO:0009056	1.0	catabolic process
+sp|P69891|HBG1_HUMAN	GO:0043169	1.0	cation binding
+sp|P69891|HBG1_HUMAN	GO:0044464	1.0	cell part
+sp|P69891|HBG1_HUMAN	GO:0044248	1.0	cellular catabolic process
+sp|P69891|HBG1_HUMAN	GO:0022607	1.0	cellular component assembly
+sp|P69891|HBG1_HUMAN	GO:0016043	1.0	cellular component organization
+sp|P69891|HBG1_HUMAN	GO:0071840	1.0	cellular component organization or biogenesis
+sp|P69891|HBG1_HUMAN	GO:1990748	1.0	cellular detoxification
+sp|P69891|HBG1_HUMAN	GO:0044237	1.0	cellular metabolic process
+sp|P69891|HBG1_HUMAN	GO:0098869	1.0	cellular oxidant detoxification
+sp|P69891|HBG1_HUMAN	GO:0009987	1.0	cellular process
+sp|P69891|HBG1_HUMAN	GO:0005575	1.0	cellular_component
+sp|P69891|HBG1_HUMAN	GO:0048037	1.0	cofactor binding
+sp|P69891|HBG1_HUMAN	GO:0051187	1.0	cofactor catabolic process
+sp|P69891|HBG1_HUMAN	GO:0051186	1.0	cofactor metabolic process
+sp|P69891|HBG1_HUMAN	GO:0044444	1.0	cytoplasmic part
+sp|P69891|HBG1_HUMAN	GO:0044445	1.0	cytosolic part
+sp|P69891|HBG1_HUMAN	GO:0098754	1.0	detoxification
+sp|P69891|HBG1_HUMAN	GO:0008144	1.0	drug binding
+sp|P69891|HBG1_HUMAN	GO:0042737	1.0	drug catabolic process
+sp|P69891|HBG1_HUMAN	GO:0017144	1.0	drug metabolic process
+sp|P69891|HBG1_HUMAN	GO:0031838	1.0	haptoglobin-hemoglobin complex
+sp|P69891|HBG1_HUMAN	GO:0020037	1.0	heme binding
+sp|P69891|HBG1_HUMAN	GO:0005833	1.0	hemoglobin complex
+sp|P69891|HBG1_HUMAN	GO:1901363	1.0	heterocyclic compound binding
+sp|P69891|HBG1_HUMAN	GO:0042744	1.0	hydrogen peroxide catabolic process
+sp|P69891|HBG1_HUMAN	GO:0042743	1.0	hydrogen peroxide metabolic process
+sp|P69891|HBG1_HUMAN	GO:0044424	1.0	intracellular part
+sp|P69891|HBG1_HUMAN	GO:0043167	1.0	ion binding
+sp|P69891|HBG1_HUMAN	GO:0008152	1.0	metabolic process
+sp|P69891|HBG1_HUMAN	GO:0046872	1.0	metal ion binding
+sp|P69891|HBG1_HUMAN	GO:0003674	1.0	molecular_function
+sp|P69891|HBG1_HUMAN	GO:0043177	1.0	organic acid binding
+sp|P69891|HBG1_HUMAN	GO:0097159	1.0	organic cyclic compound binding
+sp|P69891|HBG1_HUMAN	GO:0019825	1.0	oxygen binding
+sp|P69891|HBG1_HUMAN	GO:0005344	1.0	oxygen carrier activity
+sp|P69891|HBG1_HUMAN	GO:0051259	1.0	protein complex oligomerization
+sp|P69891|HBG1_HUMAN	GO:0051291	1.0	protein heterooligomerization
+sp|P69891|HBG1_HUMAN	GO:0032991	1.0	protein-containing complex
+sp|P69891|HBG1_HUMAN	GO:0065003	1.0	protein-containing complex assembly
+sp|P69891|HBG1_HUMAN	GO:0043933	1.0	protein-containing complex subunit organization
+sp|P69891|HBG1_HUMAN	GO:0072593	1.0	reactive oxygen species metabolic process
+sp|P69891|HBG1_HUMAN	GO:0036094	1.0	small molecule binding
+sp|P69891|HBG1_HUMAN	GO:0046906	1.0	tetrapyrrole binding
+sp|P69891|HBG1_HUMAN	GO:0005215	1.0	transporter activity
+sp|P69891|HBG1_HUMAN	GO:0008150	0.99	biological_process
+sp|P69891|HBG1_HUMAN	GO:0032501	0.92	multicellular organismal process
+sp|P69891|HBG1_HUMAN	GO:0065007	0.67	biological regulation
+sp|Q7AP54|HBP2_LISMO	GO:0005488	1.0	binding
+sp|Q7AP54|HBP2_LISMO	GO:0008150	1.0	biological_process
+sp|Q7AP54|HBP2_LISMO	GO:0043169	1.0	cation binding
+sp|Q7AP54|HBP2_LISMO	GO:0071241	1.0	cellular response to inorganic substance
+sp|Q7AP54|HBP2_LISMO	GO:0071281	1.0	cellular response to iron ion
+sp|Q7AP54|HBP2_LISMO	GO:0071248	1.0	cellular response to metal ion
+sp|Q7AP54|HBP2_LISMO	GO:0005575	1.0	cellular_component
+sp|Q7AP54|HBP2_LISMO	GO:0016021	1.0	integral component of membrane
+sp|Q7AP54|HBP2_LISMO	GO:0031224	1.0	intrinsic component of membrane
+sp|Q7AP54|HBP2_LISMO	GO:0043167	1.0	ion binding
+sp|Q7AP54|HBP2_LISMO	GO:0044425	1.0	membrane part
+sp|Q7AP54|HBP2_LISMO	GO:0046872	1.0	metal ion binding
+sp|Q7AP54|HBP2_LISMO	GO:0003674	1.0	molecular_function
+sp|Q7AP54|HBP2_LISMO	GO:0042221	1.0	response to chemical
+sp|Q7AP54|HBP2_LISMO	GO:0010035	1.0	response to inorganic substance
+sp|Q7AP54|HBP2_LISMO	GO:0010039	1.0	response to iron ion
+sp|Q7AP54|HBP2_LISMO	GO:0050896	0.99	response to stimulus
+sp|Q7AP54|HBP2_LISMO	GO:0010038	0.98	response to metal ion
+sp|Q7AP54|HBP2_LISMO	GO:0009987	0.97	cellular process
+sp|Q7AP54|HBP2_LISMO	GO:0070887	0.96	cellular response to chemical stimulus
+sp|Q7AP54|HBP2_LISMO	GO:0051716	0.92	cellular response to stimulus
+sp|Q7AP54|HBP2_LISMO	GO:0005515	0.71	protein binding

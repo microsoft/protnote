@@ -10,8 +10,12 @@ class MaskedConv1D(torch.nn.Conv1d):
         but reduces overhead of setting padding to sentiel in other contexts.
         '''
         x = set_padding_to_sentinel(x,sequence_lengths,0)
+        print('input_to_conv',x.shape,x.mean(),x.sum())
         x = super().forward(x)
+        print('output_of_conv',x.shape,x.mean(),x.sum())
         x = set_padding_to_sentinel(x,sequence_lengths,0)
+        print(x)
+        print('output_of_sentiel',x.shape,x.mean(),x.sum())
         return x
 
 #ResNet-V2 https://arxiv.org/pdf/1602.07261v2.pdf
@@ -53,6 +57,7 @@ class Residual(torch.nn.Module):
     def forward(self,x,sequence_lengths):
         out = self.bn_activation_1(x)
         out = self.masked_conv1(out,sequence_lengths)
+        print(out.shape,out.mean())
         out = self.bn_activation_2(out)
         out = self.masked_conv2(out,sequence_lengths)
 
@@ -92,13 +97,18 @@ class ProteInfer(torch.nn.Module):
         self.output_layer = torch.nn.Linear(in_features=output_channels,out_features=num_labels)
 
     def forward(self,x,sequence_lengths):
+        print('input_seq',x.shape,x.mean(),x.sum())
+        print('input_seq_len',sequence_lengths.shape,sequence_lengths)
         features = self.conv1(x,sequence_lengths)
-
+        print('first_conv',features.shape,features.mean())
         #Sequential doesn't work here because of multiple inputs
-        for resnet_block in self.resnet_blocks:
+        for idx,resnet_block in enumerate(self.resnet_blocks):
+            print('resnet_block: ',idx)
             features = resnet_block(features,sequence_lengths)
 
-        features = (torch.sum(features,dim=-1)/sequence_lengths.unsqueeze(-1)) #Works because convs are masked
+        features = set_padding_to_sentinel(features,sequence_lengths,0)
+        features = (torch.sum(features,dim=-1)/sequence_lengths.unsqueeze(-1)) 
+        
         logits = self.output_layer(features)
         return logits
 
