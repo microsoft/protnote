@@ -1,4 +1,4 @@
-name: proteinfer_env
+name: proteinfer
 channels:
   - pytorch
   - conda-forge

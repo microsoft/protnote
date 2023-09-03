@@ -167,7 +167,7 @@ class ProteinDataset(Dataset):
                                  label_vocabulary_path: Optional[Text] = None):
         return [cls(data_path,sequence_vocabulary_path,label_vocabulary_path) for data_path in data_paths]
 
-
+'''
 def set_padding_to_sentinel(padded_representations, sequence_lengths, sentinel):
     # Create a sequence mask
     seq_mask = torch.arange(padded_representations.size(1)).to(sequence_lengths.device) < sequence_lengths[:, None]
@@ -177,3 +177,37 @@ def set_padding_to_sentinel(padded_representations, sequence_lengths, sentinel):
                             
     # Use broadcasting to expand the mask to match the shape of padded_representations
     return torch.where(seq_mask.unsqueeze(-1), padded_representations, sentinel)
+'''
+
+
+def set_padding_to_sentinel(padded_representations, sequence_lengths, sentinel):
+    """
+    Set the padding values in the input tensor to the sentinel value.
+    
+    Parameters:
+        padded_representations (torch.Tensor): The input tensor of shape (batch_size, dim, max_sequence_length)
+        sequence_lengths (torch.Tensor): 1D tensor containing original sequence lengths for each sequence in the batch
+        sentinel (float): The value to set the padding to
+        
+    Returns:
+        torch.Tensor: Tensor with padding values set to sentinel
+    """
+    
+    # Get the shape of the input tensor
+    batch_size, dim, max_sequence_length = padded_representations.shape
+    
+    # Get the device of the input tensor
+    device = padded_representations.device
+    
+    # Create a mask that identifies padding, ensuring it's on the same device
+    mask = torch.arange(max_sequence_length, device=device).expand(batch_size, max_sequence_length) >= sequence_lengths.unsqueeze(1).to(device)
+    
+    # Expand the mask to cover the 'dim' dimension
+    mask = mask.unsqueeze(1).expand(-1, dim, -1)
+    
+    # Use the mask to set the padding values to sentinel
+    padded_representations[mask] = sentinel
+    
+    return padded_representations
+
+

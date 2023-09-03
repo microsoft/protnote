@@ -133,6 +133,7 @@ def load_models(model_cache_path, num_ensemble_elements):
       inner_itr = inferrer_list_paths[:num_ensemble_elements]
       inferrer_list = []
       for p in inner_itr:
+        print(p)
         inferrer_list.append(inference.Inferrer(p, use_tqdm=True))
         pbar.update()
       to_return.append(inferrer_list)

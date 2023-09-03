@@ -137,7 +137,7 @@ def _is_sequence_short_enough_for_training(example):
 
 def non_batched_dataset(train_dev_or_test,
                         label_vocab,
-                        data_root_dir=DATA_ROOT_DIR):
+                        dataset_files):
   """Constructs a dataset of examples.
 
   Args:
@@ -158,16 +158,12 @@ def non_batched_dataset(train_dev_or_test,
   if train_dev_or_test not in DATA_FOLD_VALUES:
     raise ValueError(('Only train, dev, test and * are supported datasets.'
                       ' Received {}.').format(train_dev_or_test))
-  dataset_files = [
-      os.path.join(data_root_dir, f)
-      for f in tf.gfile.ListDirectory(data_root_dir)
-      if train_dev_or_test in f and ".tfrecord" in f
-  ]
 
   tfrecord_dataset = tf.data.TFRecordDataset(dataset_files)
 
   dataset = tfrecord_dataset.map(lambda record: tf.io.parse_single_example(  # pylint: disable=g-long-lambda
       record, DATASET_FEATURES))
+  print(dataset)
   dataset = dataset.map(_add_sequence_length)
   dataset = dataset.filter(_is_sequence_short_enough_for_training)
 
