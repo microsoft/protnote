@@ -19,13 +19,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
-import sys
-
-# Get the current script's directory
-current_directory = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_directory)
-
 import base64
 import functools
 import gzip

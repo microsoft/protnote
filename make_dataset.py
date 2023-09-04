@@ -64,9 +64,6 @@ def process_split(input_dir:str,
 
 
 if __name__ == '__main__':
-    """
-    python make_dataset.py --input-dir /home/ncorley/protein/ProteinFunctions/data/swissprot/proteinfer_splits/random --output-dir /home/ncorley/protein/ProteinFunctions/data/swissprot/proteinfer_splits/random --annotation-types GO --splits train dev test
-    """
     logging.basicConfig(format='%(asctime)s | %(levelname)s: %(message)s', level=logging.NOTSET)
     parser = argparse.ArgumentParser()
 

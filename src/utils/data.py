@@ -3,7 +3,6 @@ import json
 import numpy as np
 from typing import Optional,List
 import pickle
-import pandas as pd
 import gzip
 
 def read_fasta(data_path:str,sep=" "):
@@ -40,27 +39,10 @@ def read_pickle(file_path: str):
         item = pickle.load(p)
     return item
 
-def filter_annotations(sequences_with_labels: list, allowed_annotations: set) -> list:
-    """
-    Filters out specified annotations from a list of sequences with labels.
-
-    Parameters:
-    - sequences_with_labels (list): A list of tuples where each tuple contains a sequence and its associated labels.
-    - allowed_annotations (set): Set of annotations that are allowed.
-
-    Returns:
-    - List of tuples where each tuple is (sequence, annotations) and each annotation is in the allowed_annotations set.
-    """
-    # Initialize the filtered data
-    filtered_data = []
-    for sequence, annotations in sequences_with_labels:
-        # Filter the annotations for the current sequence
-        filtered_annots = [annot for annot in annotations if annot in allowed_annotations]
-        if filtered_annots:
-            filtered_data.append((sequence, filtered_annots))
-    return filtered_data
-
 def load_gz_json(path):
   with open(path, 'rb') as f:
     with gzip.GzipFile(fileobj=f, mode='rb') as gzip_file:
-      return json.load(gzip_file)    
+      return json.load(gzip_file)
+
+
+    
