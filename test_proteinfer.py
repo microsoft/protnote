@@ -8,6 +8,7 @@ from torchmetrics.classification import BinaryPrecision,BinaryRecall
 from src.utils.data import read_json,load_gz_json
 from src.utils.proteinfer import normalize_confidences
 import torch
+import numpy as np
 from tqdm import tqdm
 import logging
 
@@ -20,9 +21,9 @@ GO_LABEL_VOCAB_PATH = '/home/samirchar/ProteinFunctions/data/vocabularies/GO_lab
 MODEL_WIEGHTS_PATH = '/home/samirchar/ProteinFunctions/models/proteinfer/GO_model_weights.pkl'
 PARENTHOOD_LIB_PATH = '/home/samirchar/ProteinFunctions/parenthood.json.gz'
 NUM_LABELS = 32102
-TEST_BATCH_SIZE = 2**8
-DECISION_TH =   0.7#0.3746
+TEST_BATCH_SIZE = 2**7
 DEBUG = False
+DECISION_TH = 0.710102#0.88
 
 logging.basicConfig( level=logging.INFO)
 
@@ -44,8 +45,6 @@ def compute_metric(model,dataloader,metric):
 
 
 if DEBUG:
-    
-
     test_dataset = ProteinDataset(data_path=TRAIN_DATA_PATH,
                                 sequence_vocabulary_path=AMINO_ACID_VOCAB_PATH,
                                 label_vocabulary_path=GO_LABEL_VOCAB_PATH)
@@ -63,6 +62,12 @@ test_loader = DataLoader(dataset=test_dataset,
                           num_workers=2,
                           collate_fn=collate_variable_sequence_length)
 
+val_loader = DataLoader(dataset=val_dataset,
+                          batch_size=TEST_BATCH_SIZE,
+                          shuffle=False,
+                          num_workers=2,
+                          collate_fn=collate_variable_sequence_length)
+
 model = ProteInfer(num_labels=NUM_LABELS,
                       input_channels=20,
                       output_channels=1100,
@@ -74,25 +79,64 @@ model = ProteInfer(num_labels=NUM_LABELS,
 
 transfer_tf_weights_to_torch(model,MODEL_WIEGHTS_PATH)
 model.to(device)
-
-
-
+model = model.eval()
 
 vocab = read_json(GO_LABEL_VOCAB_PATH)
 label_normalizer = load_gz_json(PARENTHOOD_LIB_PATH)
-#from sklearn.metrics import precision_score,recall_score
 
+if DECISION_TH is None:
+    val_probas =[]
+    val_labels = []
+    with torch.no_grad():
+        for batch_idx, (sequences,sequence_lengths,labels) in tqdm(enumerate(val_loader),total=len(val_loader)):
+            sequences,sequence_lengths,labels = (sequences.to(device),
+                                            sequence_lengths.to(device),
+                                            labels.to(device))
+            
+            logits = model(sequences,sequence_lengths)
+            probabilities = torch.sigmoid(logits)
+            probabilities = torch.tensor(normalize_confidences(predictions=probabilities.detach().cpu().numpy(),
+                                label_vocab=vocab,
+                                applicable_label_dict=label_normalizer),device=probabilities.device)
 
-probas = []
-truths = []
-from sklearn.metrics import precision_score
+            
+            val_probas.append(probabilities)
+            val_labels.append(labels)
+
+    val_probas = torch.cat(val_probas)
+    val_labels = torch.cat(val_labels)
+    best_th = 0
+    best_f1 = 0
+
+    for th in np.arange(0.1,1,0.01):
+        seqwise_precision = BinaryPrecision(threshold = th,
+                                            multidim_average='samplewise').to(device)
+        seqwise_recall = BinaryRecall(threshold = th,
+                                    multidim_average='samplewise').to(device)
+        at_least_one_positive_pred=(val_probas>th).any(axis=1).sum()
+
+        seqwise_precision(val_probas,val_labels)
+        seqwise_recall(val_probas,val_labels)
+        average_precision = seqwise_precision.compute().sum()/at_least_one_positive_pred
+        average_recall = seqwise_recall.compute().mean()
+        average_f1_score = 2*average_precision*average_recall/(average_precision+average_recall)
+        if average_f1_score>best_f1:
+            best_f1 = average_f1_score
+            best_th = th
+        print('TH:',th,'F1:',average_f1_score)
+    print('Best Val F1:',best_f1,'Best Val TH:',best_th)
+    DECISION_TH =   best_th
+
 at_least_one_positive_pred = torch.tensor(0,dtype=int).to(device)#seqs with at least one positive label prediction
 n = torch.tensor(0,dtype=int).to(device)
 seqwise_precision = BinaryPrecision(threshold = DECISION_TH,
                                     multidim_average='samplewise').to(device)
 seqwise_recall = BinaryRecall(threshold = DECISION_TH,
                             multidim_average='samplewise').to(device)
-#For debugging
+
+
+all_probas = []
+all_labels = []
 with torch.no_grad():
     for batch_idx, (sequences,sequence_lengths,labels) in tqdm(enumerate(test_loader),total=len(test_loader)):
         sequences,sequence_lengths,labels = (sequences.to(device),
@@ -102,14 +146,11 @@ with torch.no_grad():
         n+=len(labels)
         logits = model(sequences,sequence_lengths)
         probabilities = torch.sigmoid(logits)
-
-    
         probabilities = torch.tensor(normalize_confidences(predictions=probabilities.detach().cpu().numpy(),
                             label_vocab=vocab,
                             applicable_label_dict=label_normalizer),device=probabilities.device)
-        
-        probas.append(probabilities.detach().cpu().numpy())
-        truths.append(labels.detach().cpu().numpy())
+        all_probas.append(probabilities)
+        all_labels.append(labels)
         at_least_one_positive_pred+=(probabilities>DECISION_TH).any(axis=1).sum()
         seqwise_precision(probabilities,labels)
         seqwise_recall(probabilities,labels)
@@ -122,15 +163,14 @@ with torch.no_grad():
             print("| Labels shape:",labels.shape,end="\t")
     
     average_precision = seqwise_precision.compute().sum()/at_least_one_positive_pred
+    print('raw average precision:',seqwise_precision.compute().mean())
     average_recall = seqwise_recall.compute().mean()
     average_f1_score = 2*average_precision*average_recall/(average_precision+average_recall)
     coverage = at_least_one_positive_pred/n
 
-    truths_flat=[j for i in truths for j in i]
-    probas_flat=[j for i in probas for j in i]
-
-    #precisions_np=[precision_score(i,(j>0.5)*1) for i,j in zip(truths_flat,probas_flat)]
-    #at_leat_one_np=[(((j>0.5).any())*1) for i,j in zip(truths_flat,probas_flat)]
     print(average_f1_score,average_precision,average_recall,coverage)
+
+    all_probas = torch.cat(all_probas)
+    all_labels = torch.cat(all_labels)
 
 torch.cuda.empty_cache()
