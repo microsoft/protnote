@@ -1,6 +1,6 @@
 import torch
 
-def collate_variable_sequence_length(batch):
+def proteinfer_collate_variable_sequence_length(batch):
     '''
     Batch should have sequences, labels, and sequence lengths
     '''

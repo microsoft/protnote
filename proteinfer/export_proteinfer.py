@@ -28,14 +28,14 @@ def export_model_weights(model_path:str,model_name:str,output_dir:str):
         pickle.dump(weights_dict, f,protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def export_vocab(model_path:str,model_name:str,output_dir:str,vocab_variable_name:str = 'label_vocab:0'):
+def export_proteinfer_vocab(model_path:str,model_name:str,output_dir:str,vocab_variable_name:str = 'label_vocab:0'):
     inferrer = inference.Inferrer(
             savedmodel_dir_path=model_path,
             use_tqdm= True,
             batch_size=16,
             activation_type="pooled_representation"
     )
-    output_path = os.path.join(output_dir,f'{model_name}_label_vocab.json')
+    output_path = os.path.join(output_dir,f'proteinfer_{model_name}_label_vocab.json')
     label_vocab = inferrer.get_variable(vocab_variable_name).astype(str)
     with open(output_path,'w') as output_file:
         json.dump(label_vocab.tolist(),output_file)
@@ -58,6 +58,6 @@ if __name__ =='__main__':
         os.mkdir(export_folder)
     
     #if os.path.exists('export')
-    export_vocab(model_path=args.model_path,model_name=args.model_name,output_dir=export_folder)
+    export_proteinfer_vocab(model_path=args.model_path,model_name=args.model_name,output_dir=export_folder)
     export_model_weights(model_path=args.model_path,model_name=args.model_name,output_dir=export_folder)
 

@@ -5,7 +5,7 @@ from typing import Optional,List,Text
 
 
 
-class ProteinDataset(Dataset):
+class ProteInferDataset(Dataset):
     def __init__(self, data_path:str, sequence_vocabulary_path: Optional[Text] = None, label_vocabulary_path: Optional[Text] = None):
         self.data_path = data_path
         self.data = read_fasta(data_path)

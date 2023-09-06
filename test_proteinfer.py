@@ -1,7 +1,7 @@
 
-from src.data.datasets import ProteinDataset
+from src.data.datasets import ProteInferDataset
 from torch.utils.data import DataLoader
-from src.data.collators import collate_variable_sequence_length
+from src.data.collators import proteinfer_collate_variable_sequence_length
 from src.models.protein_encoders import ProteInfer
 from src.utils.proteinfer import transfer_tf_weights_to_torch
 from torchmetrics.classification import BinaryPrecision,BinaryRecall
@@ -17,13 +17,13 @@ TRAIN_DATA_PATH = '/home/samirchar/ProteinFunctions/data/swissprot/proteinfer_sp
 VAL_DATA_PATH = '/home/samirchar/ProteinFunctions/data/swissprot/proteinfer_splits/random/dev_GO.fasta'
 TEST_DATA_PATH = '/home/samirchar/ProteinFunctions/data/swissprot/proteinfer_splits/random/test_GO.fasta'
 AMINO_ACID_VOCAB_PATH = '/home/samirchar/ProteinFunctions/data/vocabularies/amino_acid_vocab.json'
-GO_LABEL_VOCAB_PATH = '/home/samirchar/ProteinFunctions/data/vocabularies/GO_label_vocab.json'
+GO_LABEL_VOCAB_PATH = '/home/samirchar/ProteinFunctions/data/vocabularies/proteinfer_GO_label_vocab.json'
 MODEL_WIEGHTS_PATH = '/home/samirchar/ProteinFunctions/models/proteinfer/GO_model_weights.pkl'
 PARENTHOOD_LIB_PATH = '/home/samirchar/ProteinFunctions/parenthood.json.gz'
 NUM_LABELS = 32102
 TEST_BATCH_SIZE = 2**7
 DEBUG = False
-DECISION_TH = 0.710102#0.88
+DECISION_TH = 0.88
 
 logging.basicConfig( level=logging.INFO)
 
@@ -45,13 +45,13 @@ def compute_metric(model,dataloader,metric):
 
 
 if DEBUG:
-    test_dataset = ProteinDataset(data_path=TRAIN_DATA_PATH,
+    test_dataset = ProteInferDataset(data_path=TRAIN_DATA_PATH,
                                 sequence_vocabulary_path=AMINO_ACID_VOCAB_PATH,
                                 label_vocabulary_path=GO_LABEL_VOCAB_PATH)
     
     test_dataset.data = [i for i in test_dataset.data if i[1][0] in ['P69891','Q7AP54']]
 else:
-    val_dataset,test_dataset = ProteinDataset\
+    val_dataset,test_dataset = ProteInferDataset\
         .create_multiple_datasets(data_paths=[VAL_DATA_PATH,TEST_DATA_PATH],
                                 sequence_vocabulary_path=AMINO_ACID_VOCAB_PATH,
                                 label_vocabulary_path=GO_LABEL_VOCAB_PATH)
@@ -60,13 +60,13 @@ test_loader = DataLoader(dataset=test_dataset,
                           batch_size=TEST_BATCH_SIZE,
                           shuffle=False,
                           num_workers=2,
-                          collate_fn=collate_variable_sequence_length)
+                          collate_fn=proteinfer_collate_variable_sequence_length)
 
 val_loader = DataLoader(dataset=val_dataset,
                           batch_size=TEST_BATCH_SIZE,
                           shuffle=False,
                           num_workers=2,
-                          collate_fn=collate_variable_sequence_length)
+                          collate_fn=proteinfer_collate_variable_sequence_length)
 
 model = ProteInfer(num_labels=NUM_LABELS,
                       input_channels=20,
@@ -135,8 +135,6 @@ seqwise_recall = BinaryRecall(threshold = DECISION_TH,
                             multidim_average='samplewise').to(device)
 
 
-all_probas = []
-all_labels = []
 with torch.no_grad():
     for batch_idx, (sequences,sequence_lengths,labels) in tqdm(enumerate(test_loader),total=len(test_loader)):
         sequences,sequence_lengths,labels = (sequences.to(device),
@@ -149,8 +147,7 @@ with torch.no_grad():
         probabilities = torch.tensor(normalize_confidences(predictions=probabilities.detach().cpu().numpy(),
                             label_vocab=vocab,
                             applicable_label_dict=label_normalizer),device=probabilities.device)
-        all_probas.append(probabilities)
-        all_labels.append(labels)
+
         at_least_one_positive_pred+=(probabilities>DECISION_TH).any(axis=1).sum()
         seqwise_precision(probabilities,labels)
         seqwise_recall(probabilities,labels)
@@ -163,14 +160,11 @@ with torch.no_grad():
             print("| Labels shape:",labels.shape,end="\t")
     
     average_precision = seqwise_precision.compute().sum()/at_least_one_positive_pred
-    print('raw average precision:',seqwise_precision.compute().mean())
     average_recall = seqwise_recall.compute().mean()
     average_f1_score = 2*average_precision*average_recall/(average_precision+average_recall)
     coverage = at_least_one_positive_pred/n
 
     print(average_f1_score,average_precision,average_recall,coverage)
 
-    all_probas = torch.cat(all_probas)
-    all_labels = torch.cat(all_labels)
 
 torch.cuda.empty_cache()
