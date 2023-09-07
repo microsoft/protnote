@@ -20,6 +20,7 @@ AMINO_ACID_VOCAB_PATH = '/home/samirchar/ProteinFunctions/data/vocabularies/amin
 GO_LABEL_VOCAB_PATH = '/home/samirchar/ProteinFunctions/data/vocabularies/proteinfer_GO_label_vocab.json'
 MODEL_WIEGHTS_PATH = '/home/samirchar/ProteinFunctions/models/proteinfer/GO_model_weights.pkl'
 PARENTHOOD_LIB_PATH = '/home/samirchar/ProteinFunctions/parenthood.json.gz'
+PROTEINFER_RESULTS_DIR = '/home/samirchar/ProteinFunctions/data/proteinfer_results/'
 NUM_LABELS = 32102
 TEST_BATCH_SIZE = 2**7
 DEBUG = False
@@ -29,19 +30,6 @@ logging.basicConfig( level=logging.INFO)
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 logging.info(f"Using device = {device}")
-
-
-#TODO: Add GPU and prediction function with threshold
-def compute_metric(model,dataloader,metric):
-    
-    model = model.eval()
-    for  batch_idx, (sequence,sequences_mask,labels) in enumerate(dataloader):
-        with torch.no_grad():
-            logits = model(sequence,sequences_mask)
-
-        predictions = None
-        metric(predictions,labels)
-    return metric
 
 
 if DEBUG:
@@ -88,10 +76,11 @@ if DECISION_TH is None:
     val_probas =[]
     val_labels = []
     with torch.no_grad():
-        for batch_idx, (sequences,sequence_lengths,labels) in tqdm(enumerate(val_loader),total=len(val_loader)):
-            sequences,sequence_lengths,labels = (sequences.to(device),
-                                            sequence_lengths.to(device),
-                                            labels.to(device))
+        for batch_idx, (sequences,sequence_lengths,labels,sequence_ids) in tqdm(enumerate(val_loader),total=len(val_loader)):
+            sequences,sequence_lengths,labels,sequence_ids = (sequences.to(device),
+                                        sequence_lengths.to(device),
+                                        labels.to(device),
+                                        sequence_ids.to(device))
             
             logits = model(sequences,sequence_lengths)
             probabilities = torch.sigmoid(logits)
@@ -134,12 +123,14 @@ seqwise_precision = BinaryPrecision(threshold = DECISION_TH,
 seqwise_recall = BinaryRecall(threshold = DECISION_TH,
                             multidim_average='samplewise').to(device)
 
-
+all_labels = []
+all_probas = []
 with torch.no_grad():
-    for batch_idx, (sequences,sequence_lengths,labels) in tqdm(enumerate(test_loader),total=len(test_loader)):
-        sequences,sequence_lengths,labels = (sequences.to(device),
+    for batch_idx, (sequences,sequence_lengths,labels,sequence_ids) in tqdm(enumerate(test_loader),total=len(test_loader)):
+        sequences,sequence_lengths,labels,sequence_ids = (sequences.to(device),
                                         sequence_lengths.to(device),
-                                        labels.to(device))
+                                        labels.to(device),
+                                        sequence_ids.to(device))
         
         n+=len(labels)
         logits = model(sequences,sequence_lengths)
@@ -151,6 +142,9 @@ with torch.no_grad():
         at_least_one_positive_pred+=(probabilities>DECISION_TH).any(axis=1).sum()
         seqwise_precision(probabilities,labels)
         seqwise_recall(probabilities,labels)
+
+        all_labels.append(labels)
+        all_probas.append(probabilities)
         
         if DEBUG:
             print("Batch index:",batch_idx,end="\t")
@@ -165,6 +159,9 @@ with torch.no_grad():
     coverage = at_least_one_positive_pred/n
 
     print(average_f1_score,average_precision,average_recall,coverage)
-
+    all_labels = torch.cat(all_labels)
+    all_probas = torch.cat(all_probas)
+    np.save(PROTEINFER_RESULTS_DIR+'labels.npy',all_labels.detach().cpu().numpy())
+    np.save(PROTEINFER_RESULTS_DIR+'probas.npy',all_probas.detach().cpu().numpy())
 
 torch.cuda.empty_cache()

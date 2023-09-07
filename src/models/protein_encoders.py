@@ -91,14 +91,21 @@ class ProteInfer(torch.nn.Module):
                      )
         self.output_layer = torch.nn.Linear(in_features=output_channels,out_features=num_labels)
 
-    def forward(self,x,sequence_lengths):
+    def get_embeddings(self,x,sequence_lengths):
         features = self.conv1(x,sequence_lengths)
         #Sequential doesn't work here because of multiple inputs
         for idx,resnet_block in enumerate(self.resnet_blocks):
             features = resnet_block(features,sequence_lengths)
         features = set_padding_to_sentinel(features,sequence_lengths,0)
         features = (torch.sum(features,dim=-1)/sequence_lengths.unsqueeze(-1)) #Average pooling        
+        return features
+    
+    def forward(self,x,sequence_lengths):
+        features = self.get_embeddings(x,sequence_lengths)       
         logits = self.output_layer(features)
         return logits
+
+
+
 
         

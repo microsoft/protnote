@@ -103,6 +103,3 @@ def normalize_confidences(
 
   return np.stack(label_confidences, axis=1)
 
-
-def get_applicable_label_dict(path):
-  return utils.load_gz_json(path)

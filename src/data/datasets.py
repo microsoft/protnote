@@ -3,8 +3,6 @@ from torch.utils.data import Dataset
 from src.utils.data import read_fasta, read_json, get_vocab_mappings
 from typing import Optional,List,Text
 
-
-
 class ProteInferDataset(Dataset):
     def __init__(self, data_path:str, sequence_vocabulary_path: Optional[Text] = None, label_vocabulary_path: Optional[Text] = None):
         self.data_path = data_path
@@ -13,10 +11,11 @@ class ProteInferDataset(Dataset):
         self.label_vocabulary_path = label_vocabulary_path
         self.max_seq_len = None
         self._process_vocab()
-    
+
     def _process_vocab(self):
         self._process_sequence_vocab()
         self._process_label_vocab()
+        self._process_sequence_id_vocab()
 
     def _process_sequence_vocab(self):
 
@@ -42,6 +41,14 @@ class ProteInferDataset(Dataset):
         self.label_vocabulary_size = len(self.label_vocabulary)
         self.label2int, self.int2label = get_vocab_mappings(self.label_vocabulary)
 
+    def _process_sequence_id_vocab(self):
+        self.sequence_ids = set()
+        for obs in self.data:
+            self.sequence_ids.add(obs[1][0])
+        self.sequence_ids = sorted(list(self.sequence_ids))
+        self.sequence_id2int = {term: idx for idx, term in enumerate(self.sequence_ids)}
+        self.int2sequence_id = {idx:term for term,idx in self.sequence_id2int.items()}
+
     def get_max_seq_len(self):
         if self.max_seq_len is None:
             self.max_seq_len = max(len(i[0]) for i in self.data)
@@ -55,12 +62,13 @@ class ProteInferDataset(Dataset):
 
         sequence_ints = torch.tensor([self.aminoacid2int[aa] for aa in sequence],dtype=torch.long)
         sequence_length = torch.tensor(len(sequence_ints))
+        sequence_id = torch.tensor(self.sequence_id2int[sequence_id],dtype=torch.long)
         labels_ints =torch.tensor([self.label2int[l] for l in labels],dtype=torch.long)
 
         sequence_onehots = torch.nn.functional.one_hot(sequence_ints,num_classes =self.sequence_vocabulary_size ).permute(1,0)        
         labels_multihot =  torch.nn.functional.one_hot(labels_ints,num_classes = self.label_vocabulary_size ).sum(dim=0)
 
-        return sequence_onehots, labels_multihot,sequence_length
+        return sequence_onehots, labels_multihot,sequence_length, sequence_id
 
     def __getitem__(self, idx):
         sequence, labels = self.data[idx]

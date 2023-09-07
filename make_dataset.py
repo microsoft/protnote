@@ -7,6 +7,7 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio import SeqIO
 from tqdm import tqdm
+from src.utils.data import read_fasta
 
 def process_sequence_tfrecord(record: dict, annotation_types: list):
     
@@ -34,13 +35,14 @@ def process_sequence_tfrecord(record: dict, annotation_types: list):
 
     return id,(sequence,list(labels))
 
-def process_split(input_dir:str,
-                  output_dir:str,
-                  annotation_types: list,
-                  split: Literal['train','dev','test']):
-    
+def process_tfrecords(input_dir:str,
+                      output_dir:str,
+                      annotation_types: list,
+                      pattern: str,
+                      pattern_name: str
+    ):  
     #Load all tfrecords from desired data split
-    datapipe1 = FileLister(input_dir, f"{split}*.tfrecord")
+    datapipe1 = FileLister(input_dir, pattern)
     datapipe2 = FileOpener(datapipe1, mode="b")
     tfrecord_loader_dp = datapipe2.load_from_tfrecord()
 
@@ -59,7 +61,7 @@ def process_split(input_dir:str,
         record = SeqRecord(Seq(sequence), id=f"{id}", description=description)
         records.append(record)
     
-    with open(os.path.join(output_dir,f"{split}_{'_'.join(annotation_types)}.fasta"), "w") as output_handle:
+    with open(os.path.join(output_dir,f"{pattern_name}_{'_'.join(annotation_types)}.fasta"), "w") as output_handle:
         SeqIO.write(records, output_handle, "fasta")
 
 
@@ -71,7 +73,6 @@ if __name__ == '__main__':
     parser.add_argument('--input-dir',required=True)
     parser.add_argument('--output-dir',required=True)
     parser.add_argument('--annotation-types',nargs = '+', required=True)
-    parser.add_argument('--splits',nargs = '+', required=True)
     args = parser.parse_args()
 
     dirname = os.path.dirname(__file__)
@@ -79,11 +80,17 @@ if __name__ == '__main__':
     #input_dir = os.path.join(dirname, 'data/swissprot/proteinfer_splits/random/')
     #output_dir = os.path.join(dirname, 'data/swissprot/proteinfer_splits/random/')
 
-    for split in args.splits:
-        logging.info(f'Processing {split} split')
-        process_split(input_dir = args.input_dir,
+    patterns = {'train':'train*.tfrecord',
+                'dev':'dev*.tfrecord',
+                'test':'test*.tfrecord',
+                'full':'*.tfrecord'}
+    
+    for pattern_name,pattern in patterns.items():
+        logging.info(f'Processing {pattern_name}')
+        process_tfrecords(input_dir = args.input_dir,
                       output_dir = args.output_dir,
                       annotation_types=args.annotation_types,
-                      split=split)
+                      pattern=pattern,
+                      pattern_name = pattern_name)
     
-
+    
