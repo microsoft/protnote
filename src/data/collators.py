@@ -60,3 +60,32 @@ def collate_variable_sequence_length(batch:List[Tuple], train_sequence_encoder: 
     else:
         # TODO: Return sequence_id instead of sequence
         return processed_sequences, sequence_lengths_tensor, labels_tensor, target_tensor
+
+### TEMPORAL ###
+
+def proteinfer_collate_variable_sequence_length(batch):
+    '''
+    Batch should have sequences, labels, and sequence lengths
+    '''
+    max_length = 0
+    for i in batch:
+        sequence,labels,sequence_length, sequence_id = i
+        max_length = max(max_length,sequence_length)
+    
+    processed_sequences = []
+    processed_labels = []
+    sequence_lengths = []
+    sequence_ids = []
+
+    for i in batch:
+        sequence,labels,sequence_length, sequence_id = i
+        padding_length = max_length - sequence_length
+        sequence_embedding_dim= sequence.shape[0]#TODO: This might be better with a global constant instead
+
+        processed_sequences.append(torch.cat((sequence,torch.zeros((sequence_embedding_dim,padding_length))),dim=1))
+        sequence_lengths.append(sequence_length)
+        processed_labels.append(labels)
+        sequence_ids.append(sequence_id)
+        
+
+    return torch.stack(processed_sequences),torch.stack(sequence_lengths),torch.stack(processed_labels),torch.stack(sequence_ids)
