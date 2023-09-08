@@ -1,0 +1,28 @@
+{
+    "params": {
+        "LEARNING_RATE": 0.0003,
+        "TEMPERATURE": 0.1,
+        "PROTEIN_EMBEDDING_DIM": 1100,
+        "LABEL_EMBEDDING_DIM": 768,
+        "LATENT_EMBEDDING_DIM": 934,
+        "NUM_EPOCHS": 15,
+        "TRAIN_BATCH_SIZE": 1024,
+        "VALIDATION_BATCH_SIZE": 1024,
+        "TEST_BATCH_SIZE": 1024,
+        "VALIDATION_FREQUENCY": 50,
+        "DECISION_TH": 0.7,
+        "NUM_WORKERS": 3
+    },
+    "relative_paths": {
+        "TRAIN_DATA_PATH": "data/swissprot/proteinfer_splits/random/train_GO.fasta",
+        "VAL_DATA_PATH": "data/swissprot/proteinfer_splits/random/dev_GO.fasta",
+        "TEST_DATA_PATH": "data/swissprot/proteinfer_splits/random/test_GO.fasta",
+        "AMINO_ACID_VOCAB_PATH": "data/vocabularies/amino_acid_vocab.json",
+        "GO_LABEL_VOCAB_PATH": "data/vocabularies/GO_label_vocab.json",
+        "LABEL_EMBEDDING_PATH": "data/embeddings/label_embeddings.pth",
+        "SEQUENCE_EMBEDDING_PATH": "data/embeddings/sequence_embeddings.pth",
+        "ALLOWED_ANNOTATIONS_PATH": "data/go_annotations.csv",
+        "OUTPUT_MODEL_DIR": "models/ProTCL",
+        "STATE_DICT_PATH": "models/ProTCL/2023-09-05_23-28-25_best_ProTCL.pth"
+    }
+}

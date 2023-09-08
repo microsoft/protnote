@@ -80,6 +80,7 @@ target/
 /models/
 /proteinfer/export/
 /proteinfer/cached_models/
+
 # Mac OS-specific storage files
 .DS_Store
 
@@ -89,3 +90,8 @@ target/
 
 # Mypy cache
 .mypy_cache/
+
+# wandb
+/wandb/
+
+```
