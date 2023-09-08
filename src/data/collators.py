@@ -1,7 +1,7 @@
 import torch
+from typing import List, Tuple
 
-
-def collate_variable_sequence_length(batch, train_sequence_encoder):
+def collate_variable_sequence_length(batch:List[Tuple], train_sequence_encoder: bool):
     """
     Collates batches with variable sequence lengths by padding sequences to the maximum length in the batch.
 

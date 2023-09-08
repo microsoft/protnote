@@ -16,7 +16,7 @@ class ProteinDataset(Dataset):
     """
 
     def __init__(self, data_path: str, allowed_annotations_path: str, sequence_vocabulary_path: Optional[Text] = None,
-                 label_vocabulary_path: Optional[Text] = None, train_sequence_encoder: bool = False, ):
+                 label_vocabulary_path: Optional[Text] = None, train_sequence_encoder: bool = False):
         # Initialize class variables
         self.data_path = data_path
         self.data = read_fasta(data_path)
@@ -92,7 +92,7 @@ class ProteinDataset(Dataset):
     def __len__(self):
         return len(self.data)
 
-    def process_example(self, sequence, labels):
+    def process_example(self, sequence:str, labels:List[str])->tuple:
         sequence_id, labels = labels[0], labels[1:]
 
         # Get one-hot encoding of sequence and multi-hot encoding of labels labels
@@ -122,11 +122,11 @@ class ProteinDataset(Dataset):
                                  allowed_annotations_path: str,
                                  sequence_vocabulary_path: Optional[Text] = None,
                                  label_vocabulary_path: Optional[Text] = None,
-                                 train_sequence_encoder: bool = False):
+                                 train_sequence_encoder: bool = False)->List[torch.utils.data.Dataset]:
         return [cls(data_path, allowed_annotations_path, sequence_vocabulary_path, label_vocabulary_path, train_sequence_encoder) for data_path in data_paths]
 
 
-def set_padding_to_sentinel(padded_representations, sequence_lengths, sentinel):
+def set_padding_to_sentinel(padded_representations:torch.Tensor, sequence_lengths: torch.Tensor, sentinel: float )->torch.Tensor:
     """
     Set the padding values in the input tensor to the sentinel value.
 
