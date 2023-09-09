@@ -4,12 +4,16 @@ from src.utils.losses import contrastive_loss
 from src.data.collators import collate_variable_sequence_length
 from src.data.datasets import ProteinDataset, create_multiple_loaders
 from src.models.ProTCL import ProTCL
+from src.utils.proteinfer import normalize_confidences
+from src.utils.data import read_json,load_gz_json
+from src.utils.evaluation import EvalMetrics
 import torch
 import wandb
 import os
 import datetime
 from torchmetrics.classification import BinaryPrecision, BinaryRecall
 import argparse
+import json
 
 # Argument parser setup
 parser = argparse.ArgumentParser(description="Train the ProTCL model.")
@@ -208,6 +212,9 @@ if args.train:
 else:
     logging.info("Skipping training...")
 
+
+label_normalizer = load_gz_json(paths['PARENTHOOD_LIB_PATH'])
+
 ####### TESTING LOOP #######
 if args.test_model:
 
@@ -216,13 +223,8 @@ if args.test_model:
 
     # Initialize metrics
     total_test_loss = 0
-    at_least_one_positive_pred = torch.tensor(0, dtype=int).to(
-        device)  # seqs with at least one positive label prediction
-    n = torch.tensor(0, dtype=int).to(device)
-    seqwise_precision = BinaryPrecision(threshold=params['DECISION_TH'],
-                                        multidim_average='samplewise').to(device)
-    seqwise_recall = BinaryRecall(threshold=params['DECISION_TH'],
-                                  multidim_average='samplewise').to(device)
+
+    eval_metrics = EvalMetrics(NUM_LABELS=train_dataset.label_vocabulary_size,threshold=params['DECISION_TH'],average=params['METRICS_AVERAGE'],device=device)
 
     with torch.no_grad():
         for test_batch in test_loader:
@@ -247,35 +249,26 @@ if args.test_model:
 
             # Apply sigmoid to get the probabilities for multi-label classification
             probabilities = torch.sigmoid(logits)
-
-            # TODO: Enfore label hierarchy within probabilities, like is done for ProteInfer paper
-
-            # Update metrics
-            at_least_one_positive_pred += (probabilities >
-                                           params['DECISION_TH']).any(axis=1).sum()
-            n += target.size(0)
-            seqwise_precision(probabilities, target)
-            seqwise_recall(probabilities, target)
+            
+            #TODO: Using original normalize_confidences implemented with numpy,
+            #but this is slow. Should be able to do this with torch tensors.
+            probabilities = torch.tensor(normalize_confidences(predictions=probabilities.detach().cpu().numpy(),
+                                label_vocab=train_dataset.label_vocabulary,
+                                applicable_label_dict=label_normalizer),device=probabilities.device)
+            eval_metrics(probabilities, labels)
 
     # Compute average test loss
     avg_test_loss = total_test_loss / len(test_loader)
+    final_metrics = eval_metrics.compute()
+    final_metrics.update({"test_loss": avg_test_loss})
 
-    # Compute average precision, recall, coverage, and F1 score
-    average_precision = seqwise_precision.compute().sum()/at_least_one_positive_pred
-    average_recall = seqwise_recall.compute().mean()
-    average_f1_score = 2*average_precision * \
-        average_recall/(average_precision+average_recall)
-    coverage = at_least_one_positive_pred/n
-
-    logging.info(
-        f"Test Loss: {avg_test_loss}, F1 Score: {average_f1_score}, Precision: {average_precision}, Recall: {average_recall}, Coverage: {coverage}")
+    logging.info(json.dumps(final_metrics, indent=4))
 
     logging.info("Testing complete.")
 
 # Close the W&B run
 if args.use_wandb:
-    wandb.log({"test_loss": avg_test_loss, "f1_score": average_f1_score,
-               "precision": average_precision, "recall": average_recall, "coverage": coverage})
+    wandb.log(final_metrics)
     wandb.finish()
 
 # Clear GPU cache

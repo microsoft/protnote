@@ -10,8 +10,9 @@
         "VALIDATION_BATCH_SIZE": 1024,
         "TEST_BATCH_SIZE": 1024,
         "VALIDATION_FREQUENCY": 50,
-        "DECISION_TH": 0.7,
-        "NUM_WORKERS": 3
+        "DECISION_TH": 0.88,
+        "NUM_WORKERS": 3,
+        "METRICS_AVERAGE": "micro"
     },
     "relative_paths": {
         "TRAIN_DATA_PATH": "data/swissprot/proteinfer_splits/random/train_GO.fasta",
@@ -23,6 +24,7 @@
         "SEQUENCE_EMBEDDING_PATH": "data/embeddings/sequence_embeddings.pth",
         "ALLOWED_ANNOTATIONS_PATH": "data/go_annotations.csv",
         "OUTPUT_MODEL_DIR": "models/ProTCL",
-        "STATE_DICT_PATH": "models/ProTCL/2023-09-05_23-28-25_best_ProTCL.pth"
+        "STATE_DICT_PATH": "models/ProTCL/2023-09-05_23-28-25_best_ProTCL.pth",
+        "PARENTHOOD_LIB_PATH":"data/proteinfer_results/"
     }
 }
