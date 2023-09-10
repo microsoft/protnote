@@ -8,7 +8,7 @@ def contrastive_loss(P_e, L_e, t, target):
     P_e: Batch of projected protein embeddings [batch_size, joint_embedding_dim]
     L_e: Batch of projected GO label embeddings [batch_size, joint_embedding_dim]
     t: Temperature parameter
-    true_annotations: Batch of "target" GO annotations [batch_size, num_labels]
+    target: Batch of "target" GO annotations [batch_size, num_labels]
     """
     # Compute pairwise cosine similarities; vectors already normalized, so no need to divide by product of vector magnitudes
     logits = torch.mm(P_e, L_e.t()) / t

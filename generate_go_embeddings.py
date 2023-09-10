@@ -1,58 +1,43 @@
-import obonet
 import pandas as pd
 import argparse
 from src.utils.PubMedBERT import load_PubMedBERT, get_PubMedBERT_embedding
+from src.utils.data import read_pickle, save_to_pickle
 from tqdm import tqdm
+import logging
 
-
-# def add_out_degree(df):
-#     """
-#     Add a column 'out_degree' to the GO annotations dataframe. Nodes with an `out_degree` of 0 are leaf nodes.
-#     """
-#     # Load the Gene Ontology graph
-#     url = "http://purl.obolibrary.org/obo/go/go-basic.obo"
-#     graph = obonet.read_obo(url)
-
-#     # Create a new column 'out_degree' and populate it with the out_degree of each GO term and convert to integer
-#     tqdm.pandas(desc="Adding out_degree")
-#     df['out_degree'] = df['go_id'].progress_apply(lambda go_id: graph.out_degree(
-#         go_id) if go_id in graph else None).astype('Int64')
-
-#     return df
+logging.basicConfig(level=logging.INFO)
 
 
 def embed_go_annotations(tokenizer, model, df, batch_size=32):
     """
     Embed the GO terms using PubMedBERT.
     """
-    embeddings = []
+    mapping = {}
 
     # Use tqdm for progress tracking
     for i in tqdm(range(0, len(df), batch_size), desc="Embedding GO terms"):
-        batch_texts = df['annotation_class_label'].iloc[i:i +
-                                                        batch_size].tolist()
+        batch_texts = df['label'].iloc[i:i + batch_size].tolist()
+        batch_go_ids = df.index[i:i + batch_size].tolist()
         batch_embeddings = get_PubMedBERT_embedding(
             tokenizer, model, batch_texts)
-        embeddings.extend(batch_embeddings)
 
-    # Assign the embeddings to the dataframe
-    df['embedding'] = embeddings
+        for go_id, embedding in zip(batch_go_ids, batch_embeddings):
+            mapping[go_id] = embedding
 
-    return df
+    return mapping
 
 
 if __name__ == "__main__":
     """
-    Example usage: python embed_go_annotations.py data/go_annotations.csv data/label_embeddings.pk1
-    Save the modified df as a pickle file
+    Example usage: python generate_go_embeddings.py data/annotations/go_annotations_2019_07_01.pkl data/embeddings/frozen_PubMedBERT_label_embeddings.pkl
     """
     # Parse command line arguments
     parser = argparse.ArgumentParser(
-        description="Add out_degree column to GO annotations CSV.")
+        description="Embed GO annotations using PubMedBERT.")
     parser.add_argument("go_annotations_path", type=str,
-                        help="Path to the GO annotations CSV file.")
+                        help="Path to the GO annotations pkl file.")
     parser.add_argument("output_path", type=str,
-                        help="Path to save the pickle.")
+                        help="Path to save the pickle file.")
     parser.add_argument("--batch_size", type=int, default=32,
                         help="Batch size for embedding GO terms.")
     args = parser.parse_args()
@@ -60,18 +45,14 @@ if __name__ == "__main__":
     # Load PubMedBERT
     (tokenizer, model) = load_PubMedBERT()
 
-    # Load the GO annotations CSV
-    df = pd.read_csv(args.go_annotations_path)
-
-    # # Add the out degree for each observation
-    # df = add_out_degree(df)
+    # Load the GO annotations
+    df = read_pickle(args.go_annotations_path)
 
     # Embed the GO term using PubMedBERT with the specified batch size
-    df = embed_go_annotations(tokenizer, model, df, batch_size=args.batch_size)
+    mapping = embed_go_annotations(
+        tokenizer, model, df, batch_size=args.batch_size)
 
-    # Save the modified dataframe to the specified output path as a pickle file
-    print(f"Saving embedded GO annotations to {args.output_path}...")
-    df.to_pickle(args.output_path)
-
-    # Print a message to indicate that the file has been saved
-    print(f"Saved embedded GO annotations to {args.output_path}")
+    save_to_pickle(
+        mapping, args.output_path)
+    logging.info(
+        f"Saved embeddings to {args.output_path}.")

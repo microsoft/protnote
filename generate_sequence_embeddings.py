@@ -23,7 +23,7 @@ GO_LABEL_VOCAB_PATH = os.path.join(
     ROOT_PATH, 'data/vocabularies/proteinfer_GO_label_vocab.json')
 MODEL_WIEGHTS_PATH = os.path.join(
     ROOT_PATH, 'models/proteinfer/GO_model_weights.pkl')
-PROTEINFER_RESULTS_DIR = os.path.join(ROOT_PATH, 'data/proteinfer_results/')
+OUTPUT_DIR = os.path.join(ROOT_PATH, 'data/embeddings/')
 
 # TODO: Move parameters to config file (as "embed_sequences_params")
 NUM_LABELS = 32102
@@ -58,7 +58,12 @@ model = ProteInfer(num_labels=NUM_LABELS,
 transfer_tf_weights_to_torch(model, MODEL_WIEGHTS_PATH)
 model.to(device)
 model = model.eval()
+
+# Mapping from sequence ID to embedding vector
 mapping = {}
+# Mapping from sequence ID to unique integer
+sequence_id_mapping = {}
+
 logging.info(f"Generating embeddings")
 with torch.no_grad():
     for batch_idx, (sequences, sequence_lengths, labels, sequence_ids) in tqdm(enumerate(full_loader), total=len(full_loader)):
@@ -74,5 +79,15 @@ with torch.no_grad():
             original_id = full_dataset.int2sequence_id[sequence_ids[i].item()]
             embedding_vector = embeddings[i].cpu().numpy()
             mapping[original_id] = embedding_vector
+            sequence_id_mapping[original_id] = len(sequence_id_mapping)
 
-save_to_pickle(mapping, f"{PROTEINFER_RESULTS_DIR}proteinfer_embeddings.pkl")
+save_to_pickle(
+    mapping, f"{OUTPUT_DIR}proteinfer_sequence_embeddings.pkl")
+logging.info(
+    f"Saved embeddings to {OUTPUT_DIR}proteinfer_sequence_embeddings.pkl")
+
+# Save mapping from ID to unique integer
+save_to_pickle(sequence_id_mapping,
+               f"{OUTPUT_DIR}sequence_id_map.pkl")
+logging.info(
+    f"Saved sequence ID map to to {OUTPUT_DIR}proteinfer_sequence_id_map.pkl")

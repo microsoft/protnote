@@ -4,6 +4,7 @@ import pickle
 import gzip
 import os
 import torch
+import yaml
 
 
 def read_fasta(data_path: str, sep=" "):
@@ -14,6 +15,12 @@ def read_fasta(data_path: str, sep=" "):
         labels = record.description.split(sep)
         sequences_with_labels.append((sequence, labels))
     return sequences_with_labels
+
+
+def read_yaml(data_path: str):
+    with open(data_path, 'r') as file:
+        data = yaml.safe_load(file)
+    return data
 
 
 def read_json(data_path: str):
@@ -28,8 +35,8 @@ def write_json(data, data_path: str):
 
 
 def get_vocab_mappings(vocabulary):
-    assert not any(vocabulary.count(
-        x) > 1 for x in vocabulary), 'items in vocabulary must be unique'
+    assert len(vocabulary) == len(set(vocabulary)
+                                  ), 'items in vocabulary must be unique'
     term2int = {term: idx for idx, term in enumerate(vocabulary)}
     int2term = {idx: term for term, idx in term2int.items()}
     return term2int, int2term
@@ -74,12 +81,29 @@ def load_gz_json(path):
             return json.load(gzip_file)
 
 
-def load_embeddings(path):
+def load_embeddings(embedding_path, id_map, embedding_dim, device):
     """
-    Loads embeddings from a .pt file.
+    Load embeddings from a given path and convert them into a tensor matri for an nn.Embedding layer.
+
+    Args:
+    - embedding_path (str): Path to the embeddings file. Must be a dictionary.
+    - id_map (dict): Mapping from alphanumeric IDs to numeric IDs.
+    - embedding_dim (int): Dimension of the embeddings.
+    - device (torch.device): Device to which the tensor should be moved.
+
+    Returns:
+    - torch.Tensor: A tensor matrix containing the embeddings.
     """
-    assert os.path.exists(path), f"Embeddings at {path} not found."
-    return torch.load(path)
+    embeddings = read_pickle(embedding_path)
+    numeric_id_embedding_map = {
+        id_map[k]: v for k, v in embeddings.items() if k in id_map
+    }
+    max_id = max(numeric_id_embedding_map.keys())
+    embedding_matrix = torch.zeros(max_id + 1, embedding_dim, device=device)
+    for numeric_id, embedding in numeric_id_embedding_map.items():
+        tensor_embedding = torch.tensor(embedding, device=device)
+        embedding_matrix[numeric_id] = tensor_embedding
+    return embedding_matrix
 
 
 def load_model_weights(model, path):

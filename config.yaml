@@ -1,0 +1,42 @@
+---
+# Parameters for model training
+params:
+  LEARNING_RATE: 0.0003
+  TEMPERATURE: 0.1
+  PROTEIN_EMBEDDING_DIM: 1100
+  LABEL_EMBEDDING_DIM: 768
+  LATENT_EMBEDDING_DIM: 934
+  NUM_EPOCHS: 10
+  TRAIN_BATCH_SIZE: 1024
+  VALIDATION_BATCH_SIZE: 1024
+  TEST_BATCH_SIZE: 1024
+  VALIDATION_FREQUENCY: 50
+  DECISION_TH: 0.88
+  NUM_WORKERS: 3
+  METRICS_AVERAGE: micro
+
+# Paths to data, vocabularies, embeddings, and models
+relative_paths:
+  # Data paths
+  TRAIN_DATA_PATH: data/swissprot/proteinfer_splits/random/train_GO.fasta
+  VAL_DATA_PATH: data/swissprot/proteinfer_splits/random/dev_GO.fasta
+  TEST_DATA_PATH: data/swissprot/proteinfer_splits/random/test_GO.fasta
+
+  # Vocabulary paths
+  AMINO_ACID_VOCAB_PATH: data/vocabularies/amino_acid_vocab.json
+  GO_LABEL_VOCAB_PATH: data/vocabularies/GO_label_vocab.json
+  SEQUENCE_ID_VOCAB_PATH: data/vocabularies/sequence_id_vocab.json
+
+  # Embeddings paths (if using frozen pre-trained models)
+  LABEL_EMBEDDING_PATH: data/embeddings/frozen_PubMedBERT_label_embeddings.pkl
+  SEQUENCE_EMBEDDING_PATH: data/embeddings/frozen_proteinfer_sequence_embeddings.pkl
+
+  # Map from alphanumeric sequence IDs to integer sequence IDs
+  SEQUENCE_ID_MAP_PATH: data/embeddings/sequence_id_map.pkl
+
+  # Where to save the model
+  OUTPUT_MODEL_DIR: models/ProTCL
+
+  # Where to load the model from, if using an existing model
+  STATE_DICT_PATH: null
+  PARENTHOOD_LIB_PATH: data/proteinfer_results/
