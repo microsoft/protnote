@@ -1,6 +1,8 @@
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
+import logging
+from src.utils.models import load_PubMedBERT, get_PubMedBERT_embedding
 
 
 class ProTCL(nn.Module):
@@ -11,7 +13,9 @@ class ProTCL(nn.Module):
             latent_dim,
             temperature,
             sequence_embedding_matrix=None,
-            label_embedding_matrix=None):
+            train_label_encoder=False,
+            label_embedding_matrix=None,
+            train_sequence_encoder=False,):
         super().__init__()
 
         # Projection heads
@@ -26,13 +30,35 @@ class ProTCL(nn.Module):
         # TODO: Possibly allow this to train
         if sequence_embedding_matrix is not None:
             self.pretrained_sequence_embeddings = nn.Embedding.from_pretrained(
-                sequence_embedding_matrix, freeze=True)
+                sequence_embedding_matrix, freeze=not train_sequence_encoder)
+        # TODO: Support using ProteInfer here like we did with labels and PubMedBERT
 
         # If using a pre-trained label embedding matrix, create a nn.Embedding layer
-        # TODO: Possibly allow this to train
         if label_embedding_matrix is not None:
             self.pretrained_label_embeddings = nn.Embedding.from_pretrained(
-                label_embedding_matrix, freeze=True)
+                label_embedding_matrix, freeze=not train_label_encoder)
+        # Otherwise, load the label pre-trained encoder and allow it to train
+        else:
+            self.label_tokenizer, self.label_encoder = load_PubMedBERT(
+                trainable=train_label_encoder)
+
+        # Log the configurations
+        logging.info(
+            "################## Model initial configurations ##################")
+
+        if sequence_embedding_matrix is not None:
+            logging.info(
+                f"Using cached sequence embeddings with {'training enabled' if train_sequence_encoder else 'training disabled'}.")
+        else:
+            logging.info(
+                f"Using ProteInfer for sequence embeddings with {'training enabled' if train_sequence_encoder else 'training disabled'}.")
+
+        if label_embedding_matrix is not None:
+            logging.info(
+                f"Using cached label embeddings with {'training enabled' if train_label_encoder else 'training disabled'}.")
+        else:
+            logging.info(
+                f"Using PubMedBERT for label embeddings with {'training enabled' if train_label_encoder else 'training disabled'}.")
 
     def forward(self, P, L):
         """
@@ -46,19 +72,20 @@ class ProTCL(nn.Module):
         collapsed_labels = torch.any(L, dim=0)
 
         # If using pre-trained label embeddings, convert labels to embeddings
-        if self.pretrained_label_embeddings is not None:
+        if hasattr(self, 'pretrained_label_embeddings'):
             L_f = self.pretrained_label_embeddings.weight[collapsed_labels]
         # If using a text encoder, convert labels to embeddings
         else:
-            # Throw error
-            raise ValueError(
-                "Label embeddings not found. Please provide a pre-trained label embedding map or a text encoder.")
+            # Convert labels to embeddings using label encoder
+            L_f = get_PubMedBERT_embedding(
+                self.tokenizer, self.pubmedbert_model, L)
 
         # If using pre-trained sequence embeddings, convert sequences to embeddings (since P is a tensor of sequence IDs)
-        if self.pretrained_sequence_embeddings is not None:
+        if hasattr(self, 'pretrained_sequence_embeddings'):
             P_f = self.pretrained_sequence_embeddings(P)
         # If using a protein sequence encoder, convert sequences to embeddings
         else:
+            # TODO: Use ProteInfer here
             # Throw error
             raise ValueError(
                 "Sequence embeddings not found. Please provide a pre-trained sequence embedding map or a protein encoder.")

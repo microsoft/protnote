@@ -5,6 +5,7 @@ from src.data.datasets import ProteinDataset, create_multiple_loaders
 from src.models.ProTCL import ProTCL
 from src.utils.proteinfer import normalize_confidences
 from src.utils.evaluation import EvalMetrics
+from src. utils.models import count_parameters
 import torch
 import wandb
 import os
@@ -14,9 +15,10 @@ import json
 import pytz
 
 # Argument parser setup
-parser = argparse.ArgumentParser(description="Train the ProTCL model.")
-parser.add_argument('--train', action='store_true',
-                    default=True, help="Perform a training pass. Default is true.")
+parser = argparse.ArgumentParser(
+    description="Train and/or Test the ProTCL model.")
+parser.add_argument('--mode', type=str, choices=['train', 'test', 'both'], default='both',
+                    help="Specify the mode: 'train', 'test', or 'both'. Default is 'both'.")
 parser.add_argument('--train-label-encoder', action='store_true',
                     default=False, help="Train the label encoder. Default is False.")
 parser.add_argument('--train-sequence-encoder', action='store_true',
@@ -120,8 +122,15 @@ model = ProTCL(protein_embedding_dim=params['PROTEIN_EMBEDDING_DIM'],
                latent_dim=params['LATENT_EMBEDDING_DIM'],
                temperature=params['TEMPERATURE'],
                sequence_embedding_matrix=sequence_embedding_matrix,
+               train_label_encoder=args.train_label_encoder,
                label_embedding_matrix=label_embedding_matrix,
+               train_sequence_encoder=args.train_sequence_encoder
                ).to(device)
+
+# Log the number of parameters
+total_params, trainable_params = count_parameters(model)
+logging.info(f"Total Parameters: {total_params}")
+logging.info(f"Trainable Parameters: {trainable_params}")
 
 # Load the model weights if LOAD_MODEL_PATH is provided
 if paths['STATE_DICT_PATH'] is not None:
@@ -130,7 +139,7 @@ if paths['STATE_DICT_PATH'] is not None:
     logging.info(
         f"Loading model weights from {paths['STATE_DICT_PATH']}...")
 
-if args.train:
+if args.mode in ['train', 'both']:
     # Define optimizer
     optimizer = torch.optim.Adam(
         model.parameters(), lr=params['LEARNING_RATE'])
@@ -238,10 +247,10 @@ if args.train:
 else:
     logging.info("Skipping training...")
 
-label_normalizer = load_gz_json(paths['PARENTHOOD_LIB_PATH'])
+# label_normalizer = load_gz_json(paths['PARENTHOOD_LIB_PATH'])
 
 ####### TESTING LOOP #######
-if args.test_model:
+if args.mode in ['test', 'both']:
 
     logging.info("Starting testing...")
     model.eval()
