@@ -33,6 +33,9 @@ def download_and_process_obo(url: str, output_file: str):
     df_filtered = df[['label']]
 
     logging.info("Saving filtered dataframe as a pickle...")
+
+
+
     # Save the filtered dataframe as a pickle
     df_filtered.to_pickle(output_file)
 
@@ -42,6 +45,8 @@ if __name__ == "__main__":
     Example usage: python download_GO_annotations.py http://release.geneontology.org/2019-07-01/ontology/go.obo data/annotations/go_annotations_2019_07_01.pkl
     """
     # TODO: Make more general so accepts any obo URL
+    #TODO: output path should be enforced for standardization. e.g. final pkl should always be in data/annotations/.
+    #TODO: Filename can be figured out from URL
     parser = argparse.ArgumentParser(
         description="Download OBO file and save GO ID and label to a pickle.")
     parser.add_argument("url", type=str,

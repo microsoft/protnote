@@ -87,7 +87,7 @@ with torch.no_grad():
             sequence_id_mapping[original_id] = len(sequence_id_mapping)
 
 save_to_pickle(
-    mapping, f"{OUTPUT_DIR}proteinfer_sequence_embeddings.pkl")
+    mapping, f"{OUTPUT_DIR}frozen_proteinfer_sequence_embeddings.pkl")
 logging.info(
     f"Saved embeddings to {OUTPUT_DIR}proteinfer_sequence_embeddings.pkl")
 

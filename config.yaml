@@ -14,6 +14,7 @@ params:
   DECISION_TH: 0.88
   NUM_WORKERS: 3
   METRICS_AVERAGE: micro
+  SEED: 42
 
 # Paths to data, vocabularies, embeddings, and models
 relative_paths:
@@ -24,11 +25,13 @@ relative_paths:
   FULL_DATA_PATH: data/swissprot/proteinfer_splits/random/full_GO.fasta
 
   # Vocabulary paths
+  VOCABULARIES_DIR: data/vocabularies
   AMINO_ACID_VOCAB_PATH: data/vocabularies/amino_acid_vocab.json
   GO_LABEL_VOCAB_PATH: data/vocabularies/GO_label_vocab.json
   SEQUENCE_ID_VOCAB_PATH: data/vocabularies/sequence_id_vocab.json
 
   # Embeddings paths (if using frozen pre-trained models)
+  EMBEDDING_DIR: data/embeddings
   LABEL_EMBEDDING_PATH: data/embeddings/frozen_PubMedBERT_label_embeddings.pkl
   SEQUENCE_EMBEDDING_PATH: data/embeddings/frozen_proteinfer_sequence_embeddings.pkl
 
