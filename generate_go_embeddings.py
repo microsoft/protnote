@@ -1,6 +1,6 @@
 import pandas as pd
 import argparse
-from src.utils.PubMedBERT import load_PubMedBERT, get_PubMedBERT_embedding
+from ProteinFunctions.src.utils.models import load_PubMedBERT, get_PubMedBERT_embedding
 from src.utils.data import read_pickle, save_to_pickle
 from tqdm import tqdm
 import logging
@@ -19,7 +19,7 @@ def embed_go_annotations(tokenizer, model, df, batch_size=32):
         batch_texts = df['label'].iloc[i:i + batch_size].tolist()
         batch_go_ids = df.index[i:i + batch_size].tolist()
         batch_embeddings = get_PubMedBERT_embedding(
-            tokenizer, model, batch_texts)
+            tokenizer, model, batch_texts).cpu().numpy()
 
         for go_id, embedding in zip(batch_go_ids, batch_embeddings):
             mapping[go_id] = embedding
