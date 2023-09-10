@@ -8,26 +8,31 @@ import torch
 import numpy as np
 from tqdm import tqdm
 import logging
-from src.utils.data import save_to_pickle
+from src.utils.data import save_to_pickle, read_yaml
 import os
 
 # Default to current directory if ROOT_PATH is not set
 ROOT_PATH = os.environ.get('ROOT_PATH', '.')
 
+# Load the configuration file
+config = read_yaml(ROOT_PATH + '/config.yaml')
+params = config['params']
+paths = config['relative_paths']
+embed_sequences_params = config['embed_sequences_params']
+
 # TODO: Move relative paths to config file
 FULL_DATA_PATH = os.path.join(
-    ROOT_PATH, 'data/swissprot/proteinfer_splits/random/full_GO.fasta')
+    ROOT_PATH, paths['FULL_DATA_PATH'])
 AMINO_ACID_VOCAB_PATH = os.path.join(
-    ROOT_PATH, 'data/vocabularies/amino_acid_vocab.json')
+    ROOT_PATH, paths['AMINO_ACID_VOCAB_PATH'])
 GO_LABEL_VOCAB_PATH = os.path.join(
-    ROOT_PATH, 'data/vocabularies/proteinfer_GO_label_vocab.json')
+    ROOT_PATH, paths['GO_LABEL_VOCAB_PATH'])
 MODEL_WIEGHTS_PATH = os.path.join(
-    ROOT_PATH, 'models/proteinfer/GO_model_weights.pkl')
+    ROOT_PATH, paths['PROTEINFER_WEIGHTS_PATH'])
 OUTPUT_DIR = os.path.join(ROOT_PATH, 'data/embeddings/')
 
 # TODO: Move parameters to config file (as "embed_sequences_params")
-NUM_LABELS = 32102
-BATCH_SIZE = 2**7
+BATCH_SIZE = params['TEST_BATCH_SIZE']
 
 logging.basicConfig(level=logging.INFO)
 
@@ -46,14 +51,14 @@ full_loader = DataLoader(dataset=full_dataset,
                          num_workers=2,
                          collate_fn=proteinfer_collate_variable_sequence_length)
 
-model = ProteInfer(num_labels=NUM_LABELS,
-                   input_channels=20,
-                   output_channels=1100,
-                   kernel_size=9,
+model = ProteInfer(num_labels=embed_sequences_params['NUM_LABELS'],
+                   input_channels=embed_sequences_params['INPUT_CHANNELS'],
+                   output_channels=embed_sequences_params['OUTPUT_CHANNELS'],
+                   kernel_size=embed_sequences_params['KERNEL_SIZE'],
                    activation=torch.nn.ReLU,
-                   dilation_base=3,
-                   num_resnet_blocks=5,
-                   bottleneck_factor=0.5)
+                   dilation_base=embed_sequences_params['DILATION_BASE'],
+                   num_resnet_blocks=embed_sequences_params['NUM_RESNET_BLOCKS'],
+                   bottleneck_factor=embed_sequences_params['BOTTLENECK_FACTOR'])
 
 transfer_tf_weights_to_torch(model, MODEL_WIEGHTS_PATH)
 model.to(device)

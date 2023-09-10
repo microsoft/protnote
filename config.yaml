@@ -21,6 +21,7 @@ relative_paths:
   TRAIN_DATA_PATH: data/swissprot/proteinfer_splits/random/train_GO.fasta
   VAL_DATA_PATH: data/swissprot/proteinfer_splits/random/dev_GO.fasta
   TEST_DATA_PATH: data/swissprot/proteinfer_splits/random/test_GO.fasta
+  FULL_DATA_PATH: data/swissprot/proteinfer_splits/random/full_GO.fasta
 
   # Vocabulary paths
   AMINO_ACID_VOCAB_PATH: data/vocabularies/amino_acid_vocab.json
@@ -40,3 +41,14 @@ relative_paths:
   # Where to load the model from, if using an existing model
   STATE_DICT_PATH: null
   PARENTHOOD_LIB_PATH: data/proteinfer_results/
+  PROTEINFER_WEIGHTS_PATH: 'models/proteinfer/GO_model_weights.pkl'
+
+#Params for protein encoder model (e.g. ProteInfer)
+embed_sequences_params:
+  NUM_LABELS: 32102
+  INPUT_CHANNELS: 20
+  OUTPUT_CHANNELS: 1100
+  KERNEL_SIZE: 9
+  DILATION_BASE: 3
+  NUM_RESNET_BLOCKS: 5
+  BOTTLENECK_FACTOR: 0.5
