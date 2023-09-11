@@ -71,7 +71,7 @@ logging.info(
 if args.use_wandb:
     wandb.init(project="protein-functions",
                name=f"{args.name if args.name else 'ProTCL'}_{timestamp}", config=params)
-    wandb.log(args)
+    wandb.log(vars(args))
 
 # Log the configuration and arguments
 logging.info(f"Configuration: {config}")
