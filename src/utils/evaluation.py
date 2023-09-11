@@ -2,6 +2,8 @@
 import torch
 from torchmetrics.classification import Precision,Recall,BinaryPrecision,BinaryRecall,F1Score
 from typing import Literal,Tuple
+from src.utils.proteinfer import normalize_confidences
+
 class EvalMetrics:
     def __init__(self,num_labels:int,threshold:float,average:Literal['micro','macro','weighted'],device:str):
         self.precision = Precision(num_labels = num_labels, threshold = threshold,task = 'multilabel',average=average).to(device)
@@ -36,7 +38,8 @@ class EvalMetrics:
 
     def compute(self)->dict:
         metrics = {'precision':self.precision.compute(),
-                    'recall':self.recall.compute()}
+                    'recall':self.recall.compute(),
+                    'f1':self.f1.compute()}
         
         (metrics['precision_samplewise'],
          metrics['recall_samplewise'],
@@ -52,3 +55,4 @@ class EvalMetrics:
         self.recall_samplewise.reset()
         self.at_least_one_positive_pred = torch.tensor(0,dtype=int).to(self.device)
         self.n = torch.tensor(0,dtype=int).to(self.device)
+

@@ -69,7 +69,8 @@ def reverse_map(
   return collections.defaultdict(frozenset, children.items())
 
 def normalize_confidences(
-    predictions, label_vocab,
+    predictions,
+    label_vocab,
     applicable_label_dict):
   """Set confidences of parent labels to the max of their children.
 
@@ -103,3 +104,13 @@ def normalize_confidences(
 
   return np.stack(label_confidences, axis=1)
 
+def get_probabilities(logits:torch.Tensor, normalize_probabilities: bool, label_normalizer: dict, label_vocabulary: list):
+
+    if normalize_probabilities:
+        # TODO: Using original normalize_confidences implemented with numpy,
+        # but this is slow. Should be able to do this with torch tensors.
+        probabilities = torch.tensor(normalize_confidences(predictions=probabilities.detach().cpu().numpy(),
+                                                            label_vocab=label_vocabulary,
+                                                            applicable_label_dict=label_normalizer),
+                                                            device=probabilities.device)
+    return probabilities
