@@ -13,9 +13,9 @@ class ProTCL(nn.Module):
             latent_dim,
             temperature,
             sequence_embedding_matrix=None,
-            train_label_encoder=False,
+            train_label_embeddings=False,
             label_embedding_matrix=None,
-            train_sequence_encoder=False,):
+            train_sequence_embeddings=False,):
         super().__init__()
 
         # Projection heads
@@ -24,41 +24,39 @@ class ProTCL(nn.Module):
         self.W_l = nn.Linear(label_embedding_dim, latent_dim, bias=False)
 
         # Temperature parameter
-        self.t = nn.Parameter(torch.tensor(temperature))
+        self.t = temperature
 
         # If using a pre-trained sequence embedding matrix, create a nn.Embedding layer
         # TODO: Possibly allow this to train
         if sequence_embedding_matrix is not None:
             self.pretrained_sequence_embeddings = nn.Embedding.from_pretrained(
-                sequence_embedding_matrix, freeze=not train_sequence_encoder)
+                sequence_embedding_matrix, freeze=not train_sequence_embeddings)
         # TODO: Support using ProteInfer here like we did with labels and PubMedBERT
 
         # If using a pre-trained label embedding matrix, create a nn.Embedding layer
         if label_embedding_matrix is not None:
             self.pretrained_label_embeddings = nn.Embedding.from_pretrained(
-                label_embedding_matrix, freeze=not train_label_encoder)
+                label_embedding_matrix, freeze=not train_label_embeddings)
         # Otherwise, load the label pre-trained encoder and allow it to train
         else:
+            # TODO: This doesn't work yet. Maybe we build an nn.Embedding but populate the matrix with the encoder? It would need to be re-calculated every pass, though, not just on init.
             self.label_tokenizer, self.label_encoder = load_PubMedBERT(
-                trainable=train_label_encoder)
+                trainable=train_label_embeddings)
 
         # Log the configurations
         logging.info(
-            "################## Model initial configurations ##################")
+            "################## Model encoder configurations ##################")
 
-        if sequence_embedding_matrix is not None:
-            logging.info(
-                f"Using cached sequence embeddings with {'training enabled' if train_sequence_encoder else 'training disabled'}.")
-        else:
-            logging.info(
-                f"Using ProteInfer for sequence embeddings with {'training enabled' if train_sequence_encoder else 'training disabled'}.")
+        logging.info(
+            f"Using {'cached' if sequence_embedding_matrix is not None else 'ProteInfer'} sequence embeddings with {'training enabled' if train_sequence_embeddings else 'training disabled'}."
+        )
 
-        if label_embedding_matrix is not None:
-            logging.info(
-                f"Using cached label embeddings with {'training enabled' if train_label_encoder else 'training disabled'}.")
-        else:
-            logging.info(
-                f"Using PubMedBERT for label embeddings with {'training enabled' if train_label_encoder else 'training disabled'}.")
+        logging.info(
+            f"Using {'cached' if label_embedding_matrix is not None else 'PubMedBERT'} label embeddings with {'training enabled' if train_label_embeddings else 'training disabled'}."
+        )
+
+        logging.info(
+            "##################################################################")
 
     def forward(self, P, L):
         """
@@ -78,7 +76,7 @@ class ProTCL(nn.Module):
         else:
             # Convert labels to embeddings using label encoder
             L_f = get_PubMedBERT_embedding(
-                self.tokenizer, self.pubmedbert_model, L)
+                self.label_tokenizer, self.label_encoder, L)
 
         # If using pre-trained sequence embeddings, convert sequences to embeddings (since P is a tensor of sequence IDs)
         if hasattr(self, 'pretrained_sequence_embeddings'):

@@ -1,3 +1,4 @@
+import ipdb
 import logging
 from src.utils.data import read_pickle, load_model_weights, read_yaml, load_gz_json, load_embeddings
 from src.utils.losses import contrastive_loss
@@ -5,7 +6,7 @@ from src.data.datasets import ProteinDataset, create_multiple_loaders
 from src.models.ProTCL import ProTCL
 from src.utils.proteinfer import normalize_confidences
 from src.utils.evaluation import EvalMetrics
-from src. utils.models import count_parameters
+from src. utils.models import count_parameters_by_layer
 from torchmetrics.classification import F1Score
 import numpy as np
 import torch
@@ -14,8 +15,9 @@ import os
 import datetime
 import argparse
 import json
-import pytz
 import random
+import time
+
 # Argument parser setup
 parser = argparse.ArgumentParser(
     description="Train and/or Test the ProTCL model.")
@@ -25,10 +27,16 @@ parser.add_argument('--train-label-encoder', action='store_true',
                     default=False, help="Train the label encoder. Default is False.")
 parser.add_argument('--train-sequence-encoder', action='store_true',
                     default=False, help="Train the sequence encoder. Default is False.")
-parser.add_argument('--test-model', action='store_true',
-                    default=True, help="Perform a test pass. Default is True.")
+parser.add_argument('--train-label-embedding-matrix', action='store_true',
+                    default=False, help="Train the label nn.Embedding layer. Default is False.")
+parser.add_argument('--train-sequence-embedding-matrix', action='store_true',
+                    default=False, help="Train the sequence nn.Embedding layer. Default is False.")
 parser.add_argument('--use-wandb', action='store_true', default=False,
                     help="Use Weights & Biases for logging. Default is False.")
+parser.add_argument('--load-model', type=str, default=None,
+                    help="(Relative) path to the model to be loaded. If not provided, a new model will be initialized.")
+parser.add_argument('--name', type=str, default=None,
+                    help="Name of the W&B run. If not provided, a name will be generated.")
 args = parser.parse_args()
 
 # Get the root path from the environment variable; default to current directory if ROOT_PATH is not set
@@ -37,24 +45,33 @@ ROOT_PATH = os.environ.get('ROOT_PATH', '.')
 # Load the configuration file
 config = read_yaml(ROOT_PATH + '/config.yaml')
 params = config['params']
-paths = config['relative_paths']
+paths = {key: os.path.join(ROOT_PATH, value)
+         for key, value in config['relative_paths'].items()}
+
+# Set the timezone for the entire Python environment
+os.environ['TZ'] = 'US/Pacific'
+time.tzset()
+timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S %Z")
 
 # Initialize logging
-logging.basicConfig(filename='train.log', filemode='w',
+log_dir = os.path.join(ROOT_PATH, 'logs')
+log_filename = f'{timestamp}_{args.name}.log' if args.name else 'train.log'
+full_log_path = os.path.join(log_dir, log_filename)
+logging.basicConfig(filename=full_log_path, filemode='w',
                     format='%(asctime)s %(levelname)-4s %(message)s',
                     level=logging.INFO,
                     datefmt='%Y-%m-%d %H:%M:%S %Z')
 
+
 # Initialize new run
-timestamp = datetime.datetime.now(pytz.timezone(
-    'US/Pacific')).strftime("%Y-%m-%d_%H-%M-%S %Z")
 logging.info(
     f"################## {timestamp} RUNNING train.py ##################")
 
 # Initialize W&B, if using
 if args.use_wandb:
     wandb.init(project="protein-functions",
-               name=f"baseline-model_{timestamp}", config=params)
+               name=f"{args.name if args.name else 'ProTCL'}_{timestamp}", config=params)
+    wandb.log(args)
 
 # Log the configuration and arguments
 logging.info(f"Configuration: {config}")
@@ -66,22 +83,13 @@ logging.info(f"Using device: {device}")
 
 # Load datasets from config file paths; the same vocabulary is used for all datasets
 common_paths = {
-    'amino_acid_vocabulary_path': os.path.join(ROOT_PATH, paths['AMINO_ACID_VOCAB_PATH']),
-    'label_vocabulary_path': os.path.join(ROOT_PATH, paths['GO_LABEL_VOCAB_PATH']),
-    'sequence_id_vocabulary_path': os.path.join(ROOT_PATH, paths['SEQUENCE_ID_VOCAB_PATH']),
-    'sequence_id_map_path': os.path.join(ROOT_PATH, paths['SEQUENCE_ID_MAP_PATH']),
+    'amino_acid_vocabulary_path': paths['AMINO_ACID_VOCAB_PATH'],
+    'label_vocabulary_path': paths['GO_LABEL_VOCAB_PATH'],
+    'sequence_id_vocabulary_path': paths['SEQUENCE_ID_VOCAB_PATH'],
+    'sequence_id_map_path': paths['SEQUENCE_ID_MAP_PATH'],
 }
-paths_list = [
-    {
-        **common_paths,
-        'data_path': os.path.join(ROOT_PATH, data_path)
-    }
-    for data_path in [
-        paths['TRAIN_DATA_PATH'],
-        paths['VAL_DATA_PATH'],
-        paths['TEST_DATA_PATH']
-    ]
-]
+paths_list = [{**common_paths, 'data_path': paths[key]}
+              for key in ['TRAIN_DATA_PATH', 'VAL_DATA_PATH', 'TEST_DATA_PATH']]
 train_dataset, val_dataset, test_dataset = ProteinDataset.create_multiple_datasets(
     paths_list)
 
@@ -95,13 +103,13 @@ train_loader, val_loader, test_loader = create_multiple_loaders(
 )
 
 # Load map from alphanumeric sequence ID's to integer sequence ID's
-sequence_id_map = read_pickle(os.path.join(
-    ROOT_PATH, paths['SEQUENCE_ID_MAP_PATH']))
+sequence_id_map = read_pickle(paths['SEQUENCE_ID_MAP_PATH'])
 
 # Load sequence embeddings
+sequence_embedding_matrix = None
 if not args.train_sequence_encoder:
     sequence_embedding_matrix = load_embeddings(
-        os.path.join(ROOT_PATH, paths['SEQUENCE_EMBEDDING_PATH']),
+        paths['SEQUENCE_EMBEDDING_PATH'],
         sequence_id_map,
         params['PROTEIN_EMBEDDING_DIM'],
         device
@@ -109,9 +117,10 @@ if not args.train_sequence_encoder:
     logging.info("Loaded sequence embeddings.")
 
 # Load label embeddings
+label_embedding_matrix = None
 if not args.train_label_encoder:
     label_embedding_matrix = load_embeddings(
-        os.path.join(ROOT_PATH, paths['LABEL_EMBEDDING_PATH']),
+        paths['LABEL_EMBEDDING_PATH'],
         train_dataset.label2int,
         params['LABEL_EMBEDDING_DIM'],
         device
@@ -348,9 +357,11 @@ def train(model,
                     if not os.path.exists(paths['OUTPUT_MODEL_DIR']):
                         os.makedirs(paths['OUTPUT_MODEL_DIR'])
 
+                    model_name = args.name if args.name else f"best_ProTCL.pt"
                     model_path = os.path.join(
-                        output_model_dir, f"{timestamp}_best_ProTCL.pt")
+                        output_model_dir, f"{timestamp}_{model_name}.pt")
                     torch.save(model.state_dict(), model_path)
+                    logging.info(f"Saved model to {model_path}.")
 
                     if args.use_wandb:
                         wandb.save(f"{timestamp}_best_ProTCL.pt")
@@ -362,22 +373,18 @@ model = ProTCL(protein_embedding_dim=params['PROTEIN_EMBEDDING_DIM'],
                latent_dim=params['LATENT_EMBEDDING_DIM'],
                temperature=params['TEMPERATURE'],
                sequence_embedding_matrix=sequence_embedding_matrix,
-               train_label_encoder=args.train_label_encoder,
+               train_label_embeddings=args.train_label_encoder or args.train_label_embedding_matrix,
                label_embedding_matrix=label_embedding_matrix,
-               train_sequence_encoder=args.train_sequence_encoder
+               train_sequence_embeddings=args.train_sequence_encoder or args.train_sequence_embedding_matrix,
                ).to(device)
 
-# Log the number of parameters
-total_params, trainable_params = count_parameters(model)
-logging.info(f"Total Parameters: {total_params}")
-logging.info(f"Trainable Parameters: {trainable_params}")
+# Log the number of parameters by layer
+count_parameters_by_layer(model)
 
-# Load the model weights if LOAD_MODEL_PATH is provided
-if paths['STATE_DICT_PATH'] is not None:
-    load_model_weights(model, os.path.join(
-        ROOT_PATH, paths['STATE_DICT_PATH']))
-    logging.info(
-        f"Loading model weights from {paths['STATE_DICT_PATH']}...")
+# Load the model weights if --load-model argument is provided
+if args.load_model:
+    load_model_weights(model, os.path.join(ROOT_PATH, args.load_model))
+    logging.info(f"Loading model weights from {args.load_model}...")
 
 if args.mode in ['train', 'both']:
     # Define optimizer

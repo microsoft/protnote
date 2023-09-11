@@ -1,23 +1,37 @@
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 import torch
+import logging
 
 
-def count_parameters(model):
+def count_parameters_by_layer(model):
     """
-    Count the total and trainable parameters of a PyTorch model.
+    Logs the number of total and trainable parameters for each layer of a PyTorch model.
 
     Args:
         model (torch.nn.Module): The PyTorch model for which parameters are to be counted.
 
-    Returns:
-        tuple: A tuple containing:
-            - total_params (int): Total number of parameters in the model.
-            - trainable_params (int): Number of trainable parameters in the model.
+    Outputs:
+        Logs layer names along with their total and trainable parameters.
     """
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel()
-                           for p in model.parameters() if p.requires_grad)
-    return total_params, trainable_params
+    total_params = 0
+    trainable_params = 0
+
+    logging.info("Layer-wise parameter details:")
+    logging.info(
+        f"{'Layer Name':<{max([len(name) for name, _ in model.named_parameters()])}} {'Total Parameters':<20} {'Trainable Parameters'}")
+
+    for name, param in model.named_parameters():
+        num_params = param.numel()
+        total_params += num_params
+
+        if param.requires_grad:
+            trainable_params += num_params
+
+        logging.info(
+            f"{name:<{max([len(name) for name, _ in model.named_parameters()])}} {num_params:<20} {num_params if param.requires_grad else 0}")
+
+    logging.info(
+        f"{'TOTAL':<{max([len(name) for name, _ in model.named_parameters()])}} {total_params:<20} {trainable_params}")
 
 
 def load_PubMedBERT(trainable=False):
