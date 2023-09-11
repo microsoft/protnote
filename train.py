@@ -4,10 +4,11 @@ from src.utils.data import read_pickle, load_model_weights, read_yaml, load_gz_j
 from src.utils.losses import contrastive_loss
 from src.data.datasets import ProteinDataset, create_multiple_loaders
 from src.models.ProTCL import ProTCL
-from src.utils.proteinfer import normalize_confidences
 from src.utils.evaluation import EvalMetrics
+from src.utils.proteinfer import normalize_confidences
 from src. utils.models import count_parameters_by_layer
 from torchmetrics.classification import F1Score
+from typing import Literal
 import numpy as np
 import torch
 import wandb
@@ -37,6 +38,7 @@ parser.add_argument('--load-model', type=str, default=None,
                     help="(Relative) path to the model to be loaded. If not provided, a new model will be initialized.")
 parser.add_argument('--name', type=str, default=None,
                     help="Name of the W&B run. If not provided, a name will be generated.")
+#TODO: Make Optimization metric and normalize probabilities part of arguments
 args = parser.parse_args()
 
 # Get the root path from the environment variable; default to current directory if ROOT_PATH is not set
@@ -55,6 +57,8 @@ timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S %Z")
 
 # Initialize logging
 log_dir = os.path.join(ROOT_PATH, 'logs')
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
 log_filename = f'{timestamp}_{args.name}.log' if args.name else 'train.log'
 full_log_path = os.path.join(log_dir, log_filename)
 logging.basicConfig(filename=full_log_path, filemode='w',
@@ -136,6 +140,112 @@ if device == 'cuda':
 
 # Evaluate function
 
+def evaluation_step(batch,
+                    model: torch.nn.Module,
+                    train_sequence_encoder: bool,
+                    device:str,
+                    use_batch_labels_only: bool = True)->tuple:
+    
+    """Perform a single evaluation step.
+
+    :param batch: _description_
+    :type batch: _type_
+    :param model: pytorch model
+    :type model: torch.nn.Module
+    :param train_sequence_encoder: whether to train the sequence encoder
+    :type train_sequence_encoder: bool
+    :param device: decide for training on cpu or gpu
+    :type device: str
+    :param use_batch_labels_only: whether to use only the labels present in the batch for calculating loss, defaults to True
+    :type use_batch_labels_only: bool, optional
+    :return: batch loss, logits and labels
+    :rtype: tuple
+    """    
+    
+    # Unpack the validation batch
+    sequence_ids, sequence_onehots, label_multihots, sequence_lengths = batch
+
+    # Move sequences and labels to GPU, if available
+    labels = label_multihots.to(device)
+    sequences = sequence_onehots.to(
+        device) if train_sequence_encoder else sequence_ids.to(device)
+
+    # Forward pass
+    P_e, L_e = model(sequences,
+                        labels if use_batch_labels_only else torch.ones_like(
+                            labels)
+                        )
+
+    # Compute validation loss for the batch
+    loss = contrastive_loss(P_e,
+                            L_e,
+                            model.t,
+                            labels[:, torch.any(
+                                labels, dim=0)] if use_batch_labels_only else labels
+                            )
+    # Compute temperature normalized cosine similarities
+    logits = torch.mm(P_e,
+                        L_e.t()) / model.t
+    
+    return loss.item(), logits, labels
+    
+def find_optimal_threshold(model: torch.nn.Module,
+                           data_loader: torch.utils.data.DataLoader,
+                           device:str,
+                           train_sequence_encoder: bool,
+                           num_labels:int,
+                           average:Literal['micro','macro','weighted'],
+                           optimization_metric_name: str,
+                           normalize_probabilities: bool = False,
+                           label_normalizer: dict = None,
+                           label_vocabulary: list = None):
+    
+    model.eval()
+
+    best_th = 0.0
+    best_score = 0.0
+
+    # Reset eval metrics just in case
+    with torch.no_grad():
+        all_probabilities = []
+        all_labels = []
+        for batch in data_loader:
+            loss,logits,labels = evaluation_step(batch=batch,
+                                                 model=model,
+                                                 train_sequence_encoder=train_sequence_encoder,
+                                                 device=device,
+                                                 use_batch_labels_only = False)
+
+            # Apply sigmoid to get the probabilities for multi-label classification
+            probabilities = torch.sigmoid(logits)
+
+            if normalize_probabilities:
+                
+                # TODO: Using original normalize_confidences implemented with numpy,
+                # but this is slow. Should be able to do this with torch tensors.
+                probabilities = torch.tensor(normalize_confidences(predictions=probabilities.detach().cpu().numpy(),
+                                                                    label_vocab=label_vocabulary,
+                                                                    applicable_label_dict=label_normalizer),
+                                                                    device=probabilities.device)
+            all_probabilities.append(probabilities)
+            all_labels.append(labels)
+            
+        all_probabilities = torch.cat(all_probabilities)
+        all_labels = torch.cat(all_labels)
+
+    for th in np.arange(0.1, 1, 0.01):
+        eval_metrics = EvalMetrics(num_labels=num_labels,average=average,threshold=th,device=device)
+        optimization_metric = getattr(eval_metrics,optimization_metric_name)
+
+        optimization_metric(all_probabilities, all_labels)
+        score = optimization_metric.compute()
+        if score > best_score:
+            best_score = score
+            best_th = th
+        print('TH:', th, 'F1:', score)
+    logging.info(f'Best Val F1: {best_score.item()}, Best Val TH: {best_th}')
+
+    return best_th, best_score
 
 def evaluate(model: torch.nn.Module,
              data_loader: torch.utils.data.DataLoader,
@@ -143,7 +253,6 @@ def evaluate(model: torch.nn.Module,
              train_sequence_encoder: bool,
              use_batch_labels_only: bool = True,
              eval_metrics: EvalMetrics = None,
-             find_optimal_threshold: bool = False,
              normalize_probabilities: bool = False,
              label_normalizer: dict = None,
              label_vocabulary: list = None) -> dict:
@@ -176,88 +285,27 @@ def evaluate(model: torch.nn.Module,
 
     model.eval()
     total_loss = 0
-
-    def evaluation_step(batch, return_probabilities_and_labels: bool):
-        # Unpack the validation batch
-        sequence_ids, sequence_onehots, label_multihots, sequence_lengths = batch
-
-        # Move sequences and labels to GPU, if available
-        labels = label_multihots.to(device)
-        sequences = sequence_onehots.to(
-            device) if train_sequence_encoder else sequence_ids.to(device)
-
-        # Forward pass
-        P_e, L_e = model(sequences,
-                         labels if use_batch_labels_only else torch.ones_like(
-                             labels)
-                         )
-
-        # Compute validation loss for the batch
-        loss = contrastive_loss(P_e,
-                                L_e,
-                                model.t,
-                                labels[:, torch.any(
-                                    labels, dim=0)] if use_batch_labels_only else labels
-                                )
-
-        if return_probabilities_and_labels:
-            # Compute temperature normalized cosine similarities
-            logits = torch.mm(P_e,
-                              L_e.t()) / model.t
-
-            # Apply sigmoid to get the probabilities for multi-label classification
-            probabilities = torch.sigmoid(logits)
-
-            if normalize_probabilities:
-                # TODO: Using original normalize_confidences implemented with numpy,
-                # but this is slow. Should be able to do this with torch tensors.
-                probabilities = torch.tensor(normalize_confidences(predictions=probabilities.detach().cpu().numpy(),
-                                                                   label_vocab=label_vocabulary,
-                                                                   applicable_label_dict=label_normalizer), device=probabilities.device)
-
-            return loss.item(), probabilities, labels
-        else:
-            return loss.item()
-
-    if find_optimal_threshold:
-        assert eval_metrics is not None, "Must provide eval_metrics to find optimal threshold."
-        best_th = 0.0
-        best_score = 0.0
-
-        # Reset eval metrics just in case
-        with torch.no_grad():
-            all_probabilities = []
-            all_labels = []
-            for batch in data_loader:
-                loss, probabilities, labels = evaluation_step(
-                    batch, return_probabilities_and_labels=True)
-                all_probabilities.append(probabilities)
-                all_labels.append(labels)
-            all_probabilities = torch.cat(all_probabilities)
-            all_labels = torch.cat(all_labels)
-
-        for th in np.arange(0.1, 1, 0.01):
-            optimization_metric = F1Score(
-                num_labels=all_labels.shape[-1], threshold=th, task='multilabel', average=params['METRICS_AVERAGE']).to(device)
-            optimization_metric(all_probabilities, all_labels)
-            score = optimization_metric.compute()
-            if score > best_score:
-                best_score = score
-                best_th = th
-            print('TH:', th, 'F1:', score)
-        logging.info('Best Val F1:', best_score, 'Best Val TH:', best_th)
-
+    
     with torch.no_grad():
         for batch in data_loader:
+            loss,logits,labels = evaluation_step(batch=batch,
+                                                 model=model,
+                                                 train_sequence_encoder=train_sequence_encoder,
+                                                 device=device,
+                                                 use_batch_labels_only=use_batch_labels_only)
             if eval_metrics is not None:
-                eval_metrics.reset()
-                loss, probabilities, labels = evaluation_step(
-                    batch, return_probabilities_and_labels=True)
+                # Apply sigmoid to get the probabilities for multi-label classification
+                probabilities = torch.sigmoid(logits)
+
+                if normalize_probabilities:
+                    # TODO: Using original normalize_confidences implemented with numpy,
+                    # but this is slow. Should be able to do this with torch tensors.
+                    probabilities = torch.tensor(normalize_confidences(predictions=probabilities.detach().cpu().numpy(),
+                                                                        label_vocab=label_vocabulary,
+                                                                        applicable_label_dict=label_normalizer),
+                                                                        device=probabilities.device)
                 # Update eval metrics
                 eval_metrics(probabilities, labels)
-            else:
-                loss = evaluation_step(
-                    batch, return_probabilities_and_labels=False)
 
             # Accumulate loss
             total_loss += loss
@@ -281,6 +329,29 @@ def train(model,
           validation_frequency: int,
           output_model_dir: str
           ):
+    """_summary_
+
+    :param model: _description_
+    :type model: _type_
+    :param num_epochs: _description_
+    :type num_epochs: int
+    :param train_loader: _description_
+    :type train_loader: torch.utils.data.DataLoader
+    :param val_loader: _description_
+    :type val_loader: torch.utils.data.DataLoader
+    :param optimizer: _description_
+    :type optimizer: torch.optim.Optimizer
+    :param device: _description_
+    :type device: str
+    :param use_batch_labels_only: _description_
+    :type use_batch_labels_only: bool
+    :param train_sequence_encoder: _description_
+    :type train_sequence_encoder: bool
+    :param validation_frequency: _description_
+    :type validation_frequency: int
+    :param output_model_dir: _description_
+    :type output_model_dir: str
+    """    
 
     model.train()
     # Watch the model
@@ -415,6 +486,21 @@ else:
 if args.mode in ['test', 'both']:
 
     logging.info("Starting testing...")
+    #label_normalizer = load_gz_json(paths['PARENTHOOD_LIB_PATH'])
+
+    if params['DECISION_TH'] is None:
+        logging.info("Decision threshold not provided. Finding optimal threshold on validation set...")
+        best_val_th,best_val_score = find_optimal_threshold(model=model,
+                                                            data_loader=val_loader,
+                                                            device=device,
+                                                            train_sequence_encoder=args.train_sequence_encoder,
+                                                            num_labels=train_dataset.label_vocabulary_size,
+                                                            average=params['METRICS_AVERAGE'],
+                                                            optimization_metric_name='f1',
+                                                            )
+
+        logging.info(f"Best validation threshold: {best_val_th}, Best validation score: {best_val_score}")
+        params['DECISION_TH'] = best_val_th
 
     # Evaluate model on test set
     eval_metrics = EvalMetrics(num_labels=train_dataset.label_vocabulary_size,
@@ -422,11 +508,8 @@ if args.mode in ['test', 'both']:
                                average=params['METRICS_AVERAGE'],
                                device=device)
 
-    # Commenting eval metrics out for now because it's not working
-    # TODO: Fix eval metrics
-    label_normalizer = load_gz_json(paths['PARENTHOOD_LIB_PATH'])
     final_metrics = evaluate(model=model,
-                             data_loader=val_loader,
+                             data_loader=test_loader,
                              eval_metrics=eval_metrics,
                              device=device,
                              use_batch_labels_only=False,
