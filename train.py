@@ -70,8 +70,7 @@ logging.info(
 # Initialize W&B, if using
 if args.use_wandb:
     wandb.init(project="protein-functions",
-               name=f"{args.name if args.name else 'ProTCL'}_{timestamp}", config=params)
-    wandb.log(vars(args))
+               name=f"{args.name if args.name else 'ProTCL'}_{timestamp}", config={**params, **vars(args)})
 
 # Log the configuration and arguments
 logging.info(f"Configuration: {config}")
