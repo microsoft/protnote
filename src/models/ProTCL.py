@@ -48,11 +48,11 @@ class ProTCL(nn.Module):
             "################## Model encoder configurations ##################")
 
         logging.info(
-            f"Using {'cached' if sequence_embedding_matrix is not None else 'ProteInfer'} sequence embeddings with {'training enabled' if train_sequence_embeddings else 'training disabled'}."
+            f"Using {'<<CACHED>>' if sequence_embedding_matrix is not None else '<<ProteInfer>>'} sequence embeddings with training {'<<ENABLED>>' if train_sequence_embeddings else '<<DISABLED>>'}."
         )
 
         logging.info(
-            f"Using {'cached' if label_embedding_matrix is not None else 'PubMedBERT'} label embeddings with {'training enabled' if train_label_embeddings else 'training disabled'}."
+            f"Using {'<<CACHED>>' if label_embedding_matrix is not None else '<<PubMedBERT>>'} label embeddings with training {'<<ENABLED>>' if train_label_embeddings else '<<DISABLED>>'}."
         )
 
         logging.info(
@@ -93,5 +93,3 @@ class ProTCL(nn.Module):
         L_e = F.normalize(self.W_l(L_f), dim=1)
 
         return P_e, L_e
-
-
