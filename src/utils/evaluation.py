@@ -5,6 +5,7 @@ from typing import Literal,Tuple
 from src.utils.proteinfer import normalize_confidences
 
 class EvalMetrics:
+    #TODO: could be better implemented with a list of metrics and a for loop
     def __init__(self,num_labels:int,threshold:float,average:Literal['micro','macro','weighted'],device:str):
         self.precision = Precision(num_labels = num_labels, threshold = threshold,task = 'multilabel',average=average).to(device)
         self.recall = Recall(num_labels = num_labels, threshold = threshold,task = 'multilabel',average=average).to(device)

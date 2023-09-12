@@ -1,5 +1,6 @@
 ---
 # Parameters for model training
+#TODO: Optimizer can also be a hyperparameter
 params:
   LEARNING_RATE: 0.0003
   TEMPERATURE: 0.1
@@ -14,7 +15,24 @@ params:
   DECISION_TH: null
   NUM_WORKERS: 4
   METRICS_AVERAGE: micro
+  TRAIN_SEQUENCE_ENCODER: False
+  TRAIN_SEQUENCE_EMBEDDING_MATRIX: False
+  TRAIN_LABEL_ENCODER: False
+  TRAIN_LABEL_EMBEDDING_MATRIX: False
+  USE_BATCH_LABELS_ONLY: True
+  NORMALIZE_PROBABILITIES: False
   SEED: 42
+  NUM_LABELS: 32102
+
+#Constants for protein encoder model (e.g. ProteInfer). Not really params since 
+# we are not going to change these.
+embed_sequences_params:
+  INPUT_CHANNELS: 20
+  OUTPUT_CHANNELS: 1100
+  KERNEL_SIZE: 9
+  DILATION_BASE: 3
+  NUM_RESNET_BLOCKS: 5
+  BOTTLENECK_FACTOR: 0.5
 
 # Paths to data, vocabularies, embeddings, and models
 relative_paths:
@@ -44,12 +62,3 @@ relative_paths:
   PARENTHOOD_LIB_PATH: parenthood.json.gz
   PROTEINFER_WEIGHTS_PATH: 'models/proteinfer/GO_model_weights.pkl'
 
-#Params for protein encoder model (e.g. ProteInfer)
-embed_sequences_params:
-  NUM_LABELS: 32102
-  INPUT_CHANNELS: 20
-  OUTPUT_CHANNELS: 1100
-  KERNEL_SIZE: 9
-  DILATION_BASE: 3
-  NUM_RESNET_BLOCKS: 5
-  BOTTLENECK_FACTOR: 0.5
