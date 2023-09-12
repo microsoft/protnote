@@ -27,7 +27,6 @@ class ProTCL(nn.Module):
         self.t = temperature
 
         # If using a pre-trained sequence embedding matrix, create a nn.Embedding layer
-        # TODO: Possibly allow this to train
         if sequence_embedding_matrix is not None:
             self.pretrained_sequence_embeddings = nn.Embedding.from_pretrained(
                 sequence_embedding_matrix, freeze=not train_sequence_embeddings)
@@ -37,9 +36,9 @@ class ProTCL(nn.Module):
         if label_embedding_matrix is not None:
             self.pretrained_label_embeddings = nn.Embedding.from_pretrained(
                 label_embedding_matrix, freeze=not train_label_embeddings)
-        # Otherwise, load the label pre-trained encoder and allow it to train
+        # Otherwise, load the label pre-trained encoder and pre-tokenize the labels
         else:
-            # TODO: This doesn't work yet. Maybe we build an nn.Embedding but populate the matrix with the encoder? It would need to be re-calculated every pass, though, not just on init.
+            # TODO: Maybe call this outside of the model and pass in the encoder and the tokenized label map
             self.label_tokenizer, self.label_encoder = load_PubMedBERT(
                 trainable=train_label_embeddings)
 
@@ -74,7 +73,10 @@ class ProTCL(nn.Module):
             L_f = self.pretrained_label_embeddings.weight[collapsed_labels]
         # If using a text encoder, convert labels to embeddings
         else:
+            # Use PubMedBERT to convert labels in the batch to embeddings
+
             # Convert labels to embeddings using label encoder
+
             L_f = get_PubMedBERT_embedding(
                 self.label_tokenizer, self.label_encoder, L)
 
