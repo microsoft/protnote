@@ -1,6 +1,6 @@
 
 import torch
-from torchmetrics.classification import Precision, Recall, BinaryPrecision, BinaryRecall, F1Score
+from torchmetrics.classification import Precision, Recall, BinaryPrecision, BinaryRecall, F1Score,AveragePrecision
 from typing import Literal, Tuple
 
 
@@ -13,6 +13,8 @@ class EvalMetrics:
                              task='multilabel', average=average).to(device)
         self.f1 = F1Score(num_labels=num_labels, threshold=threshold,
                           task='multilabel', average=average).to(device)
+        
+        self.map = AveragePrecision(num_labels=num_labels,task='multilabel',thresholds =100).to(device)
 
         self.precision_samplewise = BinaryPrecision(
             threshold=threshold, multidim_average='samplewise').to(device)
@@ -34,6 +36,7 @@ class EvalMetrics:
 
         self.at_least_one_positive_pred += (probas >
                                             self.threshold).any(axis=1).sum()
+        self.map(probas, labels)
         self.n += len(labels)
 
     def _compute_samplewise(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -48,7 +51,9 @@ class EvalMetrics:
     def compute(self) -> dict:
         metrics = {'precision': self.precision.compute(),
                    'recall': self.recall.compute(),
-                   'f1': self.f1.compute()}
+                   'f1': self.f1.compute(),
+                   'Mean Average Precision': self.map.compute()
+                   }
 
         (metrics['precision_samplewise'],
          metrics['recall_samplewise'],
@@ -62,6 +67,8 @@ class EvalMetrics:
         self.recall.reset()
         self.precision_samplewise.reset()
         self.recall_samplewise.reset()
+        self.f1.reset()
+        self.map.reset()
         self.at_least_one_positive_pred = torch.tensor(
             0, dtype=int).to(self.device)
         self.n = torch.tensor(0, dtype=int).to(self.device)

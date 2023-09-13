@@ -25,8 +25,8 @@ PROTEINFER_RESULTS_DIR = '/home/samirchar/ProteinFunctions/data/proteinfer_resul
 NUM_LABELS = 32102
 TEST_BATCH_SIZE = 2**7
 DEBUG = False
-DECISION_TH = None#0.88
-METRICS_AVERAGE = 'micro'
+DECISION_TH = .1#None#0.88
+METRICS_AVERAGE = 'macro'
 
 logging.basicConfig( level=logging.INFO)
 
@@ -99,7 +99,7 @@ if DECISION_TH is None:
     best_th = 0.0
     best_f1 = 0.0
 
-    for th in np.arange(0.1,1,0.01):
+    for th in np.arange(0.01,1,0.01):
         f1 = F1Score(num_labels = NUM_LABELS, threshold = th,task = 'multilabel',average=METRICS_AVERAGE).to(device)
 
         f1(val_probas,val_labels)
@@ -151,8 +151,8 @@ with torch.no_grad():
     all_probas = torch.cat(all_probas)
     all_seqids = torch.cat(all_seqids)
 
-    np.save(PROTEINFER_RESULTS_DIR+'labels.npy',all_labels.detach().cpu().numpy())
-    np.save(PROTEINFER_RESULTS_DIR+'probas.npy',all_probas.detach().cpu().numpy())
-    np.save(PROTEINFER_RESULTS_DIR+'seqids.npy',all_seqids.detach().cpu().numpy())
+    #np.save(PROTEINFER_RESULTS_DIR+'labels.npy',all_labels.detach().cpu().numpy())
+    #np.save(PROTEINFER_RESULTS_DIR+'probas.npy',all_probas.detach().cpu().numpy())
+    #np.save(PROTEINFER_RESULTS_DIR+'seqids.npy',all_seqids.detach().cpu().numpy())
 
 torch.cuda.empty_cache()
