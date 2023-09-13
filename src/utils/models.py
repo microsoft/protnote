@@ -63,17 +63,38 @@ def load_PubMedBERT(trainable=False):
     return tokenizer, model
 
 
-def get_PubMedBERT_embedding(tokenizer, model, text):
+def get_PubMedBERT_embedding_from_tokens(model, tokens):
     """
-    Obtain the embedding for a given text using the PubMedBERT model.
+    Obtain the embedding for a given sequence of tokens using the PubMedBERT model.
+    Performs inference on batches of tokens.
 
     Args:
-        tokenizer (transformers.PreTrainedTokenizer): The tokenizer for the PubMedBERT model.
         model (transformers.PreTrainedModel): The PubMedBERT model.
-        text (str): The input text for which the embedding is to be obtained.
+        tokens (List[dict]): The tokenized input for which the embedding is to be obtained.
 
     Returns:
-        torch.Tensor: The embedding tensor for the input text.
+        torch.Tensor: The embedding tensor for the input tokens.
+    """
+    # Set output_hidden_states to True
+    outputs = model(**tokens, output_hidden_states=True)
+    embeddings = outputs.hidden_states[-1]  # Get the last hidden state
+
+    # Get the [CLS] token embedding rather than the embedding for each token
+    sequence_embedding = embeddings[:, 0, :]
+
+    return sequence_embedding
+
+
+def get_PubMedBERT_embedding_from_text(tokenizer, model, text):
+    """
+    Obtain the embedding for a given batch of tokens using the PubMedBERT model.
+
+    Args:
+        model (transformers.PreTrainedModel): The PubMedBERT model.
+        tokens (transformers.tokenization_utils_base.BatchEncoding): The input tokens as a BatchEncoding object.
+
+    Returns:
+        torch.Tensor: The embedding tensor for the input tokens.
     """
     # Check if GPU is available
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -88,11 +109,7 @@ def get_PubMedBERT_embedding(tokenizer, model, text):
 
     # Get the embeddings
     with torch.no_grad():
-        # Set output_hidden_states to True
-        outputs = model(**inputs, output_hidden_states=True)
-        embeddings = outputs.hidden_states[-1]  # Get the last hidden state
-
-        # Get the [CLS] token embedding rather than the embedding for each token
-        sequence_embedding = embeddings[:, 0, :]
+        sequence_embedding = get_PubMedBERT_embedding_from_tokens(
+            model, inputs)
 
     return sequence_embedding

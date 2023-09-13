@@ -7,11 +7,11 @@ params:
   PROTEIN_EMBEDDING_DIM: 1100
   LABEL_EMBEDDING_DIM: 768
   LATENT_EMBEDDING_DIM: 934
-  NUM_EPOCHS: 5
+  NUM_EPOCHS: 3
   TRAIN_BATCH_SIZE: 1024
   VALIDATION_BATCH_SIZE: 1024
   TEST_BATCH_SIZE: 1024
-  VALIDATION_FREQUENCY: 50
+  VALIDATION_FREQUENCY: 150
   DECISION_TH: null
   NUM_WORKERS: 4
   METRICS_AVERAGE: micro
@@ -19,7 +19,7 @@ params:
   TRAIN_SEQUENCE_EMBEDDING_MATRIX: False
   TRAIN_LABEL_ENCODER: False
   TRAIN_LABEL_EMBEDDING_MATRIX: False
-  USE_BATCH_LABELS_ONLY: True
+  USE_BATCH_LABELS_ONLY: False
   NORMALIZE_PROBABILITIES: False
   SEED: 42
   NUM_LABELS: 32102
@@ -52,6 +52,9 @@ relative_paths:
   EMBEDDING_DIR: data/embeddings
   LABEL_EMBEDDING_PATH: data/embeddings/frozen_PubMedBERT_label_embeddings.pkl
   SEQUENCE_EMBEDDING_PATH: data/embeddings/frozen_proteinfer_sequence_embeddings.pkl
+
+  # Tokenized paths
+  TOKENIZED_LABELS_PATH: data/annotations/tokenized_go_annotations_2019_07_01.pkl
 
   # Map from alphanumeric sequence IDs to integer sequence IDs
   SEQUENCE_ID_MAP_PATH: data/embeddings/sequence_id_map.pkl

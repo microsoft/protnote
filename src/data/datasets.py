@@ -1,10 +1,9 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
-from src.utils.data import read_fasta, read_pickle, read_json, get_vocab_mappings, filter_annotations
+from src.utils.data import read_fasta, read_pickle, read_json, get_vocab_mappings
 from typing import Optional, Text, Dict
 import pandas as pd
 import logging
-from functools import partial
 from typing import List
 from src.data.collators import collate_variable_sequence_length
 

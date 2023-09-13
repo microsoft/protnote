@@ -81,29 +81,33 @@ def load_gz_json(path):
             return json.load(gzip_file)
 
 
-def load_embeddings(embedding_path, id_map, embedding_dim, device):
+def create_ordered_tensor(data_path, id_map, data_dim, device):
     """
-    Load embeddings from a given path and convert them into a tensor matri for an nn.Embedding layer.
+    Load data from a given path and organize it into a tensor matrix based on a given ID mapping.
 
     Args:
-    - embedding_path (str): Path to the embeddings file. Must be a dictionary.
-    - id_map (dict): Mapping from alphanumeric IDs to numeric IDs.
-    - embedding_dim (int): Dimension of the embeddings.
+    - data_path (str): Path to the data file. Must be a dictionary.
+    - id_map (dict): Mapping from original IDs to desired order of numeric IDs.
+    - data_dim (int): Dimension of the data.
     - device (torch.device): Device to which the tensor should be moved.
 
     Returns:
-    - torch.Tensor: A tensor matrix containing the embeddings.
+    - torch.Tensor: A tensor matrix containing the data, with each row corresponding to one id.
     """
-    embeddings = read_pickle(embedding_path)
-    numeric_id_embedding_map = {
-        id_map[k]: v for k, v in embeddings.items() if k in id_map
+    data = read_pickle(data_path)
+    numeric_id_data_map = {
+        id_map[k]: v for k, v in data.items() if k in id_map
     }
-    max_id = max(numeric_id_embedding_map.keys())
-    embedding_matrix = torch.zeros(max_id + 1, embedding_dim, device=device)
-    for numeric_id, embedding in numeric_id_embedding_map.items():
-        tensor_embedding = torch.tensor(embedding, device=device)
-        embedding_matrix[numeric_id] = tensor_embedding
-    return embedding_matrix
+
+    # Assert that the maximum id in the map is less than the number of data entries
+    assert max(numeric_id_data_map.keys()) < len(id_map), \
+        f"Maximum numeric ID in the map ({max(numeric_id_data_map.keys())}) is not less than the number of data entries ({len(id_map)})."
+
+    data_matrix = torch.zeros(len(id_map), data_dim, device=device)
+    for numeric_id, data_entry in numeric_id_data_map.items():
+        tensor_data = torch.tensor(data_entry, device=device)
+        data_matrix[numeric_id] = tensor_data
+    return data_matrix
 
 
 def load_model_weights(model, path):

@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 import logging
-from src.utils.models import load_PubMedBERT, get_PubMedBERT_embedding
+from src.utils.models import get_PubMedBERT_embedding_from_tokens
 
 
 class ProTCL(nn.Module):
@@ -12,10 +12,13 @@ class ProTCL(nn.Module):
             label_embedding_dim,
             latent_dim,
             temperature,
-            sequence_embedding_matrix=None,
-            train_label_embeddings=False,
-            label_embedding_matrix=None,
-            train_sequence_embeddings=False,):
+            label_encoder,
+            tokenized_labels,
+            sequence_encoder,
+            sequence_embedding_matrix,
+            train_label_embeddings,
+            label_embedding_matrix,
+            train_sequence_embeddings):
         super().__init__()
 
         # Projection heads
@@ -39,8 +42,8 @@ class ProTCL(nn.Module):
         # Otherwise, load the label pre-trained encoder and pre-tokenize the labels
         else:
             # TODO: Maybe call this outside of the model and pass in the encoder and the tokenized label map
-            self.label_tokenizer, self.label_encoder = load_PubMedBERT(
-                trainable=train_label_embeddings)
+            self.label_encoder = label_encoder
+            self.tokenized_labels = tokenized_labels
 
         # Log the configurations
         logging.info(
@@ -74,11 +77,11 @@ class ProTCL(nn.Module):
         # If using a text encoder, convert labels to embeddings
         else:
             # Use PubMedBERT to convert labels in the batch to embeddings
+            L_f = get_PubMedBERT_embedding_from_tokens(
+                self.label_encoder, self.tokenized_labels).to(L.device)
 
-            # Convert labels to embeddings using label encoder
-
-            L_f = get_PubMedBERT_embedding(
-                self.label_tokenizer, self.label_encoder, L)
+            # Down-filter the embeddings to only the labels in the batch
+            L_f = L_f[collapsed_labels]
 
         # If using pre-trained sequence embeddings, convert sequences to embeddings (since P is a tensor of sequence IDs)
         if hasattr(self, 'pretrained_sequence_embeddings'):
@@ -90,7 +93,7 @@ class ProTCL(nn.Module):
             raise ValueError(
                 "Sequence embeddings not found. Please provide a pre-trained sequence embedding map or a protein encoder.")
 
-        # Project protein and label embeddings to latent space
+        # Project protein and label embeddings to latent space and L2 normalize
         P_e = F.normalize(self.W_p(P_f), dim=1)
         L_e = F.normalize(self.W_l(L_f), dim=1)
 

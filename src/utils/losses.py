@@ -13,10 +13,6 @@ def contrastive_loss(P_e, L_e, t, target):
     # Compute pairwise cosine similarities; vectors already normalized, so no need to divide by product of vector magnitudes
     logits = torch.mm(P_e, L_e.t()) / t
 
-    # Move logitcs to GPU, if available
-    # TODO: Everything should be on GPU to begin with, so this should be unnecessary
-    logits = logits.to(target.device)
-
     # Compute loss for each direction (protein to label and label to protein)
     overall_loss_p = compute_asymmetric_loss(logits, target, dim=1)
     overall_loss_l = compute_asymmetric_loss(logits.t(), target.t(), dim=0)
