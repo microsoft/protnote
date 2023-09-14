@@ -19,10 +19,11 @@ params:
   TRAIN_SEQUENCE_EMBEDDING_MATRIX: False
   TRAIN_LABEL_ENCODER: False
   TRAIN_LABEL_EMBEDDING_MATRIX: False
-  USE_BATCH_LABELS_ONLY: False
+  USE_BATCH_LABELS_ONLY: True
   NORMALIZE_PROBABILITIES: False
   SEED: 42
   NUM_LABELS: 32102
+  EMBEDDING_UPDATE_INTERVAL: 30
 
 #Constants for protein encoder model (e.g. ProteInfer). Not really params since 
 # we are not going to change these.

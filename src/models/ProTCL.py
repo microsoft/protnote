@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 import logging
-from src.utils.models import get_PubMedBERT_embedding_from_tokens
+from src.utils.models import get_embeddings_from_tokens
 
 
 class ProTCL(nn.Module):
@@ -13,7 +13,7 @@ class ProTCL(nn.Module):
             latent_dim,
             temperature,
             label_encoder,
-            tokenized_labels,
+            tokenized_labels_dataloader,
             sequence_encoder,
             sequence_embedding_matrix,
             train_label_embeddings,
@@ -43,7 +43,7 @@ class ProTCL(nn.Module):
         else:
             # TODO: Maybe call this outside of the model and pass in the encoder and the tokenized label map
             self.label_encoder = label_encoder
-            self.tokenized_labels = tokenized_labels
+            self.tokenized_labels_dataloader = tokenized_labels_dataloader
 
         # Log the configurations
         logging.info(
@@ -60,7 +60,7 @@ class ProTCL(nn.Module):
         logging.info(
             "##################################################################")
 
-    def forward(self, P, L):
+    def forward(self, P, L, is_training=True):
         """
         Forward pass of the model.
         args:
@@ -76,12 +76,18 @@ class ProTCL(nn.Module):
             L_f = self.pretrained_label_embeddings.weight[collapsed_labels]
         # If using a text encoder, convert labels to embeddings
         else:
-            # Use PubMedBERT to convert labels in the batch to embeddings
-            L_f = get_PubMedBERT_embedding_from_tokens(
-                self.label_encoder, self.tokenized_labels).to(L.device)
+            # If in training mode or cache is empty (because it was cleared or because it is the first batch), recompute embeddings
+            if is_training or self.cached_label_embeddings is None:
+                print("Getting label embeddings...")
+                self.cached_label_embeddings = get_embeddings_from_tokens(
+                    self.label_encoder, self.tokenized_labels_dataloader)
+                print("Finished getting label embeddings.")
+            else:
+                print("Skipped getting label embeddings. is_training:", is_training)
 
             # Down-filter the embeddings to only the labels in the batch
-            L_f = L_f[collapsed_labels]
+            # TODO: This is technically inefficient, since we get all the label embeddings and then filter them
+            L_f = self.cached_label_embeddings[collapsed_labels]
 
         # If using pre-trained sequence embeddings, convert sequences to embeddings (since P is a tensor of sequence IDs)
         if hasattr(self, 'pretrained_sequence_embeddings'):
@@ -98,3 +104,6 @@ class ProTCL(nn.Module):
         L_e = F.normalize(self.W_l(L_f), dim=1)
 
         return P_e, L_e
+
+    def clear_label_embeddings_cache(self):
+        self.cached_label_embeddings = None

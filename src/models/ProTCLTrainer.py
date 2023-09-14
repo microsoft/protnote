@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import wandb
 import os
+from torch.cuda.amp import GradScaler, autocast
 
 
 class ProTCLTrainer:
@@ -47,6 +48,8 @@ class ProTCLTrainer:
         self.num_labels = config['params']['NUM_LABELS']
         self.num_epochs = config['params']['NUM_EPOCHS']
         self.train_sequence_encoder = config['params']['TRAIN_SEQUENCE_ENCODER']
+        self.train_label_encoder = config['params']['TRAIN_LABEL_ENCODER']
+        self.embedding_update_interval = config['params']['EMBEDDING_UPDATE_INTERVAL']
         self.use_batch_labels_only = config['params']['USE_BATCH_LABELS_ONLY']
         self.normalize_probabilities = config['params']['NORMALIZE_PROBABILITIES']
         self.validation_frequency = config['params']['VALIDATION_FREQUENCY']
@@ -56,6 +59,8 @@ class ProTCLTrainer:
         self.label_normalizer = load_gz_json(
             config['relative_paths']['PARENTHOOD_LIB_PATH'])
         self.output_model_dir = config['relative_paths']['OUTPUT_MODEL_DIR']
+        self.scaler = GradScaler()
+        self.cached_label_embeddings = None
 
     def evaluation_step(self, batch, testing=False) -> tuple:
         """Perform a single evaluation step.
@@ -81,7 +86,7 @@ class ProTCLTrainer:
             labels)
 
         # Forward pass
-        P_e, L_e = self.model(sequences, considered_labels)
+        P_e, L_e = self.model(sequences, considered_labels, is_training=False)
 
         # Compute validation loss for the batch
         loss = contrastive_loss(P_e,
@@ -190,7 +195,7 @@ class ProTCLTrainer:
         self.model.eval()
         total_loss = 0
 
-        with torch.no_grad():
+        with torch.no_grad(), autocast():
             for batch in data_loader:
                 loss, logits, labels = self.evaluation_step(
                     batch=batch, testing=testing)
@@ -261,7 +266,8 @@ class ProTCLTrainer:
                 # Labels can be only the labels that are present in the batch (if self.USE_BATCH_LABELS is True) or all the labels (if False)
                 considered_labels = labels if self.use_batch_labels_only else torch.ones_like(
                     labels)
-                P_e, L_e = self.model(sequences, considered_labels)
+                with autocast():
+                    P_e, L_e = self.model(sequences, considered_labels)
 
                 # Compute target (note that the target shape varies depending on whether we are using batch labels only or not)
                 target = labels[:, torch.any(
@@ -280,13 +286,18 @@ class ProTCLTrainer:
                     wandb.log({"training_loss": loss.item()})
 
                 # Backward pass
-                loss.backward()
-                self.optimizer.step()
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
 
                 # Increment batch count
                 batch_count += 1
 
-                # Run validation and log progress every 20 batches
+                # Force the model to re-calculate the embeddings every n batches
+                if batch_count % self.embedding_update_interval == 0 and self.train_label_encoder:
+                    self.model.clear_label_embeddings_cache()
+
+                # Run validation and log progress every n batches
                 if batch_count % self.validation_frequency == 0:
 
                     ####### VALIDATION LOOP #######

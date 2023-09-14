@@ -1,6 +1,8 @@
-from transformers import AutoTokenizer, AutoModelForMaskedLM
+from transformers import AutoTokenizer, AutoModel
 import torch
+from torch.cuda.amp import autocast  # For AMP
 import logging
+from torch.utils.data import DataLoader
 
 
 def count_parameters_by_layer(model):
@@ -34,82 +36,76 @@ def count_parameters_by_layer(model):
         f"{'TOTAL':<{max([len(name) for name, _ in model.named_parameters()])}} {total_params:<20} {trainable_params}")
 
 
-def load_PubMedBERT(trainable=False):
+def load_model_and_tokenizer(checkpoint, freeze_weights=False):
     """
-    Load the PubMedBERT tokenizer and model.
+    Load a tokenizer and model given a checkpoint string.
 
     Args:
-        trainable (bool, optional): If True, allows the model weights to be trainable. 
-                                    Defaults to False (weights are frozen).
+        checkpoint (str): The checkpoint string for the model and tokenizer, based on the HuggingFace model hub.
+        freeze_weights (bool, optional): If True, the model weights will be frozen. Defaults to False.
 
     Returns:
         tuple: A tuple containing the tokenizer and the model.
     """
-    # Load PubMedBERT tokenizer and model
-    tokenizer = AutoTokenizer.from_pretrained(
-        "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext")
-    model = AutoModelForMaskedLM.from_pretrained(
-        "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext")
+    tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+    model = AutoModel.from_pretrained(checkpoint).to('cuda')
 
-    # If not trainable, freeze the model weights
-    if not trainable:
+    if freeze_weights:
         for param in model.parameters():
             param.requires_grad = False
-
-    # Move model to GPU if available
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    model = model.to(device)
 
     return tokenizer, model
 
 
-def get_PubMedBERT_embedding_from_tokens(model, tokens):
+def tokenize_inputs(tokenizer, labels, padding=True, truncation=True, max_length=512):
     """
-    Obtain the embedding for a given sequence of tokens using the PubMedBERT model.
-    Performs inference on batches of tokens.
+    Tokenize inputs given a tokenizer.
 
     Args:
-        model (transformers.PreTrainedModel): The PubMedBERT model.
-        tokens (List[dict]): The tokenized input for which the embedding is to be obtained.
+        tokenizer (transformers.PreTrainedTokenizer): The tokenizer.
+        labels (list): The list of labels to tokenize.
+        max_length (int, optional): Maximum length for tokenization. Defaults to 512.
 
     Returns:
-        torch.Tensor: The embedding tensor for the input tokens.
+        transformers.tokenization_utils_base.BatchEncoding: The tokenized inputs.
     """
-    # Set output_hidden_states to True
-    outputs = model(**tokens, output_hidden_states=True)
-    embeddings = outputs.hidden_states[-1]  # Get the last hidden state
-
-    # Get the [CLS] token embedding rather than the embedding for each token
-    sequence_embedding = embeddings[:, 0, :]
-
-    return sequence_embedding
+    return tokenizer(labels, padding=padding, truncation=truncation, max_length=max_length, return_tensors="pt").to('cuda')
 
 
-def get_PubMedBERT_embedding_from_text(tokenizer, model, text):
+def get_embeddings_from_tokens(model, input_data, train_model=False):
     """
-    Obtain the embedding for a given batch of tokens using the PubMedBERT model.
+    Get embeddings given tokens using a model.
 
     Args:
-        model (transformers.PreTrainedModel): The PubMedBERT model.
-        tokens (transformers.tokenization_utils_base.BatchEncoding): The input tokens as a BatchEncoding object.
+        model (transformers.PreTrainedModel): The model.
+        input_data (Union[DataLoader, transformers.tokenization_utils_base.BatchEncoding]): DataLoader or Tokenized inputs.
+        train_model (bool, optional): If True, the model will be trained on the input tokens. Defaults to False.
 
     Returns:
-        torch.Tensor: The embedding tensor for the input tokens.
+        torch.Tensor: The embeddings tensor.
     """
-    # Check if GPU is available
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    # Set the model to training mode if train_model is True
+    model.train(train_model)
 
-    # Tokenize the text and obtain the output tensors
-    inputs = tokenizer(text, return_tensors="pt",
-                       truncation=True, padding=True, max_length=512)
+    if isinstance(input_data, DataLoader):
+        embeddings = torch.empty((len(input_data.dataset), 768), device='cuda')
+        for i, batch in enumerate(input_data):
+            batch = tuple(t.to('cuda') for t in batch)
+            with torch.set_grad_enabled(train_model), autocast():
+                outputs = model.forward(
+                    input_ids=batch[0], attention_mask=batch[1], output_hidden_states=True)
+                batch_embeddings = outputs.last_hidden_state
+                # Extract the [CLS] token embeddings (the first token for each sequence)
+                cls_embeddings = batch_embeddings[:, 0, :]
+                embeddings[i*input_data.batch_size:(i+1)
+                           * input_data.batch_size] = cls_embeddings
+        return embeddings
 
-    # Move the tensors to GPU if available
-    inputs = {name: tensor.to(device) for name, tensor in inputs.items()}
-    model = model.to(device)
-
-    # Get the embeddings
-    with torch.no_grad():
-        sequence_embedding = get_PubMedBERT_embedding_from_tokens(
-            model, inputs)
-
-    return sequence_embedding
+    else:  # Direct tokenized inputs
+        with torch.set_grad_enabled(train_model), autocast():
+            outputs = model.forward(
+                input_ids=input_data['input_ids'].to('cuda'), attention_mask=input_data['attention_mask'].to('cuda'), output_hidden_states=True)
+            embeddings = outputs.last_hidden_state
+            # Extract the [CLS] token embeddings (the first token for each sequence)
+            cls_embeddings = embeddings[:, 0, :]
+        return cls_embeddings

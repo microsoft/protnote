@@ -13,8 +13,13 @@ def calculate_label(row):
     Returns the definition of the row with any text between brackets removed.
     """
     definition = row.get("def", None)
+
+    # Remove any text between brackets, e.g., PubMed citations
+    # Remove leading and trailing quotation marks
     if definition is not None:
         definition = re.sub(r'\s*\[.*?\]\s*', '', definition)
+        definition = definition.strip('"')
+
     return definition
 
 
