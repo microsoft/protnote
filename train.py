@@ -32,7 +32,8 @@ from torch.utils.data import DataLoader, TensorDataset
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Argument parser setup
-parser = argparse.ArgumentParser(description="Train and/or Test the ProTCL model.")
+parser = argparse.ArgumentParser(
+    description="Train and/or Test the ProTCL model.")
 parser.add_argument(
     "--mode",
     type=str,
@@ -68,6 +69,8 @@ parser.add_argument(
     "--override", nargs="*", help="Override parameters in key-value pairs."
 )
 
+# TODO: Add an option to serialize and save config with a name corresponding to the model save path
+
 # TODO: Make Optimization metric and normalize probabilities part of arguments
 args = parser.parse_args()
 
@@ -75,13 +78,14 @@ args = parser.parse_args()
     config_path=args.config, run_name=args.name, overrides=args.override
 )
 
-
+# Create datasets
 train_dataset, val_dataset, test_dataset = ProteinDataset.create_multiple_datasets(
     paths_list
 )
 
 # Initialize new run
-logger.info(f"################## {timestamp} RUNNING train.py ##################")
+logger.info(
+    f"################## {timestamp} RUNNING train.py ##################")
 
 # Initialize W&B, if using
 if args.use_wandb:
@@ -106,9 +110,6 @@ train_loader, val_loader, test_loader = create_multiple_loaders(
     num_workers=params["NUM_WORKERS"],
     pin_memory=True,
 )
-
-# Load map from alphanumeric sequence ID's to integer sequence ID's
-sequence_id_map = read_pickle(paths["SEQUENCE_ID_MAP_PATH"])
 
 # Load sequence embeddings
 sequence_embedding_matrix = sequence_encoder = None
