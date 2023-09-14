@@ -98,7 +98,6 @@ class ProTCLTrainer:
 
     def find_optimal_threshold(self,
                                data_loader: torch.utils.data.DataLoader,
-                               average: Literal['micro', 'macro', 'weighted'],
                                optimization_metric_name: str
                                ) -> tuple[float, float]:
         """Find the optimal threshold for the given data loader.
@@ -148,8 +147,10 @@ class ProTCLTrainer:
             all_labels = torch.cat(all_labels)
 
         for th in np.arange(0.1, 1, 0.01):
-            eval_metrics = EvalMetrics(
-                num_labels=self.num_labels, average=average, threshold=th, device=self.device)
+            eval_metrics = EvalMetrics(num_labels=self.num_labels,
+                               threshold=th,
+                               device=self.device).get_metric_collection(type='all')
+            
             optimization_metric = getattr(
                 eval_metrics, optimization_metric_name)
 

@@ -245,13 +245,14 @@ if args.mode in ['test', 'both']:
 
         best_val_th, best_val_score = Trainer.find_optimal_threshold(data_loader=val_loader,
                                                                      average=params['METRICS_AVERAGE'],
-                                                                     optimization_metric_name='f1'
+                                                                     optimization_metric_name='f1_macro'
                                                                      )
     # Evaluate model on test set
     eval_metrics = EvalMetrics(num_labels=train_dataset.label_vocabulary_size,
                                threshold=best_val_th,
-                               average=params['METRICS_AVERAGE'],
-                               device=device)
+                               device=device).get_metric_collection(type='all')
+    
+
 
     final_metrics = Trainer.evaluate(data_loader=test_loader,
                                      eval_metrics=eval_metrics,
