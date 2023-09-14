@@ -2,16 +2,14 @@ import logging
 from src.utils.data import (
     read_pickle,
     load_model_weights,
-    seed_everything,
+    read_yaml,
     create_ordered_tensor,
-    get_tokenized_labels_dataloader,
 )
 from src.data.datasets import ProteinDataset, create_multiple_loaders
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
 from src.utils.evaluation import EvalMetrics
 from src.utils.models import count_parameters_by_layer
-from src.utils.configs import get_setup
 import numpy as np
 import torch
 import wandb
@@ -34,13 +32,6 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # Argument parser setup
 parser = argparse.ArgumentParser(description="Train and/or Test the ProTCL model.")
 parser.add_argument(
-    "--mode",
-    type=str,
-    choices=["train", "test", "both"],
-    default="both",
-    help="Specify the mode: 'train', 'test', or 'both'. Default is 'both'.",
-)
-parser.add_argument(
     "--use-wandb",
     action="store_true",
     default=False,
@@ -53,32 +44,50 @@ parser.add_argument(
     help="(Relative) path to the model to be loaded. If not provided, a new model will be initialized.",
 )
 parser.add_argument(
-    "--name",
-    type=str,
-    default="ProTCL",
-    help="Name of the W&B run. If not provided, a name will be generated.",
-)
-parser.add_argument(
     "--config",
     type=str,
     default="configs/base_config.yaml",
     help="(Relative) path to the configuration file.",
 )
-parser.add_argument(
-    "--override", nargs="*", help="Override parameters in key-value pairs."
-)
 
 # TODO: Make Optimization metric and normalize probabilities part of arguments
 args = parser.parse_args()
 
-(config, params, paths, paths_list, timestamp, logger, device, ROOT_PATH) = get_setup(
-    config_path=args.config, run_name=args.name, overrides=args.override
+
+# Get the root path from the environment variable; default to current directory if ROOT_PATH is not set
+ROOT_PATH = os.environ.get("ROOT_PATH", ".")
+
+# Load the configuration file
+config = read_yaml(os.path.join(ROOT_PATH, args.config))
+
+# Extract the parameters and paths from the (possibly overidden) config file
+params = config["params"]
+paths = {
+    key: os.path.join(ROOT_PATH, value)
+    for key, value in config["relative_paths"].items()
+}
+
+# Set the timezone for the entire Python environment
+os.environ["TZ"] = "US/Pacific"
+time.tzset()
+timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S %Z").strip()
+
+# Initialize logging
+# TODO: Find a way to give W&B access to the log file
+log_dir = os.path.join(ROOT_PATH, "logs")
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+full_log_path = os.path.join(log_dir, f"{timestamp}_train_{args.name}.log")
+logging.basicConfig(
+    filename=full_log_path,
+    filemode="w",
+    format="%(asctime)s %(levelname)-4s %(message)s",
+    level=logging.INFO,
+    datefmt="%Y-%m-%d %H:%M:%S %Z",
 )
 
-
-train_dataset, val_dataset, test_dataset = ProteinDataset.create_multiple_datasets(
-    paths_list
-)
+logger = logging.getLogger()
+print(f"Logging to {full_log_path}...")
 
 # Initialize new run
 logger.info(f"################## {timestamp} RUNNING train.py ##################")
@@ -95,17 +104,32 @@ if args.use_wandb:
 logger.info(f"Configuration: {config}")
 logger.info(f"Arguments: {args}")
 
+# Use GPU if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+logging.info(f"Using device: {device}")
+
+# Load datasets from config file paths; the same vocabulary is used for all datasets
+common_paths = {
+    "amino_acid_vocabulary_path": paths["AMINO_ACID_VOCAB_PATH"],
+    "label_vocabulary_path": paths["GO_LABEL_VOCAB_PATH"],
+    "sequence_id_vocabulary_path": paths["SEQUENCE_ID_VOCAB_PATH"],
+    "sequence_id_map_path": paths["SEQUENCE_ID_MAP_PATH"],
+}
+paths_list = [
+    {**common_paths, "data_path": paths[key]}
+    for key in ["TRAIN_DATA_PATH", "VAL_DATA_PATH", "TEST_DATA_PATH"]
+]
+
+test_dataset = ProteinDataset.create_multiple_datasets(paths_list)[0]
+
 # Define data loaders
-train_loader, val_loader, test_loader = create_multiple_loaders(
-    [train_dataset, val_dataset, test_dataset],
-    [
-        params["TRAIN_BATCH_SIZE"],
-        params["VALIDATION_BATCH_SIZE"],
-        params["TEST_BATCH_SIZE"],
-    ],
+test_loader = create_multiple_loaders(
+    [test_dataset],
+    [params["TEST_BATCH_SIZE"]],
     num_workers=params["NUM_WORKERS"],
     pin_memory=True,
-)
+)[0]
+
 
 # Load map from alphanumeric sequence ID's to integer sequence ID's
 sequence_id_map = read_pickle(paths["SEQUENCE_ID_MAP_PATH"])
@@ -116,7 +140,7 @@ if not params["TRAIN_SEQUENCE_ENCODER"]:
     # TODO: Rather than loading from file, create from ProteInfer itself (slower at startup, but more flexible)
     sequence_embedding_matrix = create_ordered_tensor(
         paths["SEQUENCE_EMBEDDING_PATH"],
-        train_dataset.sequence_id2int,
+        test_dataset.sequence_id2int,  # TODO: Not sure if this should be from test_dataset
         params["PROTEIN_EMBEDDING_DIM"],
         device,
     )
@@ -128,25 +152,53 @@ if not params["TRAIN_LABEL_ENCODER"]:
     # TODO: Rather than loading from file, create from the model itself (slower at startup, but more flexible)
     label_embedding_matrix = create_ordered_tensor(
         paths["LABEL_EMBEDDING_PATH"],
-        train_dataset.label2int,
+        test_dataset.label2int,  # TODO: Not sure if this should be from test_dataset
         params["LABEL_EMBEDDING_DIM"],
         device,
     )
     logger.info("Loaded label embeddings.")
 # Otherwise, load the pre-tokenized labels
 else:
-    tokenized_labels_dataloader = get_tokenized_labels_dataloader(
-        go_descriptions_path=paths["GO_DESCRIPTIONS_PATH"],
-        llm_checkpoint_path=params["PUBMEDBERT_CHECKPOINT"],
-        train_label_encoder=params["TRAIN_LABEL_ENCODER"],
-        label_vocabulary=train_dataset.label_vocabulary,
-        label2int_mapping=train_dataset.label2int,
-        batch_size=params["LABEL_BATCH_SIZE"],
-        device=device,
+    # Load the go annotations (include free text) from data file
+    annotations = read_pickle(paths["GO_DESCRIPTIONS_PATH"])
+
+    # Filter the annotations df to be only the labels in label_vocab. In annotations, the go id is the index
+    annotations = annotations[annotations.index.isin(test_dataset.label_vocabulary)]
+
+    # Add a new column 'numeric_id' to the dataframe based on the id_map
+    annotations["numeric_id"] = annotations.index.map(test_dataset.label2int)
+
+    # Sort the dataframe by 'numeric_id'
+    annotations_sorted = annotations.sort_values(by="numeric_id")
+
+    # Extract the "label" column as a list
+    sorted_labels = annotations_sorted["label"].tolist()
+
+    checkpoint = params["PUBMEDBERT_CHECKPOINT"]
+
+    # Load the model and tokenizer, then tokenize the labels
+    label_tokenizer, label_encoder = load_model_and_tokenizer(
+        checkpoint, freeze_weights=not params["TRAIN_LABEL_ENCODER"]
+    )
+    label_encoder = label_encoder.to(device)
+    model_inputs = tokenize_inputs(label_tokenizer, sorted_labels)
+
+    # Move the tensors to GPU if available
+    model_inputs = {name: tensor.to(device) for name, tensor in model_inputs.items()}
+
+    # Create a DataLoader to iterate over the tokenized labels in batches
+    # TODO: Move this other batch size to arguments as LABEL_BATCH_SIZE
+    tokenized_labels_dataloader = DataLoader(
+        TensorDataset(*model_inputs.values()), batch_size=500
     )
 
 # Seed everything so we don't go crazy
-seed_everything(params["SEED"], device)
+random.seed(params["SEED"])
+np.random.seed(params["SEED"])
+torch.manual_seed(params["SEED"])
+if device == "cuda":
+    torch.cuda.manual_seed_all(params["SEED"])
+
 # Initialize the models
 
 # TODO: Initialize ProteInfer and PubMedBERT here as well as the ensemble (ProTCL), which should take the other two as optional arguments
@@ -187,12 +239,6 @@ if args.load_model:
     load_model_weights(model, os.path.join(ROOT_PATH, args.load_model))
     logger.info(f"Loading model weights from {args.load_model}...")
 
-####### TRAINING AND VALIDATION LOOPS #######
-if args.mode in ["train", "both"]:
-    # Train function
-    Trainer.train(train_loader=train_loader, val_loader=val_loader)
-else:
-    logger.info("Skipping training...")
 
 ####### TESTING LOOP #######
 if args.mode in ["test", "both"]:
@@ -204,7 +250,7 @@ if args.mode in ["test", "both"]:
         logger.info("Decision threshold not provided.")
 
         best_val_th, best_val_score = Trainer.find_optimal_threshold(
-            data_loader=val_loader, optimization_metric_name="f1_micro"
+            data_loader=test_loader, optimization_metric_name="f1_micro"
         )
     # Evaluate model on test set
     eval_metrics = EvalMetrics(
@@ -214,12 +260,6 @@ if args.mode in ["test", "both"]:
     final_metrics = Trainer.evaluate(
         data_loader=test_loader, eval_metrics=eval_metrics, testing=True
     )
-    # Convert all metrics to float
-    final_metrics = {
-        k: (v.item() if isinstance(v, torch.Tensor) else v)
-        for k, v in final_metrics.items()
-    }
-
     logger.info(json.dumps(final_metrics, indent=4))
     logger.info("Testing complete.")
 

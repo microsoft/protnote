@@ -26,7 +26,7 @@ def compute_asymmetric_loss(logits, target, dim):
     Helper function to compute the asymmetric loss (either using the protein or label embeddings as the anchor)
     """
     epsilon = 1e-10  # Small value to avoid division by zero
-    loss = F.binary_cross_entropy_with_logits(logits, target, reduction='none')
+    loss = F.binary_cross_entropy_with_logits(logits, target.float(), reduction='none')
 
     # Create positive and negative label masks
     target_pos = target.bool()
