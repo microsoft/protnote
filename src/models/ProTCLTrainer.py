@@ -144,8 +144,6 @@ class ProTCLTrainer:
                                                                        applicable_label_dict=self.label_normalizer),
                                                  device=self.device)
 
-                # # Only append if the probability tensor is the same size as the existing tensors in all_probabilities (to avoid partial batch issues)
-                # if len(all_probabilities) == 0 or probabilities.shape == all_probabilities[0].shape:
                 all_probabilities.append(probabilities)
                 all_labels.append(labels)
 
@@ -285,16 +283,21 @@ class ProTCLTrainer:
                 if self.use_wandb:
                     wandb.log({"training_loss": loss.item()})
 
+                # print("Running backward pass...")
+
                 # Backward pass
                 self.scaler.scale(loss).backward()
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
+
+                # print("Completed batch", batch_count)
 
                 # Increment batch count
                 batch_count += 1
 
                 # Force the model to re-calculate the embeddings every n batches
                 if batch_count % self.embedding_update_interval == 0 and self.train_label_encoder:
+                    # print("Clearing cached label embeddings...")
                     self.model.clear_label_embeddings_cache()
 
                 # Run validation and log progress every n batches

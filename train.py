@@ -139,7 +139,7 @@ if not params['TRAIN_SEQUENCE_ENCODER']:
     # TODO: Rather than loading from file, create from ProteInfer itself (slower at startup, but more flexible)
     sequence_embedding_matrix = create_ordered_tensor(
         paths['SEQUENCE_EMBEDDING_PATH'],
-        sequence_id_map,
+        train_dataset.sequence_id2int,
         params['PROTEIN_EMBEDDING_DIM'],
         device
     )
@@ -214,9 +214,11 @@ model = ProTCL(protein_embedding_dim=params['PROTEIN_EMBEDDING_DIM'],
                sequence_encoder=sequence_encoder,
                sequence_embedding_matrix=sequence_embedding_matrix,
                label_embedding_matrix=label_embedding_matrix,
-               # TODO: Can simplify based on whether we pass an encoder or an embedding matrix
-               train_label_embeddings=params['TRAIN_LABEL_ENCODER'] or params['TRAIN_LABEL_EMBEDDING_MATRIX'],
-               train_sequence_embeddings=params['TRAIN_SEQUENCE_ENCODER'] or params['TRAIN_SEQUENCE_EMBEDDING_MATRIX'],
+               train_projection_head=params['TRAIN_PROJECTION_HEAD'],
+               train_label_embeddings=params['TRAIN_LABEL_EMBEDDING_MATRIX'],
+               train_sequence_embeddings=params['TRAIN_SEQUENCE_EMBEDDING_MATRIX'],
+               train_label_encoder=params['TRAIN_LABEL_ENCODER'],
+               train_sequence_encoder=params['TRAIN_SEQUENCE_ENCODER'],
                ).to(device)
 
 # Initialize trainer class to handle model training, validation, and testing

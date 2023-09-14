@@ -4,13 +4,11 @@
 # Run script with: ./run_multiple.sh
 
 # Runs to optimize temperature (using all the labels)
-python train.py --name 'base_run_t0.25_batch_only' --override TEMPERATURE 0.25 --use-wandb
-python train.py --name 'base_run_t0.1_batch_only' --override TEMPERATURE 0.1 --use-wandb
-python train.py --name 'base_run_t0.075_batch_only' --override TEMPERATURE 0.075 --use-wandb
-
-python train.py --name 'base_run_t0.25' --override TEMPERATURE 0.25 USE_BATCH_LABELS_ONLY False --use-wandb
-python train.py --name 'base_run_t0.1' --override TEMPERATURE 0.1 USE_BATCH_LABELS_ONLY False --use-wandb
-python train.py --name 'base_run_t0.075' --override TEMPERATURE 0.075 USE_BATCH_LABELS_ONLY False --use-wandb
+python train.py --name 'train_label_embedding_t0.25_batch_only' --override TEMPERATURE 0.1 --use-wandb
+python train.py --name 'train_label_embedding_t0.1_batch_only' --override TEMPERATURE 0.09 --use-wandb
+python train.py --name 'train_label_embedding_t0.075_batch_only' --override TEMPERATURE 0.08 --use-wandb
+python train.py --name 'train_label_embedding_t0.075_batch_only' --override TEMPERATURE 0.07 --use-wandb
+python train.py --name 'train_label_embedding_t0.075_batch_only' --override TEMPERATURE 0.06 --use-wandb
 
 # python train.py --name 'base_run_t3' --override TEMPERATURE 0.05 --use-wandb
 # python train.py --name 'base_run_t4' --override TEMPERATURE 0.01 --use-wandb

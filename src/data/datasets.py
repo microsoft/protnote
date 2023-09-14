@@ -20,24 +20,25 @@ class ProteinDataset(Dataset):
             amino_acid_vocabulary_path (str): Path to the JSON file containing the amino acid vocabulary.
             label_vocabulary_path (str): Path to the JSON file containing the label vocabulary.
             sequence_id_vocabulary_path (str): Path to the JSON file containing the sequence ID vocabulary.
-            sequence_id_map_path (str): Path to the pickled file containing the map from alphanumeric sequence IDs to integer sequence IDs.
         deduplicate (bool): Whether to remove duplicate sequences (default: False)
         """
         # Error handling: check for missing keys
-        required_keys = ["data_path", "amino_acid_vocabulary_path", "label_vocabulary_path",
-                         "sequence_id_vocabulary_path", "sequence_id_map_path"]
+        required_keys = ["data_path"]
         for key in required_keys:
             if key not in paths:
                 raise ValueError(
                     f"Missing required key in paths dictionary: {key}")
 
-        # Initialize class variables
-        self.data = read_fasta(paths["data_path"])
+        # Set default values for paths not provided
         self.data_path = paths["data_path"]
-        self.amino_acid_vocabulary_path = paths["amino_acid_vocabulary_path"]
-        self.label_vocabulary_path = paths["label_vocabulary_path"]
-        self.sequence_id_vocabulary_path = paths["sequence_id_vocabulary_path"]
-        self.sequence_id_map_path = paths["sequence_id_map_path"]
+        self.amino_acid_vocabulary_path = paths.get(
+            "amino_acid_vocabulary_path", None)
+        self.label_vocabulary_path = paths.get("label_vocabulary_path", None)
+        self.sequence_id_vocabulary_path = paths.get(
+            "sequence_id_vocabulary_path", None)
+
+        # Initialize class variables
+        self.data = read_fasta(self.data_path)
         self.max_seq_len = None
 
         if deduplicate:
@@ -49,10 +50,7 @@ class ProteinDataset(Dataset):
         # Load vocabularies
         self._process_vocab()
 
-        # Load sequence ID map from pickle (maps alphanumeric sequence ID to unique integer ID)
-        self.sequence_id_map = read_pickle(self.sequence_id_map_path)
-        logging.info(
-            f"Loaded {len(self.data)} sequences from {self.data_path}.")
+        # Create map from sequence ID to unique integer ID
 
     def _remove_duplicates(self):
         """
@@ -78,10 +76,12 @@ class ProteinDataset(Dataset):
             self.amino_acid_vocabulary = read_json(
                 self.amino_acid_vocabulary_path)
         else:
-            logging.error(
-                "No sequence vocabulary path given. Please run generate_vocabularies.py")
-
-        self.amino_acid_vocabulary_size = len(self.amino_acid_vocabulary)
+            logging.info("No amino acid vocabulary path given. Generating...")
+            self.amino_acid_vocabulary = set()
+            for obs in self.data:
+                self.amino_acid_vocabulary.update(list(obs[0]))
+            self.amino_acid_vocabulary = sorted(
+                list(self.amino_acid_vocabulary))
         self.aminoacid2int, self.int2aminoacid = get_vocab_mappings(
             self.amino_acid_vocabulary)
 
@@ -89,19 +89,27 @@ class ProteinDataset(Dataset):
         if self.label_vocabulary_path is not None:
             self.label_vocabulary = read_json(self.label_vocabulary_path)
         else:
-            logging.error(
-                "No label vocabulary path given. Please run generate_vocabularies.py")
-        self.label_vocabulary_size = len(self.label_vocabulary)
+            logging.info("No label vocabulary path given. Generating...")
+            self.label_vocabulary = set()
+            for obs in self.data:
+                self.label_vocabulary.update(obs[1][1:])
+            self.label_vocabulary = sorted(list(self.label_vocabulary))
         self.label2int, self.int2label = get_vocab_mappings(
             self.label_vocabulary)
 
     def _process_sequence_id_vocab(self):
         if self.sequence_id_vocabulary_path is not None:
-            self.sequence_ids = read_json(self.sequence_id_vocabulary_path)
+            self.sequence_id_vocabulary = read_json(
+                self.sequence_id_vocabulary_path)
         else:
-            logging.error(
-                "No sequence ID vocabulary path given. Please run generate_vocabularies.py")
-        self.sequence_id_vocabulary_size = len(self.sequence_ids)
+            logging.info("No sequence id vocabulary path given. Generating...")
+            self.sequence_id_vocabulary = set()
+            for obs in self.data:
+                self.sequence_id_vocabulary.add(obs[1][0])
+            self.sequence_id_vocabulary = sorted(
+                list(self.sequence_id_vocabulary))
+        self.sequence_id2int, self.int2sequence_id = get_vocab_mappings(
+            self.sequence_id_vocabulary)
 
     def get_max_seq_len(self):
         if self.max_seq_len is None:
@@ -116,23 +124,23 @@ class ProteinDataset(Dataset):
 
         # Get the integer sequence ID and convert to tensor
         sequence_id_numeric = torch.tensor(
-            self.sequence_id_map[sequence_id_alphanumeric], dtype=torch.long)
+            self.sequence_id2int[sequence_id_alphanumeric], dtype=torch.long)
 
         # Convert the sequence and labels to integers
-        sequence_ints = torch.tensor(
+        amino_acid_ints = torch.tensor(
             [self.aminoacid2int[aa] for aa in sequence], dtype=torch.long)
 
         labels_ints = torch.tensor([self.label2int[l]
                                    for l in labels], dtype=torch.long)
 
         # Get the length of the sequence
-        sequence_length = torch.tensor(len(sequence_ints))
+        sequence_length = torch.tensor(len(amino_acid_ints))
 
         # Get multi-hot encoding of sequence and labels
         sequence_onehots = torch.nn.functional.one_hot(
-            sequence_ints, num_classes=self.amino_acid_vocabulary_size).permute(1, 0).float()
+            amino_acid_ints, num_classes=len(self.amino_acid_vocabulary)).permute(1, 0).float()
         label_multihots = torch.nn.functional.one_hot(
-            labels_ints, num_classes=self.label_vocabulary_size).sum(dim=0).float()
+            labels_ints, num_classes=len(self.label_vocabulary)).sum(dim=0).float()
 
         # Return the integer id, the one-hod sequence, the multi-hot sequence, and the sequence length
         return sequence_id_numeric, sequence_onehots, label_multihots, sequence_length

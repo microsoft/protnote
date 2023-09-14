@@ -29,8 +29,10 @@ def count_parameters_by_layer(model):
         if param.requires_grad:
             trainable_params += num_params
 
-        logging.info(
-            f"{name:<{max([len(name) for name, _ in model.named_parameters()])}} {num_params:<20} {num_params if param.requires_grad else 0}")
+    assert trainable_params > 0, "No trainable parameters found. Check the config file to ensure that the model is not frozen."
+
+    logging.info(
+        f"{name:<{max([len(name) for name, _ in model.named_parameters()])}} {num_params:<20} {num_params if param.requires_grad else 0}")
 
     logging.info(
         f"{'TOTAL':<{max([len(name) for name, _ in model.named_parameters()])}} {total_params:<20} {trainable_params}")

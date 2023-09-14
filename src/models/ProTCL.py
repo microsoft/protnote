@@ -16,15 +16,23 @@ class ProTCL(nn.Module):
             tokenized_labels_dataloader,
             sequence_encoder,
             sequence_embedding_matrix,
-            train_label_embeddings,
             label_embedding_matrix,
-            train_sequence_embeddings):
+            train_label_embeddings,
+            train_sequence_embeddings,
+            train_projection_head,
+            train_label_encoder,
+            train_sequence_encoder):
         super().__init__()
 
         # Projection heads
         # TODO: Discuss whether or not to include bias in the projection heads
         self.W_p = nn.Linear(protein_embedding_dim, latent_dim, bias=False)
         self.W_l = nn.Linear(label_embedding_dim, latent_dim, bias=False)
+
+        # Optionally freeze projection head weights
+        if not train_projection_head:
+            self.W_p.weight.requires_grad = False
+            self.W_l.weight.requires_grad = False
 
         # Temperature parameter
         self.t = temperature
@@ -33,15 +41,17 @@ class ProTCL(nn.Module):
         if sequence_embedding_matrix is not None:
             self.pretrained_sequence_embeddings = nn.Embedding.from_pretrained(
                 sequence_embedding_matrix, freeze=not train_sequence_embeddings)
-        # TODO: Support using ProteInfer here like we did with labels and PubMedBERT
+        # TODO: Support using sequence encoder here like we did with labels
 
         # If using a pre-trained label embedding matrix, create a nn.Embedding layer
-        if label_embedding_matrix is not None:
+        if label_embedding_matrix is not None and not train_label_encoder:
             self.pretrained_label_embeddings = nn.Embedding.from_pretrained(
                 label_embedding_matrix, freeze=not train_label_embeddings)
         # Otherwise, load the label pre-trained encoder and pre-tokenize the labels
         else:
-            # TODO: Maybe call this outside of the model and pass in the encoder and the tokenized label map
+            # Assert that the label encoder is not None
+            assert label_encoder is not None, "Label encoder must be provided if no pre-trained label embeddings are provided."
+            assert tokenized_labels_dataloader is not None, "Tokenized labels dataloader must be provided if no pre-trained label embeddings are provided."
             self.label_encoder = label_encoder
             self.tokenized_labels_dataloader = tokenized_labels_dataloader
 
