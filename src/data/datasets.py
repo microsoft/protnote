@@ -26,16 +26,15 @@ class ProteinDataset(Dataset):
         required_keys = ["data_path"]
         for key in required_keys:
             if key not in paths:
-                raise ValueError(
-                    f"Missing required key in paths dictionary: {key}")
+                raise ValueError(f"Missing required key in paths dictionary: {key}")
 
         # Set default values for paths not provided
         self.data_path = paths["data_path"]
-        self.amino_acid_vocabulary_path = paths.get(
-            "amino_acid_vocabulary_path", None)
+        self.amino_acid_vocabulary_path = paths.get("amino_acid_vocabulary_path", None)
         self.label_vocabulary_path = paths.get("label_vocabulary_path", None)
         self.sequence_id_vocabulary_path = paths.get(
-            "sequence_id_vocabulary_path", None)
+            "sequence_id_vocabulary_path", None
+        )
 
         # Initialize class variables
         self.data = read_fasta(self.data_path)
@@ -43,7 +42,8 @@ class ProteinDataset(Dataset):
 
         if deduplicate:
             logging.info(
-                "Removing duplicates, keeping only the first instance of each sequence...")
+                "Removing duplicates, keeping only the first instance of each sequence..."
+            )
             # Deduplicate sequences
             self._remove_duplicates()
 
@@ -58,10 +58,10 @@ class ProteinDataset(Dataset):
         Use pandas to improve performance
         """
         # Convert self.data to a DataFrame
-        df = pd.DataFrame(self.data, columns=['sequence', 'labels'])
+        df = pd.DataFrame(self.data, columns=["sequence", "labels"])
 
         # Drop duplicate rows based on the 'sequence' column, keeping the first instance
-        df = df.drop_duplicates(subset='sequence', keep='first')
+        df = df.drop_duplicates(subset="sequence", keep="first")
 
         # Convert the DataFrame back to the list of tuples format
         self.data = list(df.itertuples(index=False, name=None))
@@ -73,17 +73,16 @@ class ProteinDataset(Dataset):
 
     def _process_amino_acid_vocab(self):
         if self.amino_acid_vocabulary_path is not None:
-            self.amino_acid_vocabulary = read_json(
-                self.amino_acid_vocabulary_path)
+            self.amino_acid_vocabulary = read_json(self.amino_acid_vocabulary_path)
         else:
             logging.info("No amino acid vocabulary path given. Generating...")
             self.amino_acid_vocabulary = set()
             for obs in self.data:
                 self.amino_acid_vocabulary.update(list(obs[0]))
-            self.amino_acid_vocabulary = sorted(
-                list(self.amino_acid_vocabulary))
+            self.amino_acid_vocabulary = sorted(list(self.amino_acid_vocabulary))
         self.aminoacid2int, self.int2aminoacid = get_vocab_mappings(
-            self.amino_acid_vocabulary)
+            self.amino_acid_vocabulary
+        )
 
     def _process_label_vocab(self):
         if self.label_vocabulary_path is not None:
@@ -94,22 +93,20 @@ class ProteinDataset(Dataset):
             for obs in self.data:
                 self.label_vocabulary.update(obs[1][1:])
             self.label_vocabulary = sorted(list(self.label_vocabulary))
-        self.label2int, self.int2label = get_vocab_mappings(
-            self.label_vocabulary)
+        self.label2int, self.int2label = get_vocab_mappings(self.label_vocabulary)
 
     def _process_sequence_id_vocab(self):
         if self.sequence_id_vocabulary_path is not None:
-            self.sequence_id_vocabulary = read_json(
-                self.sequence_id_vocabulary_path)
+            self.sequence_id_vocabulary = read_json(self.sequence_id_vocabulary_path)
         else:
             logging.info("No sequence id vocabulary path given. Generating...")
             self.sequence_id_vocabulary = set()
             for obs in self.data:
                 self.sequence_id_vocabulary.add(obs[1][0])
-            self.sequence_id_vocabulary = sorted(
-                list(self.sequence_id_vocabulary))
+            self.sequence_id_vocabulary = sorted(list(self.sequence_id_vocabulary))
         self.sequence_id2int, self.int2sequence_id = get_vocab_mappings(
-            self.sequence_id_vocabulary)
+            self.sequence_id_vocabulary
+        )
 
     def get_max_seq_len(self):
         if self.max_seq_len is None:
@@ -124,23 +121,28 @@ class ProteinDataset(Dataset):
 
         # Get the integer sequence ID and convert to tensor
         sequence_id_numeric = torch.tensor(
-            self.sequence_id2int[sequence_id_alphanumeric], dtype=torch.long)
+            self.sequence_id2int[sequence_id_alphanumeric], dtype=torch.long
+        )
 
         # Convert the sequence and labels to integers
         amino_acid_ints = torch.tensor(
-            [self.aminoacid2int[aa] for aa in sequence], dtype=torch.long)
+            [self.aminoacid2int[aa] for aa in sequence], dtype=torch.long
+        )
 
-        labels_ints = torch.tensor([self.label2int[l]
-                                   for l in labels], dtype=torch.long)
+        labels_ints = torch.tensor(
+            [self.label2int[l] for l in labels], dtype=torch.long
+        )
 
         # Get the length of the sequence
         sequence_length = torch.tensor(len(amino_acid_ints))
 
         # Get multi-hot encoding of sequence and labels
         sequence_onehots = torch.nn.functional.one_hot(
-            amino_acid_ints, num_classes=len(self.amino_acid_vocabulary)).permute(1, 0).float()
+            amino_acid_ints, num_classes=len(self.amino_acid_vocabulary)
+        ).permute(1, 0)
         label_multihots = torch.nn.functional.one_hot(
-            labels_ints, num_classes=len(self.label_vocabulary)).sum(dim=0).float()
+            labels_ints, num_classes=len(self.label_vocabulary)
+        ).sum(dim=0)
 
         # Return the integer id, the one-hod sequence, the multi-hot sequence, and the sequence length
         return sequence_id_numeric, sequence_onehots, label_multihots, sequence_length
@@ -150,9 +152,9 @@ class ProteinDataset(Dataset):
         return self.process_example(sequence, labels)
 
     @classmethod
-    def create_multiple_datasets(cls,
-                                 paths_list: List[Dict[str, str]],
-                                 deduplicate: bool = False) -> List[Dataset]:
+    def create_multiple_datasets(
+        cls, paths_list: List[Dict[str, str]], deduplicate: bool = False
+    ) -> List[Dataset]:
         """
         paths_list (List[Dict[str, str]]): List of dictionaries, each containing paths to the data and vocabularies.
         Deduplicate (bool): Whether to remove duplicate sequences (default: False). Applies to all datasets in paths_list.
@@ -160,7 +162,11 @@ class ProteinDataset(Dataset):
         return [cls(paths, deduplicate) for paths in paths_list]
 
 
-def set_padding_to_sentinel(padded_representations: torch.Tensor, sequence_lengths: torch.Tensor, sentinel: float) -> torch.Tensor:
+def set_padding_to_sentinel(
+    padded_representations: torch.Tensor,
+    sequence_lengths: torch.Tensor,
+    sentinel: float,
+) -> torch.Tensor:
     """
     Set the padding values in the input tensor to the sentinel value.
 
@@ -181,7 +187,8 @@ def set_padding_to_sentinel(padded_representations: torch.Tensor, sequence_lengt
 
     # Create a mask that identifies padding, ensuring it's on the same device
     mask = torch.arange(max_sequence_length, device=device).expand(
-        batch_size, max_sequence_length) >= sequence_lengths.unsqueeze(1).to(device)
+        batch_size, max_sequence_length
+    ) >= sequence_lengths.unsqueeze(1).to(device)
 
     # Expand the mask to cover the 'dim' dimension
     mask = mask.unsqueeze(1).expand(-1, dim, -1)
@@ -192,11 +199,12 @@ def set_padding_to_sentinel(padded_representations: torch.Tensor, sequence_lengt
     return padded_representations
 
 
-def create_multiple_loaders(datasets: List[Dataset],
-                            batch_sizes: List[int],
-                            num_workers: int = 2,
-                            pin_memory: bool = True
-                            ) -> List[DataLoader]:
+def create_multiple_loaders(
+    datasets: List[Dataset],
+    batch_sizes: List[int],
+    num_workers: int = 2,
+    pin_memory: bool = True,
+) -> List[DataLoader]:
     loaders = []
     for dataset, batch_size in zip(datasets, batch_sizes):
         loader = torch.utils.data.DataLoader(
@@ -205,7 +213,7 @@ def create_multiple_loaders(datasets: List[Dataset],
             shuffle=True,
             collate_fn=collate_variable_sequence_length,
             num_workers=num_workers,
-            pin_memory=pin_memory
+            pin_memory=pin_memory,
         )
         loaders.append(loader)
     return loaders
@@ -213,8 +221,14 @@ def create_multiple_loaders(datasets: List[Dataset],
 
 ### TEMPORAL ###
 
+
 class ProteInferDataset(Dataset):
-    def __init__(self, data_path: str, sequence_vocabulary_path: Optional[Text] = None, label_vocabulary_path: Optional[Text] = None):
+    def __init__(
+        self,
+        data_path: str,
+        sequence_vocabulary_path: Optional[Text] = None,
+        label_vocabulary_path: Optional[Text] = None,
+    ):
         self.data_path = data_path
         self.data = read_fasta(data_path)
         self.sequence_vocabulary_path = sequence_vocabulary_path
@@ -228,7 +242,6 @@ class ProteInferDataset(Dataset):
         self._process_sequence_id_vocab()
 
     def _process_sequence_vocab(self):
-
         if self.sequence_vocabulary_path is not None:
             self.sequence_vocabulary = read_json(self.sequence_vocabulary_path)
         else:
@@ -238,10 +251,10 @@ class ProteInferDataset(Dataset):
             self.sequence_vocabulary = sorted(list(self.sequence_vocabulary))
         self.sequence_vocabulary_size = len(self.sequence_vocabulary)
         self.aminoacid2int, self.int2aminoacid = get_vocab_mappings(
-            self.sequence_vocabulary)
+            self.sequence_vocabulary
+        )
 
     def _process_label_vocab(self):
-
         if self.label_vocabulary_path is not None:
             self.label_vocabulary = read_json(self.label_vocabulary_path)
         else:
@@ -250,18 +263,15 @@ class ProteInferDataset(Dataset):
                 self.label_vocabulary.update(obs[1][1:])
             self.label_vocabulary = sorted(list(self.label_vocabulary))
         self.label_vocabulary_size = len(self.label_vocabulary)
-        self.label2int, self.int2label = get_vocab_mappings(
-            self.label_vocabulary)
+        self.label2int, self.int2label = get_vocab_mappings(self.label_vocabulary)
 
     def _process_sequence_id_vocab(self):
         self.sequence_ids = set()
         for obs in self.data:
             self.sequence_ids.add(obs[1][0])
         self.sequence_ids = sorted(list(self.sequence_ids))
-        self.sequence_id2int = {term: idx for idx,
-                                term in enumerate(self.sequence_ids)}
-        self.int2sequence_id = {idx: term for term,
-                                idx in self.sequence_id2int.items()}
+        self.sequence_id2int = {term: idx for idx, term in enumerate(self.sequence_ids)}
+        self.int2sequence_id = {idx: term for term, idx in self.sequence_id2int.items()}
 
     def get_max_seq_len(self):
         if self.max_seq_len is None:
@@ -275,17 +285,20 @@ class ProteInferDataset(Dataset):
         sequence_id, labels = labels[0], labels[1:]
 
         sequence_ints = torch.tensor(
-            [self.aminoacid2int[aa] for aa in sequence], dtype=torch.long)
+            [self.aminoacid2int[aa] for aa in sequence], dtype=torch.long
+        )
         sequence_length = torch.tensor(len(sequence_ints))
-        sequence_id = torch.tensor(
-            self.sequence_id2int[sequence_id], dtype=torch.long)
-        labels_ints = torch.tensor([self.label2int[l]
-                                   for l in labels], dtype=torch.long)
+        sequence_id = torch.tensor(self.sequence_id2int[sequence_id], dtype=torch.long)
+        labels_ints = torch.tensor(
+            [self.label2int[l] for l in labels], dtype=torch.long
+        )
 
         sequence_onehots = torch.nn.functional.one_hot(
-            sequence_ints, num_classes=self.sequence_vocabulary_size).permute(1, 0)
+            sequence_ints, num_classes=self.sequence_vocabulary_size
+        ).permute(1, 0)
         labels_multihot = torch.nn.functional.one_hot(
-            labels_ints, num_classes=self.label_vocabulary_size).sum(dim=0)
+            labels_ints, num_classes=self.label_vocabulary_size
+        ).sum(dim=0)
 
         return sequence_onehots, labels_multihot, sequence_length, sequence_id
 
@@ -294,8 +307,13 @@ class ProteInferDataset(Dataset):
         return self.process_example(sequence, labels)
 
     @classmethod
-    def create_multiple_datasets(cls,
-                                 data_paths: list,
-                                 sequence_vocabulary_path: str,
-                                 label_vocabulary_path: Optional[Text] = None):
-        return [cls(data_path, sequence_vocabulary_path, label_vocabulary_path) for data_path in data_paths]
+    def create_multiple_datasets(
+        cls,
+        data_paths: list,
+        sequence_vocabulary_path: str,
+        label_vocabulary_path: Optional[Text] = None,
+    ):
+        return [
+            cls(data_path, sequence_vocabulary_path, label_vocabulary_path)
+            for data_path in data_paths
+        ]

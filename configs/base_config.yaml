@@ -7,11 +7,12 @@ params:
   PROTEIN_EMBEDDING_DIM: 1100
   LABEL_EMBEDDING_DIM: 768
   LATENT_EMBEDDING_DIM: 934
-  NUM_EPOCHS: 3
-  TRAIN_BATCH_SIZE: 1024
-  VALIDATION_BATCH_SIZE: 1024
-  TEST_BATCH_SIZE: 1024
-  VALIDATION_FREQUENCY: 150
+  NUM_EPOCHS: 1
+  TRAIN_BATCH_SIZE: 256
+  VALIDATION_BATCH_SIZE: 256
+  TEST_BATCH_SIZE: 256
+  LABEL_BATCH_SIZE: 500
+  VALIDATION_FREQUENCY: 500
   DECISION_TH: null
   NUM_WORKERS: 4
   METRICS_AVERAGE: micro
@@ -25,6 +26,7 @@ params:
   SEED: 42
   NUM_LABELS: 32102
   EMBEDDING_UPDATE_INTERVAL: 30
+  PUBMEDBERT_CHECKPOINT: microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext
 
 #Constants for protein encoder model (e.g. ProteInfer). Not really params since 
 # we are not going to change these.
@@ -49,6 +51,7 @@ relative_paths:
   AMINO_ACID_VOCAB_PATH: data/vocabularies/amino_acid_vocab.json
   GO_LABEL_VOCAB_PATH: data/vocabularies/GO_label_vocab.json
   SEQUENCE_ID_VOCAB_PATH: data/vocabularies/sequence_id_vocab.json
+  GO_DESCRIPTIONS_PATH: data/annotations/go_annotations_2019_07_01.pkl
 
   # Embeddings paths (if using frozen pre-trained models)
   EMBEDDING_DIR: data/embeddings
@@ -64,5 +67,5 @@ relative_paths:
   # Where to save the model
   OUTPUT_MODEL_DIR: models/ProTCL
 
-  PARENTHOOD_LIB_PATH: parenthood.json.gz
+  PARENTHOOD_LIB_PATH: data/vocabularies/parenthood.json.gz
   PROTEINFER_WEIGHTS_PATH: 'models/proteinfer/GO_model_weights.pkl'
