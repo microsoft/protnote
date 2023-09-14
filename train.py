@@ -14,7 +14,11 @@ import argparse
 import json
 import random
 import time
-from src.utils.models import load_PubMedBERT
+from src.utils.models import load_model_and_tokenizer, tokenize_inputs, get_embeddings_from_tokens
+from torch.utils.data import DataLoader, TensorDataset
+
+# Set the TOKENIZERS_PARALLELISM environment variable to False
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 # Argument parser setup
 parser = argparse.ArgumentParser(
@@ -86,6 +90,7 @@ logging.basicConfig(filename=full_log_path, filemode='w',
                     datefmt='%Y-%m-%d %H:%M:%S %Z')
 
 logger = logging.getLogger()
+print(f"Logging to {full_log_path}...")
 
 # Initialize new run
 logger.info(
@@ -131,17 +136,19 @@ sequence_id_map = read_pickle(paths['SEQUENCE_ID_MAP_PATH'])
 # Load sequence embeddings
 sequence_embedding_matrix = sequence_encoder = None
 if not params['TRAIN_SEQUENCE_ENCODER']:
+    # TODO: Rather than loading from file, create from ProteInfer itself (slower at startup, but more flexible)
     sequence_embedding_matrix = create_ordered_tensor(
         paths['SEQUENCE_EMBEDDING_PATH'],
-        sequence_id_map,
+        train_dataset.sequence_id2int,
         params['PROTEIN_EMBEDDING_DIM'],
         device
     )
     logger.info("Loaded sequence embeddings.")
 
 # Load label embeddings or label encoder
-label_embedding_matrix = label_encoder = tokenized_labels = None
+label_embedding_matrix = label_encoder = tokenized_labels_dataloader = None
 if not params['TRAIN_LABEL_ENCODER']:
+    # TODO: Rather than loading from file, create from the model itself (slower at startup, but more flexible)
     label_embedding_matrix = create_ordered_tensor(
         paths['LABEL_EMBEDDING_PATH'],
         train_dataset.label2int,
@@ -151,7 +158,8 @@ if not params['TRAIN_LABEL_ENCODER']:
     logger.info("Loaded label embeddings.")
 # Otherwise, load the pre-tokenized labels
 else:
-    # Load the label vocabulary
+    # Load the go annotations (include free text) from data file
+    # TODO: Move to config
     annotations = read_pickle(
         '/home/ncorley/protein/ProteinFunctions/data/annotations/go_annotations_2019_07_01.pkl')
 
@@ -168,21 +176,23 @@ else:
     # Extract the "label" column as a list
     sorted_labels = annotations_sorted['label'].tolist()
 
-    # Initialize label encoder and tokenizer
-    # TODO: Pass label encoder an argument to ProTCL rather than re-instantiating
-    label_tokenizer, label_encoder = load_PubMedBERT(
-        trainable=params['TRAIN_LABEL_ENCODER'] or params['TRAIN_LABEL_EMBEDDING_MATRIX'])
-    label_encoder = label_encoder.to(device)
+    # TODO: Move to config
+    checkpoint = "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext"
 
-    # Tokenize all labels in the dataframe in a batched manner
-    # The batch is ordered according to the order of the labels in the label vocabulary
-    tokenized_labels = label_tokenizer(
-        sorted_labels, return_tensors="pt", truncation=True, padding=True, max_length=512)
+    # Load the model and tokenizer, then tokenize the labels
+    label_tokenizer, label_encoder = load_model_and_tokenizer(
+        checkpoint, freeze_weights=not params['TRAIN_LABEL_ENCODER'])
+    label_encoder = label_encoder.to(device)
+    model_inputs = tokenize_inputs(label_tokenizer, sorted_labels)
 
     # Move the tensors to GPU if available
-    tokenized_labels = {name: tensor.to(device)
-                        for name, tensor in tokenized_labels.items()}
+    model_inputs = {name: tensor.to(device)
+                    for name, tensor in model_inputs.items()}
 
+    # Create a DataLoader to iterate over the tokenized labels in batches
+    # TODO: Move this other batch size to arguments as LABEL_BATCH_SIZE
+    tokenized_labels_dataloader = DataLoader(TensorDataset(
+        *model_inputs.values()), batch_size=500)
 
 # Seed everything so we don't go crazy
 random.seed(params['SEED'])
@@ -200,13 +210,15 @@ model = ProTCL(protein_embedding_dim=params['PROTEIN_EMBEDDING_DIM'],
                latent_dim=params['LATENT_EMBEDDING_DIM'],
                temperature=params['TEMPERATURE'],
                label_encoder=label_encoder,
-               tokenized_labels=tokenized_labels,
+               tokenized_labels_dataloader=tokenized_labels_dataloader,
                sequence_encoder=sequence_encoder,
                sequence_embedding_matrix=sequence_embedding_matrix,
                label_embedding_matrix=label_embedding_matrix,
-               # TODO: Can simplify based on whether we pass an encoder or an embedding matrix
-               train_label_embeddings=params['TRAIN_LABEL_ENCODER'] or params['TRAIN_LABEL_EMBEDDING_MATRIX'],
-               train_sequence_embeddings=params['TRAIN_SEQUENCE_ENCODER'] or params['TRAIN_SEQUENCE_EMBEDDING_MATRIX'],
+               train_projection_head=params['TRAIN_PROJECTION_HEAD'],
+               train_label_embeddings=params['TRAIN_LABEL_EMBEDDING_MATRIX'],
+               train_sequence_embeddings=params['TRAIN_SEQUENCE_EMBEDDING_MATRIX'],
+               train_label_encoder=params['TRAIN_LABEL_ENCODER'],
+               train_sequence_encoder=params['TRAIN_SEQUENCE_ENCODER'],
                ).to(device)
 
 # Initialize trainer class to handle model training, validation, and testing

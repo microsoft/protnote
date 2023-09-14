@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 import logging
-from src.utils.models import get_PubMedBERT_embedding_from_tokens
+from src.utils.models import get_embeddings_from_tokens
 
 
 class ProTCL(nn.Module):
@@ -13,18 +13,26 @@ class ProTCL(nn.Module):
             latent_dim,
             temperature,
             label_encoder,
-            tokenized_labels,
+            tokenized_labels_dataloader,
             sequence_encoder,
             sequence_embedding_matrix,
-            train_label_embeddings,
             label_embedding_matrix,
-            train_sequence_embeddings):
+            train_label_embeddings,
+            train_sequence_embeddings,
+            train_projection_head,
+            train_label_encoder,
+            train_sequence_encoder):
         super().__init__()
 
         # Projection heads
         # TODO: Discuss whether or not to include bias in the projection heads
         self.W_p = nn.Linear(protein_embedding_dim, latent_dim, bias=False)
         self.W_l = nn.Linear(label_embedding_dim, latent_dim, bias=False)
+
+        # Optionally freeze projection head weights
+        if not train_projection_head:
+            self.W_p.weight.requires_grad = False
+            self.W_l.weight.requires_grad = False
 
         # Temperature parameter
         self.t = temperature
@@ -33,17 +41,19 @@ class ProTCL(nn.Module):
         if sequence_embedding_matrix is not None:
             self.pretrained_sequence_embeddings = nn.Embedding.from_pretrained(
                 sequence_embedding_matrix, freeze=not train_sequence_embeddings)
-        # TODO: Support using ProteInfer here like we did with labels and PubMedBERT
+        # TODO: Support using sequence encoder here like we did with labels
 
         # If using a pre-trained label embedding matrix, create a nn.Embedding layer
-        if label_embedding_matrix is not None:
+        if label_embedding_matrix is not None and not train_label_encoder:
             self.pretrained_label_embeddings = nn.Embedding.from_pretrained(
                 label_embedding_matrix, freeze=not train_label_embeddings)
         # Otherwise, load the label pre-trained encoder and pre-tokenize the labels
         else:
-            # TODO: Maybe call this outside of the model and pass in the encoder and the tokenized label map
+            # Assert that the label encoder is not None
+            assert label_encoder is not None, "Label encoder must be provided if no pre-trained label embeddings are provided."
+            assert tokenized_labels_dataloader is not None, "Tokenized labels dataloader must be provided if no pre-trained label embeddings are provided."
             self.label_encoder = label_encoder
-            self.tokenized_labels = tokenized_labels
+            self.tokenized_labels_dataloader = tokenized_labels_dataloader
 
         # Log the configurations
         logging.info(
@@ -60,7 +70,7 @@ class ProTCL(nn.Module):
         logging.info(
             "##################################################################")
 
-    def forward(self, P, L):
+    def forward(self, P, L, is_training=True):
         """
         Forward pass of the model.
         args:
@@ -76,12 +86,18 @@ class ProTCL(nn.Module):
             L_f = self.pretrained_label_embeddings.weight[collapsed_labels]
         # If using a text encoder, convert labels to embeddings
         else:
-            # Use PubMedBERT to convert labels in the batch to embeddings
-            L_f = get_PubMedBERT_embedding_from_tokens(
-                self.label_encoder, self.tokenized_labels).to(L.device)
+            # If in training mode or cache is empty (because it was cleared or because it is the first batch), recompute embeddings
+            if is_training or self.cached_label_embeddings is None:
+                print("Getting label embeddings...")
+                self.cached_label_embeddings = get_embeddings_from_tokens(
+                    self.label_encoder, self.tokenized_labels_dataloader)
+                print("Finished getting label embeddings.")
+            else:
+                print("Skipped getting label embeddings. is_training:", is_training)
 
             # Down-filter the embeddings to only the labels in the batch
-            L_f = L_f[collapsed_labels]
+            # TODO: This is technically inefficient, since we get all the label embeddings and then filter them
+            L_f = self.cached_label_embeddings[collapsed_labels]
 
         # If using pre-trained sequence embeddings, convert sequences to embeddings (since P is a tensor of sequence IDs)
         if hasattr(self, 'pretrained_sequence_embeddings'):
@@ -98,3 +114,6 @@ class ProTCL(nn.Module):
         L_e = F.normalize(self.W_l(L_f), dim=1)
 
         return P_e, L_e
+
+    def clear_label_embeddings_cache(self):
+        self.cached_label_embeddings = None

@@ -41,6 +41,7 @@ def collate_variable_sequence_length(batch: List[Tuple]):
         processed_label_multihots.append(label_multihots)
         processed_sequence_ids.append(sequence_id_numeric)
 
+    # TODO: Do we really need to return the sequence lengths?
     return torch.stack(processed_sequence_ids), torch.stack(processed_sequence_onehots), torch.stack(processed_label_multihots), torch.stack(processed_sequence_lengths)
 
 
