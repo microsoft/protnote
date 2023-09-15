@@ -21,20 +21,20 @@ class SamplewisePrecision(Metric):
 
     def update(self, probas: torch.Tensor, labels: torch.Tensor):
         at_least_one_positive_pred = (probas > self.threshold).any(axis=1)
-        #This method could be more 
+        # This method could be more
         if at_least_one_positive_pred.any().item():
             self.precision_samplewise(
-                probas[at_least_one_positive_pred, :], labels[at_least_one_positive_pred, :]
+                probas[at_least_one_positive_pred, :],
+                labels[at_least_one_positive_pred, :],
             )
-    
+
     def compute(self) -> torch.Tensor:
-        #catch error if no objects to concatenate and return 0
+        # catch error if no objects to concatenate and return 0
         try:
             return self.precision_samplewise.compute().mean()
         except ValueError:
             print("No objects to concatenate. Returning 0.0")
             return torch.tensor(0.0)
-        
 
 
 class SamplewiseRecall(Metric):

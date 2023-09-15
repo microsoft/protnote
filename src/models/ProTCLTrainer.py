@@ -11,6 +11,7 @@ import os
 from torch.cuda.amp import GradScaler, autocast
 from collections import defaultdict
 
+
 class ProTCLTrainer:
     def __init__(
         self,
@@ -93,7 +94,9 @@ class ProTCLTrainer:
         )
 
         # Forward pass
-        P_e, L_e = self.model(sequences, considered_labels, sequence_lengths, is_training=False)
+        P_e, L_e = self.model(
+            sequences, considered_labels, sequence_lengths, is_training=False
+        )
 
         # Compute validation loss for the batch
         loss = contrastive_loss(
@@ -180,7 +183,7 @@ class ProTCLTrainer:
         self,
         data_loader: torch.utils.data.DataLoader,
         eval_metrics: EvalMetrics = None,
-        testing=False
+        testing=False,
     ) -> tuple[dict, dict]:
         """Evaluate the model on the given data loader.
 
@@ -205,7 +208,7 @@ class ProTCLTrainer:
         test_results = defaultdict(list)
         with torch.no_grad(), autocast():
             for batch in data_loader:
-                loss, logits, labels,sequence_ids = self.evaluation_step(
+                loss, logits, labels, sequence_ids = self.evaluation_step(
                     batch=batch, testing=testing
                 )
                 num_labels = labels.shape[1]
@@ -227,7 +230,9 @@ class ProTCLTrainer:
                     # Update eval metrics
                     eval_metrics(probabilities, labels)
 
-                    test_results["sequence_ids"].append(sequence_ids.repeat_interleave(num_labels))
+                    test_results["sequence_ids"].append(
+                        sequence_ids.repeat_interleave(num_labels)
+                    )
                     test_results["probabilities"].append(probabilities)
                     test_results["labels"].append(labels)
 
@@ -235,7 +240,9 @@ class ProTCLTrainer:
                 total_loss += loss
 
             for key in test_results.keys():
-                test_results[key] = torch.cat(test_results[key]).flatten().detach().cpu().numpy()
+                test_results[key] = (
+                    torch.cat(test_results[key]).flatten().detach().cpu().numpy()
+                )
 
             # Compute average validation loss
             avg_loss = total_loss / len(data_loader)
@@ -298,7 +305,9 @@ class ProTCLTrainer:
                     labels if self.use_batch_labels_only else torch.ones_like(labels)
                 )
                 with autocast():
-                    P_e, L_e = self.model(sequences, considered_labels, sequence_lengths)
+                    P_e, L_e = self.model(
+                        sequences, considered_labels, sequence_lengths
+                    )
 
                 # Compute target (note that the target shape varies depending on whether we are using batch labels only or not)
                 target = (
@@ -345,7 +354,7 @@ class ProTCLTrainer:
                     ####### VALIDATION LOOP #######
                     self.logger.info("Running validation...")
 
-                    val_metrics,_ = self.evaluate(data_loader=val_loader, testing=True)
+                    val_metrics, _ = self.evaluate(data_loader=val_loader, testing=True)
 
                     self.logger.info(val_metrics)
                     self.logger.info(

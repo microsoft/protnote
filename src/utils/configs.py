@@ -29,7 +29,14 @@ def override_config(config: dict, overrides: list):
                 )
 
 
-def get_setup(config_path: str, run_name: str, overrides: list, train_path_name: str = None, val_path_name: str = None, test_paths_names: list = None):
+def get_setup(
+    config_path: str,
+    run_name: str,
+    overrides: list,
+    train_path_name: str = None,
+    val_path_name: str = None,
+    test_paths_names: list = None,
+):
     # Get the root path from the environment variable; default to current directory if ROOT_PATH is not set
     ROOT_PATH = os.environ.get("ROOT_PATH", ".")
 
@@ -53,20 +60,34 @@ def get_setup(config_path: str, run_name: str, overrides: list, train_path_name:
         "sequence_id_vocabulary_path": paths["SEQUENCE_ID_VOCAB_PATH"],
         "sequence_id_map_path": paths["SEQUENCE_ID_MAP_PATH"],
     }
-    
-    train_paths_list = [
-        {**common_paths, "data_path": paths[train_path_name], "dataset_type": "train"}
-    ] if train_path_name is not None else []
 
-    val_paths_list = [
-        {**common_paths, "data_path": paths[val_path_name], "dataset_type": "validation"}
-    ] if val_path_name is not None else []
+    train_paths_list = (
+        [{**common_paths, "data_path": paths[train_path_name], "dataset_type": "train"}]
+        if train_path_name is not None
+        else []
+    )
 
-    test_paths_list = [
-        {**common_paths, "data_path": paths[key], "dataset_type": "test"}
-        for key in test_paths_names
-    ] if test_paths_names is not None else []
-    
+    val_paths_list = (
+        [
+            {
+                **common_paths,
+                "data_path": paths[val_path_name],
+                "dataset_type": "validation",
+            }
+        ]
+        if val_path_name is not None
+        else []
+    )
+
+    test_paths_list = (
+        [
+            {**common_paths, "data_path": paths[key], "dataset_type": "test"}
+            for key in test_paths_names
+        ]
+        if test_paths_names is not None
+        else []
+    )
+
     paths_list = train_paths_list + val_paths_list + test_paths_list
 
     # Set the timezone for the entire Python environment

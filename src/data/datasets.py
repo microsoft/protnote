@@ -24,12 +24,16 @@ class ProteinDataset(Dataset):
         deduplicate (bool): Whether to remove duplicate sequences (default: False)
         """
         # Error handling: check for missing keys
-        required_keys = ["data_path","dataset_type"]
+        required_keys = ["data_path", "dataset_type"]
         for key in required_keys:
             if key not in paths:
                 raise ValueError(f"Missing required key in paths dictionary: {key}")
 
-        assert paths["dataset_type"] in ["train","validation","test"], "dataset_type must be one of 'train', 'val', or 'test'"
+        assert paths["dataset_type"] in [
+            "train",
+            "validation",
+            "test",
+        ], "dataset_type must be one of 'train', 'val', or 'test'"
 
         # Set default values for paths not provided
         self.data_path = paths["data_path"]
@@ -46,7 +50,6 @@ class ProteinDataset(Dataset):
         self.amino_acid_vocabulary_size = None
         self.label_vocabulary_size = None
         self.sequence_id_vocabulary_size = None
-
 
         if deduplicate:
             logging.info(
@@ -120,17 +123,17 @@ class ProteinDataset(Dataset):
         if self.max_seq_len is None:
             self.max_seq_len = max(len(i[0]) for i in self.data)
         return self.max_seq_len
-    
+
     def get_amino_acid_vocabulary_size(self):
         if self.amino_acid_vocabulary_size is None:
             self.amino_acid_vocabulary_size = len(self.amino_acid_vocabulary)
         return self.amino_acid_vocabulary_size
-    
+
     def get_label_vocabulary_size(self):
         if self.label_vocabulary_size is None:
             self.label_vocabulary_size = len(self.label_vocabulary)
         return self.label_vocabulary_size
-    
+
     def get_sequence_id_vocabulary_size(self):
         if self.sequence_id_vocabulary_size is None:
             self.sequence_id_vocabulary_size = len(self.sequence_id_vocabulary)
@@ -184,7 +187,7 @@ class ProteinDataset(Dataset):
         """
         datasets = defaultdict(list)
         for paths in paths_list:
-            datasets[paths['dataset_type']].append(cls(paths, deduplicate=deduplicate))
+            datasets[paths["dataset_type"]].append(cls(paths, deduplicate=deduplicate))
         return datasets
 
 
@@ -231,14 +234,15 @@ def create_multiple_loaders(
     num_workers: int = 2,
     pin_memory: bool = True,
 ) -> List[DataLoader]:
-
     loaders = defaultdict(list)
     for dataset_type in datasets.keys():
         for dataset in datasets[dataset_type]:
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=params[f"{dataset_type.upper()}_BATCH_SIZE"],
-                shuffle=True if dataset_type == "train" else False, #only shuffle train. No need to shuffle val or test.
+                shuffle=True
+                if dataset_type == "train"
+                else False,  # only shuffle train. No need to shuffle val or test.
                 collate_fn=collate_variable_sequence_length,
                 num_workers=num_workers,
                 pin_memory=pin_memory,

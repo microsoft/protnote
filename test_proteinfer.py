@@ -10,7 +10,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 import logging
-import argparse 
+import argparse
 import os
 
 """
@@ -21,8 +21,7 @@ sample usage: python test_proteinfer.py --validation-path-name VAL_DATA_PATH --t
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Argument parser setup
-parser = argparse.ArgumentParser(
-    description="Train and/or Test the ProTCL model.")
+parser = argparse.ArgumentParser(description="Train and/or Test the ProTCL model.")
 
 parser.add_argument(
     "--validation-path-name",
@@ -43,14 +42,14 @@ parser.add_argument(
     "--optimization-metric-name",
     type=str,
     default="f1_macro",
-    help="Specify the desired metric to optimize for. Default is f1_macro."
+    help="Specify the desired metric to optimize for. Default is f1_macro.",
 )
 
 parser.add_argument(
     "--decision-th",
     type=float,
     default=None,
-    help="Specify the desired decision threshold. If not provided, the decision threshold will be optimized on the validation set."
+    help="Specify the desired decision threshold. If not provided, the decision threshold will be optimized on the validation set.",
 )
 
 parser.add_argument(
@@ -76,17 +75,18 @@ args = parser.parse_args()
 
 
 (config, params, paths, paths_list, timestamp, logger, device, ROOT_PATH) = get_setup(
-    config_path=args.config, run_name=args.name, overrides=args.override, val_path_name=args.validation_path_name, test_paths_names=args.test_paths_names
+    config_path=args.config,
+    run_name=args.name,
+    overrides=args.override,
+    val_path_name=args.validation_path_name,
+    test_paths_names=args.test_paths_names,
 )
 
 # Create datasets
-datasets = ProteinDataset.create_multiple_datasets(
-    paths_list
-)
+datasets = ProteinDataset.create_multiple_datasets(paths_list)
 
 # Initialize new run
-logger.info(
-    f"################## {timestamp} RUNNING train.py ##################")
+logger.info(f"################## {timestamp} RUNNING train.py ##################")
 
 # Log the configuration and arguments
 logger.info(f"Configuration: {config}")
@@ -94,7 +94,7 @@ logger.info(f"Arguments: {args}")
 
 # Define data loaders
 loaders = create_multiple_loaders(
-    datasets = datasets,
+    datasets=datasets,
     params=params,
     num_workers=params["NUM_WORKERS"],
     pin_memory=True,
@@ -121,7 +121,9 @@ label_normalizer = load_gz_json(paths["PARENTHOOD_LIB_PATH"])
 
 best_th = args.decision_th
 if best_th is None:
-    assert args.validation_path_name is not None, "Must provide validation path name to optimize decision threshold."
+    assert (
+        args.validation_path_name is not None
+    ), "Must provide validation path name to optimize decision threshold."
     val_probas = []
     val_labels = []
 
@@ -133,7 +135,7 @@ if best_th is None:
                 sequence_ids.to(device),
                 sequences.to(device),
                 labels.to(device),
-                sequence_lengths.to(device)
+                sequence_lengths.to(device),
             )
 
             logits = model(sequences, sequence_lengths)
@@ -185,7 +187,7 @@ with torch.no_grad():
             sequence_ids.to(device),
             sequences.to(device),
             labels.to(device),
-            sequence_lengths.to(device)
+            sequence_lengths.to(device),
         )
 
         logits = model(sequences, sequence_lengths)
@@ -204,7 +206,6 @@ with torch.no_grad():
         all_labels.append(labels)
         all_probas.append(probabilities)
         all_seqids.append(sequence_ids)
-
 
     final_metrics = eval_metrics.compute()
     print("Final Metrics:", final_metrics)

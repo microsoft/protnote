@@ -25,7 +25,12 @@ def collate_variable_sequence_length(batch: List[Tuple]):
     processed_sequence_lengths = []
 
     # Loop through the batch
-    for sequence_id_numeric, sequence_onehots, label_multihots, sequence_length in batch:
+    for (
+        sequence_id_numeric,
+        sequence_onehots,
+        label_multihots,
+        sequence_length,
+    ) in batch:
         # Set padding
         padding_length = max_length - sequence_length
 
@@ -33,8 +38,11 @@ def collate_variable_sequence_length(batch: List[Tuple]):
         sequence_dim = sequence_onehots.shape[0]
 
         # Pad the sequence to the max_length and append to the processed_sequences list
-        processed_sequence_onehots.append(torch.cat(
-            (sequence_onehots, torch.zeros((sequence_dim, padding_length))), dim=1))
+        processed_sequence_onehots.append(
+            torch.cat(
+                (sequence_onehots, torch.zeros((sequence_dim, padding_length))), dim=1
+            )
+        )
 
         # Simply append the sequence lengths, labels, and ids to their respective lists
         processed_sequence_lengths.append(sequence_length)
@@ -42,5 +50,9 @@ def collate_variable_sequence_length(batch: List[Tuple]):
         processed_sequence_ids.append(sequence_id_numeric)
 
     # TODO: Do we really need to return the sequence lengths? @NATE: Yes, ProteInfer uses them for masking convolutions
-    return torch.stack(processed_sequence_ids), torch.stack(processed_sequence_onehots), torch.stack(processed_label_multihots), torch.stack(processed_sequence_lengths)
-
+    return (
+        torch.stack(processed_sequence_ids),
+        torch.stack(processed_sequence_onehots),
+        torch.stack(processed_label_multihots),
+        torch.stack(processed_sequence_lengths),
+    )
