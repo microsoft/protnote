@@ -90,6 +90,7 @@ def get_embeddings_from_tokens(model, input_data, train_model=False):
     model.train(train_model)
 
     if isinstance(input_data, DataLoader):
+        #TODO: 768 is hard-coded here; this should be changed to a variable
         embeddings = torch.empty((len(input_data.dataset), 768), device='cuda')
         for i, batch in enumerate(input_data):
             batch = tuple(t.to('cuda') for t in batch)

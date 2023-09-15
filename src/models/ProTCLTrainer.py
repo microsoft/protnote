@@ -9,7 +9,7 @@ import torch
 import wandb
 import os
 from torch.cuda.amp import GradScaler, autocast
-
+from collections import defaultdict
 
 class ProTCLTrainer:
     def __init__(
@@ -93,7 +93,7 @@ class ProTCLTrainer:
         )
 
         # Forward pass
-        P_e, L_e = self.model(sequences, considered_labels, is_training=False)
+        P_e, L_e = self.model(sequences, considered_labels, sequence_lengths, is_training=False)
 
         # Compute validation loss for the batch
         loss = contrastive_loss(
@@ -105,7 +105,7 @@ class ProTCLTrainer:
         # Compute temperature normalized cosine similarities
         logits = torch.mm(P_e, L_e.t()) / self.model.t
 
-        return loss.item(), logits, labels
+        return loss.item(), logits, labels, sequence_ids
 
     def find_optimal_threshold(
         self, data_loader: torch.utils.data.DataLoader, optimization_metric_name: str
@@ -132,7 +132,7 @@ class ProTCLTrainer:
             all_probabilities = []
             all_labels = []
             for batch in data_loader:
-                _, logits, labels = self.evaluation_step(batch=batch, testing=True)
+                _, logits, labels, _ = self.evaluation_step(batch=batch, testing=True)
 
                 # Apply sigmoid to get the probabilities for multi-label classification
                 probabilities = torch.sigmoid(logits)
@@ -180,8 +180,8 @@ class ProTCLTrainer:
         self,
         data_loader: torch.utils.data.DataLoader,
         eval_metrics: EvalMetrics = None,
-        testing=False,
-    ) -> dict:
+        testing=False
+    ) -> tuple[dict, dict]:
         """Evaluate the model on the given data loader.
 
         :param data_loader: pytorch data loader
@@ -202,12 +202,13 @@ class ProTCLTrainer:
 
         self.model.eval()
         total_loss = 0
-
+        test_results = defaultdict(list)
         with torch.no_grad(), autocast():
             for batch in data_loader:
-                loss, logits, labels = self.evaluation_step(
+                loss, logits, labels,sequence_ids = self.evaluation_step(
                     batch=batch, testing=testing
                 )
+                num_labels = labels.shape[1]
                 if eval_metrics is not None:
                     # Apply sigmoid to get the probabilities for multi-label classification
                     probabilities = torch.sigmoid(logits)
@@ -226,15 +227,22 @@ class ProTCLTrainer:
                     # Update eval metrics
                     eval_metrics(probabilities, labels)
 
+                    test_results["sequence_ids"].append(sequence_ids.repeat_interleave(num_labels))
+                    test_results["probabilities"].append(probabilities)
+                    test_results["labels"].append(labels)
+
                 # Accumulate loss
                 total_loss += loss
+
+            for key in test_results.keys():
+                test_results[key] = torch.cat(test_results[key]).flatten().detach().cpu().numpy()
 
             # Compute average validation loss
             avg_loss = total_loss / len(data_loader)
             final_metrics = eval_metrics.compute() if eval_metrics is not None else {}
             final_metrics.update({"avg_loss": avg_loss})
 
-        return final_metrics
+        return final_metrics, test_results
 
     def train(
         self,
@@ -290,7 +298,7 @@ class ProTCLTrainer:
                     labels if self.use_batch_labels_only else torch.ones_like(labels)
                 )
                 with autocast():
-                    P_e, L_e = self.model(sequences, considered_labels)
+                    P_e, L_e = self.model(sequences, considered_labels, sequence_lengths)
 
                 # Compute target (note that the target shape varies depending on whether we are using batch labels only or not)
                 target = (
@@ -337,7 +345,7 @@ class ProTCLTrainer:
                     ####### VALIDATION LOOP #######
                     self.logger.info("Running validation...")
 
-                    val_metrics = self.evaluate(data_loader=val_loader, testing=True)
+                    val_metrics,_ = self.evaluate(data_loader=val_loader, testing=True)
 
                     self.logger.info(val_metrics)
                     self.logger.info(

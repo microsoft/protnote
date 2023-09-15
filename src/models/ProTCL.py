@@ -70,7 +70,7 @@ class ProTCL(nn.Module):
         logging.info(
             "##################################################################")
 
-    def forward(self, P, L, is_training=True):
+    def forward(self, P, L,sequence_lenghts,is_training=True):
         """
         Forward pass of the model.
         args:
@@ -104,7 +104,10 @@ class ProTCL(nn.Module):
             P_f = self.pretrained_sequence_embeddings(P)
         # If using a protein sequence encoder, convert sequences to embeddings
         else:
-            # TODO: Use ProteInfer here
+            # TODO: Have not tested this.
+            with torch.set_grad_enabled(True), torch.cuda.amp.autocast():
+                P_f = self.sequence_encoder.get_embeddings(P, sequence_lenghts)
+                
             # Throw error
             raise ValueError(
                 "Sequence embeddings not found. Please provide a pre-trained sequence embedding map or a protein encoder.")
