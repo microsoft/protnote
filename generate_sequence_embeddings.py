@@ -39,12 +39,12 @@ logging.basicConfig(level=logging.INFO)
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 logging.info(f"Using device = {device}")
 
-logging.info(f"Creating Dataset")
+logging.info("Creating Dataset")
 full_dataset = ProteInferDataset(data_path=FULL_DATA_PATH,
                                  sequence_vocabulary_path=AMINO_ACID_VOCAB_PATH,
                                  label_vocabulary_path=GO_LABEL_VOCAB_PATH)
 
-logging.info(f"Creating DataLoader")
+logging.info("Creating DataLoader")
 full_loader = DataLoader(dataset=full_dataset,
                          batch_size=BATCH_SIZE,
                          shuffle=False,
@@ -69,7 +69,7 @@ mapping = {}
 # Mapping from sequence ID to unique integer
 sequence_id_mapping = {}
 
-logging.info(f"Generating embeddings")
+logging.info("Generating embeddings...")
 with torch.no_grad():
     for batch_idx, (sequences, sequence_lengths, labels, sequence_ids) in tqdm(enumerate(full_loader), total=len(full_loader)):
         sequences, sequence_lengths, labels, sequence_ids = (sequences.to(device),

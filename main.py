@@ -3,24 +3,23 @@ from src.utils.data import (
     load_model_weights,
     seed_everything,
     create_ordered_tensor,
-    get_tokenized_labels_dataloader,
+    read_pickle,
 )
 from src.data.datasets import ProteinDataset, create_multiple_loaders
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
 from src.utils.evaluation import EvalMetrics
-from src.utils.models import count_parameters_by_layer
+from src.utils.models import count_parameters_by_layer, get_embeddings
 from src.utils.configs import get_setup
 import torch
 import wandb
 import os
-import datetime
 import argparse
 import json
-
+from transformers import AutoTokenizer, AutoModel
 
 """
- sample usage: train.py --train-path-name TRAIN_DATA_PATH --validation-path-name VAL_DATA_PATH --test-paths-names TEST_DATA_PATH TEST_DATA_PATH 
+ Sample usage: python main.py --train-path-name TRAIN_DATA_PATH --validation-path-name VAL_DATA_PATH --test-paths-names TEST_DATA_PATH TEST_DATA_PATH 
  here we pass the same test set twice as an example.
 """
 
@@ -28,7 +27,8 @@ import json
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Argument parser setup
-parser = argparse.ArgumentParser(description="Train and/or Test the ProTCL model.")
+parser = argparse.ArgumentParser(
+    description="Train and/or Test the ProTCL model.")
 parser.add_argument(
     "--train-path-name",
     type=str,
@@ -76,15 +76,22 @@ parser.add_argument(
     help="(Relative) path to the configuration file.",
 )
 parser.add_argument(
-    "--override", nargs="*", help="Override parameters in key-value pairs."
+    "--override", nargs="*", help="Override config parameters in key-value pairs."
 )
+parser.add_argument(
+    "--log-to-console",
+    action="store_true",
+    default=False,
+    help="Log outputs to console instead of the default logfile.",
+)
+
+# TODO: Create an argument to force recalculations of all of the vocabularies (easier than to create a new config file)
 
 # TODO: Add an option to serialize and save config with a name corresponding to the model save path
 
 # TODO: Make Optimization metric and normalize probabilities part of arguments
 args = parser.parse_args()
 
-# TODO: Need to
 # TODO: This could be more elegant with parser.add_subparsers()
 # Raise error if only one of train or val path is provided
 if (args.train_path_name is None) ^ (args.validation_path_name is None):
@@ -93,14 +100,12 @@ if (args.train_path_name is None) ^ (args.validation_path_name is None):
     )
 
 # Raise error if none of the paths are provided
-if (
-    (args.train_path_name is None)
-    and (args.validation_path_name is None)
-    and (args.test_paths_names is None)
-):
-    parser.error(
-        "You must provide --test-path-names, or --train-path-name, --val-path-name together together, or all three."
-    )
+if args.test_paths_names is None and \
+   (args.train_path_name is None or args.validation_path_name is None):
+    parser.error("You must provide one of the following options:\n"
+                 "--test-path-names\n"
+                 "--train-path-name and --validation-path-name together\n"
+                 "All three options\nPlease provide the required option(s) and try again.")
 
 # Raise error if only test path is provided and no model is loaded
 if (
@@ -109,12 +114,14 @@ if (
     and (args.test_paths_names is not None)
     and (args.load_model is None)
 ):
-    parser.error("You must provide --load-model if you only provide --test-path-names.")
+    parser.error(
+        "You must provide --load-model if you only provide --test-path-names.")
 
 (config, params, paths, paths_list, timestamp, logger, device, ROOT_PATH) = get_setup(
     config_path=args.config,
     run_name=args.name,
     overrides=args.override,
+    log_to_console=args.log_to_console,
     train_path_name=args.train_path_name,
     val_path_name=args.validation_path_name,
     test_paths_names=args.test_paths_names,
@@ -124,7 +131,8 @@ if (
 datasets = ProteinDataset.create_multiple_datasets(paths_list)
 
 # Initialize new run
-logger.info(f"################## {timestamp} RUNNING train.py ##################")
+logger.info(
+    f"################## {timestamp} RUNNING train.py ##################")
 
 # Initialize W&B, if using
 if args.use_wandb:
@@ -147,10 +155,14 @@ loaders = create_multiple_loaders(
 )
 
 # mappings. A bit hacky, but it works
-sequence_id2int = datasets[list(datasets.keys())[0]][0].sequence_id2int
+# TODO: Is there a cleaner way of doing this? It feels awkward that we define "label2int" based on only train (even though it's the same)
+# Maybe we load label2int from the JSON vocabulary upfront and pass that to the dataset?
 label2int = datasets[list(datasets.keys())[0]][0].label2int
+int2label = datasets[list(datasets.keys())[0]][0].int2label
 label_vocabulary = datasets[list(datasets.keys())[0]][0].label_vocabulary
 
+# TODO: Get rid of this one (sequence ids should be dynamically loaded in the future; no caching)
+sequence_id2int = datasets[list(datasets.keys())[0]][0].sequence_id2int
 
 # Load sequence embeddings
 sequence_embedding_matrix = sequence_encoder = None
@@ -164,57 +176,63 @@ if not params["TRAIN_SEQUENCE_ENCODER"]:
     )
     logger.info("Loaded sequence embeddings.")
 
-# Load label embeddings or label encoder
-label_embedding_matrix = label_encoder = tokenized_labels_dataloader = None
+# Create a map from GO alphanumeric id to numberic id
+int_label_id_map = {k: int(v[3:]) for k, v in int2label.items()}
+
+# Load the map from numeric label id to text label
+label_annotation_map = {key: value['label'] for key, value in read_pickle(
+    paths['GO_ANNOTATIONS_PATH']).to_dict(orient='index').items()}
+
+# Load the tokenizer and model
+label_tokenizer = AutoTokenizer.from_pretrained(
+    params['LABEL_ENCODER_CHECKPOINT'])
+label_encoder = AutoModel.from_pretrained("microsoft/biogpt").to(device)
+
+# Generate all label embeddings upfront, if not training the encoder
+label_embedding_matrix = None
 if not params["TRAIN_LABEL_ENCODER"]:
-    # TODO: Rather than loading from file, create from the model itself (slower at startup, but more flexible)
-    label_embedding_matrix = create_ordered_tensor(
-        paths["LABEL_EMBEDDING_PATH"],
-        label2int,
-        params["LABEL_EMBEDDING_DIM"],
-        device,
-    )
-    logger.info("Loaded label embeddings.")
-# Otherwise, load the pre-tokenized labels
-else:
-    tokenized_labels_dataloader = get_tokenized_labels_dataloader(
-        go_descriptions_path=paths["GO_DESCRIPTIONS_PATH"],
-        llm_checkpoint_path=params["PUBMEDBERT_CHECKPOINT"],
-        train_label_encoder=params["TRAIN_LABEL_ENCODER"],
-        label_vocabulary=sequence_id2int,
-        label2int_mapping=label2int,
-        batch_size=params["LABEL_BATCH_SIZE"],
-        device=device,
-    )
+    # Create a list of text labels
+    label_annotations = [label_annotation_map[int(label_id[3:])]
+                         for label_id in label_vocabulary]
+
+    # Tokenize the labels in batches
+    logging.info("Tokenizing all labels and getting embeddings...")
+    with torch.no_grad():
+        label_embedding_matrix = get_embeddings(
+            label_annotations, label_tokenizer, label_encoder, batch_size=300
+        )
 
 # Seed everything so we don't go crazy
 seed_everything(params["SEED"], device)
 # Initialize the models
 
-# TODO: Initialize ProteInfer and PubMedBERT here as well as the ensemble (ProTCL), which should take the other two as optional arguments
-
 model = ProTCL(
+    # Parameters
     protein_embedding_dim=params["PROTEIN_EMBEDDING_DIM"],
     label_embedding_dim=params["LABEL_EMBEDDING_DIM"],
     latent_dim=params["LATENT_EMBEDDING_DIM"],
     temperature=params["TEMPERATURE"],
+    # Label encoder
     label_encoder=label_encoder,
-    tokenized_labels_dataloader=tokenized_labels_dataloader,
+    label_tokenizer=label_tokenizer,
+    label_annotation_map=label_annotation_map,
+    int_label_id_map=int_label_id_map,
+    # Sequence encoder
     sequence_encoder=sequence_encoder,
-    sequence_embedding_matrix=sequence_embedding_matrix,
-    label_embedding_matrix=label_embedding_matrix,
+    # Training options
     train_projection_head=params["TRAIN_PROJECTION_HEAD"],
-    train_label_embeddings=params["TRAIN_LABEL_EMBEDDING_MATRIX"],
-    train_sequence_embeddings=params["TRAIN_SEQUENCE_EMBEDDING_MATRIX"],
     train_label_encoder=params["TRAIN_LABEL_ENCODER"],
     train_sequence_encoder=params["TRAIN_SEQUENCE_ENCODER"],
+    # TODO: Refactor so these are computed once upfront. That will require a consistent sequence vocabulary
+    sequence_embedding_matrix=sequence_embedding_matrix,
+    label_embedding_matrix=label_embedding_matrix,
 ).to(device)
 
 # Initialize trainer class to handle model training, validation, and testing
 Trainer = ProTCLTrainer(
     model=model,
     device=device,
-    config=config,
+    config={"params": params, "paths": paths},
     logger=logger,
     timestamp=timestamp,
     run_name=args.name,
@@ -232,7 +250,8 @@ if args.load_model:
 ####### TRAINING AND VALIDATION LOOPS #######
 if args.train_path_name is not None:
     # Train function
-    Trainer.train(train_loader=loaders["train"][0], val_loader=loaders["validation"][0])
+    Trainer.train(train_loader=loaders["train"]
+                  [0], val_loader=loaders["validation"][0])
 else:
     logger.info("Skipping training...")
 

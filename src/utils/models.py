@@ -1,8 +1,9 @@
 from transformers import AutoTokenizer, AutoModel
 import torch
-from torch.cuda.amp import autocast  # For AMP
+from torch.cuda.amp import autocast
 import logging
-from torch.utils.data import DataLoader
+from src.utils.data import chunks
+from contextlib import nullcontext
 
 
 def count_parameters_by_layer(model):
@@ -38,77 +39,32 @@ def count_parameters_by_layer(model):
         f"{'TOTAL':<{max([len(name) for name, _ in model.named_parameters()])}} {total_params:<20} {trainable_params}")
 
 
-def load_model_and_tokenizer(checkpoint, freeze_weights=False):
+def get_embeddings(text, tokenizer, model, batch_size=300, max_length=1024):
     """
-    Load a tokenizer and model given a checkpoint string.
+    Get embeddings for a list of text strings.
 
     Args:
-        checkpoint (str): The checkpoint string for the model and tokenizer, based on the HuggingFace model hub.
-        freeze_weights (bool, optional): If True, the model weights will be frozen. Defaults to False.
-
-    Returns:
-        tuple: A tuple containing the tokenizer and the model.
-    """
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-    model = AutoModel.from_pretrained(checkpoint).to('cuda')
-
-    if freeze_weights:
-        for param in model.parameters():
-            param.requires_grad = False
-
-    return tokenizer, model
-
-
-def tokenize_inputs(tokenizer, labels, padding=True, truncation=True, max_length=512):
-    """
-    Tokenize inputs given a tokenizer.
-
-    Args:
+        text (list): The list of text strings. If the list of text strings is too large, it will be split into batches.
         tokenizer (transformers.PreTrainedTokenizer): The tokenizer.
-        labels (list): The list of labels to tokenize.
-        max_length (int, optional): Maximum length for tokenization. Defaults to 512.
-
-    Returns:
-        transformers.tokenization_utils_base.BatchEncoding: The tokenized inputs.
-    """
-    return tokenizer(labels, padding=padding, truncation=truncation, max_length=max_length, return_tensors="pt").to('cuda')
-
-
-def get_embeddings_from_tokens(model, input_data, train_model=False):
-    """
-    Get embeddings given tokens using a model.
-
-    Args:
         model (transformers.PreTrainedModel): The model.
-        input_data (Union[DataLoader, transformers.tokenization_utils_base.BatchEncoding]): DataLoader or Tokenized inputs.
-        train_model (bool, optional): If True, the model will be trained on the input tokens. Defaults to False.
 
     Returns:
-        torch.Tensor: The embeddings tensor.
+        torch.Tensor: The embeddings.
     """
-    # Set the model to training mode if train_model is True
-    model.train(train_model)
+    all_label_embeddings = []
 
-    if isinstance(input_data, DataLoader):
-        #TODO: 768 is hard-coded here; this should be changed to a variable
-        embeddings = torch.empty((len(input_data.dataset), 768), device='cuda')
-        for i, batch in enumerate(input_data):
-            batch = tuple(t.to('cuda') for t in batch)
-            with torch.set_grad_enabled(train_model), autocast():
-                outputs = model.forward(
-                    input_ids=batch[0], attention_mask=batch[1], output_hidden_states=True)
-                batch_embeddings = outputs.last_hidden_state
-                # Extract the [CLS] token embeddings (the first token for each sequence)
-                cls_embeddings = batch_embeddings[:, 0, :]
-                embeddings[i*input_data.batch_size:(i+1)
-                           * input_data.batch_size] = cls_embeddings
-        return embeddings
+    # Tokenize the labels in batches
+    for batch in chunks(text, batch_size):
+        # TODO: Consider identifying the max_length in the dataset to improve speed
+        tokenized_labels = tokenizer(
+            batch, padding=True, truncation=True, max_length=max_length, return_tensors="pt"
+        ).to(model.device)
 
-    else:  # Direct tokenized inputs
-        with torch.set_grad_enabled(train_model), autocast():
-            outputs = model.forward(
-                input_ids=input_data['input_ids'].to('cuda'), attention_mask=input_data['attention_mask'].to('cuda'), output_hidden_states=True)
-            embeddings = outputs.last_hidden_state
-            # Extract the [CLS] token embeddings (the first token for each sequence)
-            cls_embeddings = embeddings[:, 0, :]
-        return cls_embeddings
+        # Get the label embeddings (average across all tokens of the last hidden state)
+        with autocast():
+            outputs = model(**tokenized_labels)
+            label_embeddings = outputs.last_hidden_state.mean(dim=1)
+        all_label_embeddings.append(label_embeddings)
+
+    # Concatenate all the label embeddings
+    return torch.cat(all_label_embeddings, dim=0)

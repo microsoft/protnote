@@ -26,6 +26,7 @@ def collate_variable_sequence_length(batch: List[Tuple]):
 
     # Loop through the batch
     for (
+        # TODO: If we don't cache sequence embeddings, we can remove sequence_ids
         sequence_id_numeric,
         sequence_onehots,
         label_multihots,
@@ -49,10 +50,10 @@ def collate_variable_sequence_length(batch: List[Tuple]):
         processed_label_multihots.append(label_multihots)
         processed_sequence_ids.append(sequence_id_numeric)
 
-    # TODO: Do we really need to return the sequence lengths? @NATE: Yes, ProteInfer uses them for masking convolutions
     return (
         torch.stack(processed_sequence_ids),
         torch.stack(processed_sequence_onehots),
         torch.stack(processed_label_multihots),
         torch.stack(processed_sequence_lengths),
+        # We need to also return an ordered list of the label ids
     )
