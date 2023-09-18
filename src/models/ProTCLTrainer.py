@@ -51,13 +51,13 @@ class ProTCLTrainer:
         self.num_epochs = config["params"]["NUM_EPOCHS"]
         self.train_sequence_encoder = config["params"]["TRAIN_SEQUENCE_ENCODER"]
         self.train_label_encoder = config["params"]["TRAIN_LABEL_ENCODER"]
-        self.embedding_update_interval = config["params"]["EMBEDDING_UPDATE_INTERVAL"]
         self.use_batch_labels_only = config["params"]["USE_BATCH_LABELS_ONLY"]
         self.normalize_probabilities = config["params"]["NORMALIZE_PROBABILITIES"]
         self.validation_frequency = config["params"]["VALIDATION_FREQUENCY"]
-        self.optimizer = torch.optim.Adam(
-            model.parameters(), lr=config["params"]["LEARNING_RATE"]
-        )
+        self.gradient_accumulation_steps = config["params"]["GRADIENT_ACCUMULATION_STEPS"]
+
+
+    
         self.label_vocabulary = config["relative_paths"]["GO_LABEL_VOCAB_PATH"]
         self.label_normalizer = load_gz_json(
             config["relative_paths"]["PARENTHOOD_LIB_PATH"]
@@ -65,6 +65,31 @@ class ProTCLTrainer:
         self.output_model_dir = config["relative_paths"]["OUTPUT_MODEL_DIR"]
         self.scaler = GradScaler()
         self.cached_label_embeddings = None
+        self._set_optimizer(config)
+
+        # Load pre-trained weights for the sequence encoder. 
+
+    def _set_optimizer(self,config):
+
+        trainable_params = []
+        trainable_params_names = []
+                
+        for name,param in self.model.named_parameters():
+            
+            if (name.startswith('sequence_encoder')&(not self.train_sequence_encoder)):
+                param.requires_grad = False
+
+            if (name.startswith('label_encoder')&(not self.train_label_encoder)):
+                param.requires_grad = False
+
+            if param.requires_grad:
+                trainable_params.append(param)
+                trainable_params_names.append(name)
+
+        self.trainable_params_names = trainable_params_names
+        self.optimizer = torch.optim.Adam(
+            trainable_params, lr=config["params"]["LEARNING_RATE"]
+        )
 
     def evaluation_step(self, batch, testing=False) -> tuple:
         """Perform a single evaluation step.
@@ -83,11 +108,8 @@ class ProTCLTrainer:
 
         # Move sequences and labels to GPU, if available
         labels = label_multihots.to(self.device)
-        sequences = (
-            sequence_onehots.to(self.device)
-            if self.train_sequence_encoder
-            else sequence_ids.to(self.device)
-        )
+        sequences = sequence_onehots.to(self.device)
+        sequence_lengths = sequence_lengths.to(self.device)
 
         considered_labels = (
             labels if _use_batch_labels_only else torch.ones_like(labels)
@@ -109,6 +131,42 @@ class ProTCLTrainer:
         logits = torch.mm(P_e, L_e.t()) / self.model.t
 
         return loss.item(), logits, labels, sequence_ids
+
+    def validation_step(self,val_loader: torch.utils.data.DataLoader,best_val_loss: float):
+
+        self.logger.info("Running validation...")
+
+        val_metrics, _ = self.evaluate(data_loader=val_loader, testing=True)
+
+        self.logger.info(val_metrics)
+
+        if self.use_wandb:
+            wandb.log({"validation_loss": val_metrics["avg_loss"]})
+
+        # Save the model if it has the best validation loss so far
+        if val_metrics["avg_loss"] < best_val_loss:
+            self.logger.info(
+                f"New best validation loss: {val_metrics['avg_loss']}. Saving model..."
+            )
+            best_val_loss = val_metrics["avg_loss"]
+
+            # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
+            if not os.path.exists(self.output_model_dir):
+                os.makedirs(self.output_model_dir)
+
+            model_name = (
+                self.run_name if self.run_name else "best_ProTCL.pt"
+            )
+            model_path = os.path.join(
+                self.output_model_dir, f"{self.timestamp}_{model_name}.pt"
+            )
+            torch.save(self.model.state_dict(), model_path)
+            self.logger.info(f"Saved model to {model_path}.")
+
+            if self.use_wandb:
+                wandb.save(f"{self.timestamp}_best_ProTCL.pt")
+
+        return val_metrics, best_val_loss
 
     def find_optimal_threshold(
         self, data_loader: torch.utils.data.DataLoader, optimization_metric_name: str
@@ -231,7 +289,7 @@ class ProTCLTrainer:
                     eval_metrics(probabilities, labels)
 
                     test_results["sequence_ids"].append(
-                        sequence_ids.repeat_interleave(num_labels)
+                        sequence_ids # could use .repeat_interleave(num_labels) to make long format
                     )
                     test_results["probabilities"].append(probabilities)
                     test_results["labels"].append(labels)
@@ -241,7 +299,7 @@ class ProTCLTrainer:
 
             for key in test_results.keys():
                 test_results[key] = (
-                    torch.cat(test_results[key]).flatten().detach().cpu().numpy()
+                    torch.cat(test_results[key]).detach().cpu().numpy()
                 )
 
             # Compute average validation loss
@@ -254,7 +312,7 @@ class ProTCLTrainer:
     def train(
         self,
         train_loader: torch.utils.data.DataLoader,
-        val_loader: torch.utils.data.DataLoader,
+        val_loader: torch.utils.data.DataLoader
     ):
         """Train model
 
@@ -272,14 +330,19 @@ class ProTCLTrainer:
             wandb.watch(self.model)
 
         # Keep track of batches for logging
-        batch_count = 0
+        batch_count = 1
 
         # Initialize the best validation loss to a high value
         best_val_loss = float("inf")
 
+        num_training_steps = len(train_loader) * self.num_epochs
+        
+        self.logger.info(f"Total number of training steps: {num_training_steps}")
+
         for epoch in range(self.num_epochs):
             ####### TRAINING LOOP #######
             for train_batch in train_loader:
+                print(batch_count)
                 # Unpack batch
                 (
                     sequence_ids,
@@ -288,16 +351,11 @@ class ProTCLTrainer:
                     sequence_lengths,
                 ) = train_batch
 
-                # Move sequences and labels to GPU, if available
+                # Move sequences, labels and sequence_lengths to GPU, if available
                 labels = label_multihots.to(self.device)
-                sequences = (
-                    sequence_onehots.to(self.device)
-                    if self.train_sequence_encoder
-                    else sequence_ids.to(self.device)
-                )
+                sequence_lengths = sequence_lengths.to(self.device)
+                sequences = sequence_onehots.to(self.device)
 
-                # Reset gradients
-                self.optimizer.zero_grad()
 
                 # Forward pass (project sequences and relevant labels to latent space
                 # Labels can be only the labels that are present in the batch (if self.USE_BATCH_LABELS is True) or all the labels (if False)
@@ -323,7 +381,7 @@ class ProTCLTrainer:
                 )
 
                 # Compute loss
-                loss = contrastive_loss(P_e, L_e, self.model.t, target)
+                loss = contrastive_loss(P_e, L_e, self.model.t, target) / self.gradient_accumulation_steps
 
                 # Log metrics to W&B
                 if self.use_wandb:
@@ -333,56 +391,26 @@ class ProTCLTrainer:
 
                 # Backward pass
                 self.scaler.scale(loss).backward()
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-
-                # print("Completed batch", batch_count)
-
-                # Increment batch count
-                batch_count += 1
-
-                # Force the model to re-calculate the embeddings every n batches
-                if (
-                    batch_count % self.embedding_update_interval == 0
-                    and self.train_label_encoder
-                ):
-                    # print("Clearing cached label embeddings...")
-                    self.model.clear_label_embeddings_cache()
+                
+                #Gradient accumulation every GRADIENT_ACCUMULATION_STEPS
+                if ((batch_count) % self.gradient_accumulation_steps == 0):
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    self.optimizer.zero_grad()
+                
 
                 # Run validation and log progress every n batches
                 if batch_count % self.validation_frequency == 0:
                     ####### VALIDATION LOOP #######
-                    self.logger.info("Running validation...")
+                    val_metrics, best_val_loss = self.validation_step(val_loader=val_loader,
+                                                                      best_val_loss=best_val_loss)
 
-                    val_metrics, _ = self.evaluate(data_loader=val_loader, testing=True)
-
-                    self.logger.info(val_metrics)
                     self.logger.info(
                         f"Epoch {epoch+1}/{self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}, Validation Loss: {val_metrics['avg_loss']}"
                     )
+                #Log training progress percentage every 5%
+                if num_training_steps > 20 and batch_count % int(num_training_steps/20) == 0:
+                    self.logger.info(f"Training progress: {100*batch_count/num_training_steps}%")
 
-                    if self.use_wandb:
-                        wandb.log({"validation_loss": val_metrics["avg_loss"]})
-
-                    # Save the model if it has the best validation loss so far
-                    if val_metrics["avg_loss"] < best_val_loss:
-                        self.logger.info(
-                            f"New best validation loss: {val_metrics['avg_loss']}. Saving model..."
-                        )
-                        best_val_loss = val_metrics["avg_loss"]
-
-                        # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
-                        if not os.path.exists(self.output_model_dir):
-                            os.makedirs(self.output_model_dir)
-
-                        model_name = (
-                            self.run_name if self.run_name else "best_ProTCL.pt"
-                        )
-                        model_path = os.path.join(
-                            self.output_model_dir, f"{self.timestamp}_{model_name}.pt"
-                        )
-                        torch.save(self.model.state_dict(), model_path)
-                        self.logger.info(f"Saved model to {model_path}.")
-
-                        if self.use_wandb:
-                            wandb.save(f"{self.timestamp}_best_ProTCL.pt")
+                # Increment batch count
+                batch_count += 1

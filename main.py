@@ -8,9 +8,11 @@ from src.utils.data import (
 from src.data.datasets import ProteinDataset, create_multiple_loaders
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
-from src.utils.evaluation import EvalMetrics
+from src.models.protein_encoders import ProteInfer
+from src.utils.evaluation import EvalMetrics, save_evaluation_results
 from src.utils.models import count_parameters_by_layer
 from src.utils.configs import get_setup
+from src.utils.proteinfer import transfer_tf_weights_to_torch
 import torch
 import wandb
 import os
@@ -20,7 +22,7 @@ import json
 
 
 """
- sample usage: train.py --train-path-name TRAIN_DATA_PATH --validation-path-name VAL_DATA_PATH --test-paths-names TEST_DATA_PATH TEST_DATA_PATH 
+ sample usage: python train.py --train-path-name TRAIN_DATA_PATH --validation-path-name VAL_DATA_PATH --test-paths-names TEST_DATA_PATH TEST_DATA_PATH 
  here we pass the same test set twice as an example.
 """
 
@@ -153,7 +155,7 @@ label_vocabulary = datasets[list(datasets.keys())[0]][0].label_vocabulary
 
 
 # Load sequence embeddings
-sequence_embedding_matrix = sequence_encoder = None
+sequence_embedding_matrix = None
 if not params["TRAIN_SEQUENCE_ENCODER"]:
     # TODO: Rather than loading from file, create from ProteInfer itself (slower at startup, but more flexible)
     sequence_embedding_matrix = create_ordered_tensor(
@@ -191,6 +193,21 @@ else:
 seed_everything(params["SEED"], device)
 # Initialize the models
 
+
+# Initialize 
+sequence_encoder = ProteInfer.from_pretrained(
+    weights_path=config["relative_paths"]["PROTEINFER_WEIGHTS_PATH"],
+    num_labels=params["NUM_LABELS"],
+    input_channels=config["embed_sequences_params"]["INPUT_CHANNELS"],
+    output_channels=config["embed_sequences_params"]["OUTPUT_CHANNELS"],
+    kernel_size=config["embed_sequences_params"]["KERNEL_SIZE"],
+    activation=torch.nn.ReLU,
+    dilation_base=config["embed_sequences_params"]["DILATION_BASE"],
+    num_resnet_blocks=config["embed_sequences_params"]["NUM_RESNET_BLOCKS"],
+    bottleneck_factor=config["embed_sequences_params"]["BOTTLENECK_FACTOR"],
+)
+
+
 # TODO: Initialize ProteInfer and PubMedBERT here as well as the ensemble (ProTCL), which should take the other two as optional arguments
 
 model = ProTCL(
@@ -201,13 +218,10 @@ model = ProTCL(
     label_encoder=label_encoder,
     tokenized_labels_dataloader=tokenized_labels_dataloader,
     sequence_encoder=sequence_encoder,
-    sequence_embedding_matrix=sequence_embedding_matrix,
     label_embedding_matrix=label_embedding_matrix,
     train_projection_head=params["TRAIN_PROJECTION_HEAD"],
     train_label_embeddings=params["TRAIN_LABEL_EMBEDDING_MATRIX"],
-    train_sequence_embeddings=params["TRAIN_SEQUENCE_EMBEDDING_MATRIX"],
-    train_label_encoder=params["TRAIN_LABEL_ENCODER"],
-    train_sequence_encoder=params["TRAIN_SEQUENCE_ENCODER"],
+    train_label_encoder=params["TRAIN_LABEL_ENCODER"]
 ).to(device)
 
 # Initialize trainer class to handle model training, validation, and testing
@@ -267,6 +281,14 @@ if args.test_paths_names is not None:
         final_metrics, test_results = Trainer.evaluate(
             data_loader=test_loader, eval_metrics=eval_metrics, testing=True
         )
+
+        save_evaluation_results(results=test_results,
+                                   label_vocabulary = label_vocabulary,
+                                   run_name = args.name,
+                                   output_dir=os.path.join(ROOT_PATH,paths["RESULTS_DIR"])
+                                   )
+
+
         # Convert all metrics to float
         final_metrics = {
             k: (v.item() if isinstance(v, torch.Tensor) else v)

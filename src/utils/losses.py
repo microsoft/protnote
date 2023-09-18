@@ -49,3 +49,27 @@ def compute_asymmetric_loss(logits, target, dim):
 
     # Return the weighted average of the positive and negative losses
     return ((loss_pos / (num_pos + epsilon)) + (loss_neg / (num_neg + epsilon))).mean()
+
+def multilabel_bce(logits, target, pos_weight = None, symmetric=False):
+    """_summary_
+
+    :param logits: Tensor of shape (batch_size, num_labels)
+    :type logits: torch.Tensor
+    :param target: Tensor of shape (batch_size, num_labels)
+    :type target: torch.Tensor
+    :param pos_weight: weight for positive examples, defaults to None
+    :type pos_weight: torch.Tensor, optional
+    :param symmetric: whether to compute the symmetric loss, defaults to False. 
+    :type symmetric: bool, optional
+    """    
+    loss = F.binary_cross_entropy_with_logits(logits,target.float(),reduction='none',pos_weight=pos_weight)
+    
+    #Compute standard multilabel BCE loss. Loss per example is summed over all labels
+    standard_loss = loss.sum(dim=1)
+
+    if symmetric:
+        #Compute loss as if the targets where the examples. Loss per label is summed over all examples.
+        inverted_loss = loss.sum(dim=0)
+        return (standard_loss + inverted_loss)/2
+    else:
+        return standard_loss

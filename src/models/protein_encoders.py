@@ -2,6 +2,7 @@ import torch
 from typing import Literal,Text,Optional
 import numpy as np
 from ..data.datasets import set_padding_to_sentinel
+from src.utils.proteinfer import transfer_tf_weights_to_torch
 
 class MaskedConv1D(torch.nn.Conv1d):
     def forward(self,x,sequence_lengths):
@@ -55,7 +56,7 @@ class Residual(torch.nn.Module):
         out = self.masked_conv1(out,sequence_lengths)
         out = self.bn_activation_2(out)
         out = self.masked_conv2(out,sequence_lengths)
-        out+=x
+        out = out + x
         return out
     
 class ProteInfer(torch.nn.Module):
@@ -89,6 +90,8 @@ class ProteInfer(torch.nn.Module):
                         bottleneck_factor=bottleneck_factor,
                         activation = activation)
                      )
+            
+            
         self.output_layer = torch.nn.Linear(in_features=output_channels,out_features=num_labels)
 
     def get_embeddings(self,x,sequence_lengths):
@@ -104,6 +107,37 @@ class ProteInfer(torch.nn.Module):
         features = self.get_embeddings(x,sequence_lengths)       
         logits = self.output_layer(features)
         return logits
+    
+
+    @classmethod
+    def from_pretrained(cls,
+                        weights_path: str,
+                        num_labels:int,
+                        input_channels:int,
+                        output_channels:int,
+                        kernel_size:int,
+                        activation,
+                        dilation_base:int,
+                        num_resnet_blocks:int,
+                        bottleneck_factor:float
+                        ):
+
+                     
+        '''
+        Load a pretrained model from a path or url.
+        '''
+        model = cls(num_labels,
+                    input_channels,
+                    output_channels,
+                    kernel_size,
+                    activation,
+                    dilation_base,
+                    num_resnet_blocks,
+                    bottleneck_factor
+                    )
+        transfer_tf_weights_to_torch(model,weights_path)
+
+        return model
 
 
 

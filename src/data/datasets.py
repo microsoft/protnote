@@ -223,7 +223,8 @@ def set_padding_to_sentinel(
     mask = mask.unsqueeze(1).expand(-1, dim, -1)
 
     # Use the mask to set the padding values to sentinel
-    padded_representations[mask] = sentinel
+    padded_representations = torch.where(mask, sentinel, padded_representations)
+
 
     return padded_representations
 

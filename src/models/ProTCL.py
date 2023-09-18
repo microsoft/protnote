@@ -4,7 +4,6 @@ import torch
 import logging
 from src.utils.models import get_embeddings_from_tokens
 
-
 class ProTCL(nn.Module):
     def __init__(
         self,
@@ -15,13 +14,10 @@ class ProTCL(nn.Module):
         label_encoder,
         tokenized_labels_dataloader,
         sequence_encoder,
-        sequence_embedding_matrix,
         label_embedding_matrix,
         train_label_embeddings,
-        train_sequence_embeddings,
         train_projection_head,
-        train_label_encoder,
-        train_sequence_encoder,
+        train_label_encoder
     ):
         super().__init__()
 
@@ -38,11 +34,9 @@ class ProTCL(nn.Module):
         # Temperature parameter
         self.t = temperature
 
-        # If using a pre-trained sequence embedding matrix, create a nn.Embedding layer
-        if sequence_embedding_matrix is not None:
-            self.pretrained_sequence_embeddings = nn.Embedding.from_pretrained(
-                sequence_embedding_matrix, freeze=not train_sequence_embeddings
-            )
+        #Sequence encoder
+        self.sequence_encoder = sequence_encoder
+
         # TODO: Support using sequence encoder here like we did with labels
 
         # If using a pre-trained label embedding matrix, create a nn.Embedding layer
@@ -65,10 +59,6 @@ class ProTCL(nn.Module):
         # Log the configurations
         logging.info(
             "################## Model encoder configurations ##################"
-        )
-
-        logging.info(
-            f"Using {'<<CACHED>>' if sequence_embedding_matrix is not None else '<<ProteInfer>>'} sequence embeddings with training {'<<ENABLED>>' if train_sequence_embeddings else '<<DISABLED>>'}."
         )
 
         logging.info(
@@ -109,20 +99,10 @@ class ProTCL(nn.Module):
             # TODO: This is technically inefficient, since we get all the label embeddings and then filter them
             L_f = self.cached_label_embeddings[collapsed_labels]
 
-        # If using pre-trained sequence embeddings, convert sequences to embeddings (since P is a tensor of sequence IDs)
-        if hasattr(self, "pretrained_sequence_embeddings"):
-            P_f = self.pretrained_sequence_embeddings(P)
-        # If using a protein sequence encoder, convert sequences to embeddings
-        else:
-            # TODO: Have not tested this.
-            with torch.set_grad_enabled(True), torch.cuda.amp.autocast():
-                P_f = self.sequence_encoder.get_embeddings(P, sequence_lenghts)
 
-            # Throw error
-            raise ValueError(
-                "Sequence embeddings not found. Please provide a pre-trained sequence embedding map or a protein encoder."
-            )
+        P_f = self.sequence_encoder.get_embeddings(P, sequence_lenghts)
 
+     
         # Project protein and label embeddings to latent space and L2 normalize
         P_e = F.normalize(self.W_p(P_f), dim=1)
         L_e = F.normalize(self.W_l(L_f), dim=1)

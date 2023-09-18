@@ -8,9 +8,9 @@ params:
   LABEL_EMBEDDING_DIM: 768
   LATENT_EMBEDDING_DIM: 934
   NUM_EPOCHS: 1
-  TRAIN_BATCH_SIZE: 256
-  VALIDATION_BATCH_SIZE: 256
-  TEST_BATCH_SIZE: 256
+  TRAIN_BATCH_SIZE: 128
+  VALIDATION_BATCH_SIZE: 128
+  TEST_BATCH_SIZE: 128
   LABEL_BATCH_SIZE: 500
   VALIDATION_FREQUENCY: 500
   DECISION_TH: null
@@ -18,13 +18,13 @@ params:
   TRAIN_SEQUENCE_ENCODER: False
   TRAIN_SEQUENCE_EMBEDDING_MATRIX: False
   TRAIN_LABEL_ENCODER: False
-  TRAIN_LABEL_EMBEDDING_MATRIX: True
+  TRAIN_LABEL_EMBEDDING_MATRIX: False
   TRAIN_PROJECTION_HEAD: True
   USE_BATCH_LABELS_ONLY: True
   NORMALIZE_PROBABILITIES: False
   SEED: 42
   NUM_LABELS: 32102
-  EMBEDDING_UPDATE_INTERVAL: 30
+  GRADIENT_ACCUMULATION_STEPS: 1 #1 is essentially no gradient accumulation
   PUBMEDBERT_CHECKPOINT: microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext
 
 #Constants for protein encoder model (e.g. ProteInfer). Not really params since 
@@ -65,6 +65,9 @@ relative_paths:
 
   # Where to save the model
   OUTPUT_MODEL_DIR: models/ProTCL
+
+  # Where to save results
+  RESULTS_DIR: results/
 
   PARENTHOOD_LIB_PATH: data/vocabularies/parenthood.json.gz
   PROTEINFER_WEIGHTS_PATH: 'models/proteinfer/GO_model_weights.pkl'
