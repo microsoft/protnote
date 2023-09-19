@@ -223,7 +223,7 @@ model = ProTCL(
     train_projection_head=params["TRAIN_PROJECTION_HEAD"],
     train_label_encoder=params["TRAIN_LABEL_ENCODER"],
     train_sequence_encoder=params["TRAIN_SEQUENCE_ENCODER"],
-    label_embedding_matrix=label_embedding_matrix,
+    label_embedding_matrix=label_embedding_matrix
 ).to(device)
 
 # Initialize trainer class to handle model training, validation, and testing

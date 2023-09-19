@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import wandb
 import os
+import json
 from torch.cuda.amp import GradScaler, autocast
 from collections import defaultdict
 
@@ -126,7 +127,7 @@ class ProTCLTrainer:
 
         return loss.item(), logits, labels, sequence_ids
 
-    def validation_step(self, val_loader: torch.utils.data.DataLoader, best_val_loss: float):
+    def validate(self, val_loader: torch.utils.data.DataLoader, best_val_loss: float):
 
         self.logger.info("Running validation...")
 
@@ -331,7 +332,6 @@ class ProTCLTrainer:
         for epoch in range(self.num_epochs):
             ####### TRAINING LOOP #######
             for train_batch in train_loader:
-                print(batch_count)
                 # Unpack batch
                 # TODO: Modify datasets and data loaders to no longer return sequence_ids
                 (
@@ -386,19 +386,22 @@ class ProTCLTrainer:
                 if batch_count % self.validation_frequency == 0:
                     ####### VALIDATION LOOP #######
                     # Force model to recompute all label embeddings
-                    self.model.clear_label_embeddings_cache()
+                    if self.train_label_encoder:
+                        self.model.clear_label_embeddings_cache()
+
                     # Run validation
-                    val_metrics, best_val_loss = self.validation_step(val_loader=val_loader,
+                    val_metrics, best_val_loss = self.validate(val_loader=val_loader,
                                                                       best_val_loss=best_val_loss)
 
                     self.logger.info(
                         f"Epoch {epoch+1}/{self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}, Validation Loss: {val_metrics['avg_loss']}"
                     )
 
+                    self.logger.info(f"Validation metrics:\n{json.dumps(val_metrics, indent=4)}")
                 # Log training progress percentage every 5%
                 if num_training_steps > 20 and batch_count % int(num_training_steps/20) == 0:
                     self.logger.info(
-                        f"Training progress: {100*batch_count/num_training_steps}%")
+                        f"Training progress: {round(100*batch_count/num_training_steps,2)}%")
 
                 # Increment batch count
                 batch_count += 1

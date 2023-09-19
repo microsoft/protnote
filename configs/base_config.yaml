@@ -12,7 +12,7 @@ params:
   VALIDATION_BATCH_SIZE: 128
   TEST_BATCH_SIZE: 128
   LABEL_BATCH_SIZE: 500
-  VALIDATION_FREQUENCY: 2
+  VALIDATION_FREQUENCY: 500
   DECISION_TH: 0.84 # Set to null if you want to use the best threshold from validation
   NUM_WORKERS: 4
   TRAIN_SEQUENCE_ENCODER: False
