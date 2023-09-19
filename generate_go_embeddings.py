@@ -4,7 +4,7 @@ import os
 import torch
 from tqdm import tqdm
 from src.utils.data import read_pickle, save_to_pickle
-from src.utils.models import load_model_and_tokenizer, tokenize_inputs, get_embeddings_from_tokens
+from src.utils.models import load_model_and_tokenizer, tokenize_inputs, get_cls_embeddings_from_tokenss
 import time
 
 # Set the TOKENIZERS_PARALLELISM environment variable to False
@@ -26,7 +26,7 @@ def embed_go_annotations(tokenizer, model, df, batch_size=32):
         tokens = tokenize_inputs(tokenizer, batch_texts)
 
         # Get embeddings for the tokens
-        embeddings = get_embeddings_from_tokens(model, tokens)
+        embeddings = get_cls_embeddings_from_tokenss(model, tokens)
 
         # Convert the embeddings to numpy and map them to the GO ids
         batch_embeddings = embeddings.cpu().numpy()

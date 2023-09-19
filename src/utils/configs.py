@@ -4,6 +4,7 @@ import time
 import datetime
 import logging
 from src.utils.data import read_yaml
+import sys
 
 
 def override_config(config: dict, overrides: list):
@@ -33,6 +34,7 @@ def get_setup(
     config_path: str,
     run_name: str,
     overrides: list,
+    log_to_console: bool,
     train_path_name: str = None,
     val_path_name: str = None,
     test_paths_names: list = None,
@@ -58,7 +60,6 @@ def get_setup(
         "amino_acid_vocabulary_path": paths["AMINO_ACID_VOCAB_PATH"],
         "label_vocabulary_path": paths["GO_LABEL_VOCAB_PATH"],
         "sequence_id_vocabulary_path": paths["SEQUENCE_ID_VOCAB_PATH"],
-        "sequence_id_map_path": paths["SEQUENCE_ID_MAP_PATH"],
     }
 
     train_paths_list = (
@@ -102,16 +103,22 @@ def get_setup(
         os.makedirs(log_dir)
     full_log_path = os.path.join(log_dir, f"{timestamp}_train_{run_name}.log")
 
-    logging.basicConfig(
-        filename=full_log_path,
-        filemode="w",
-        format="%(asctime)s %(levelname)-4s %(message)s",
-        level=logging.INFO,
-        datefmt="%Y-%m-%d %H:%M:%S %Z",
-    )
+    log_args = {
+        "format": "%(asctime)s %(levelname)-4s %(message)s",
+        "level": logging.INFO,
+        "datefmt": "%Y-%m-%d %H:%M:%S %Z"
+    }
 
+    if log_to_console:
+        log_args["stream"] = sys.stdout
+    else:
+        log_args["filename"] = full_log_path
+        log_args["filemode"] = "w"
+
+    logging.basicConfig(**log_args)
     logger = logging.getLogger()
-    print(f"Logging to {full_log_path}...")
+    print(
+        f"Logging to {'console' if log_to_console else full_log_path}...")
 
     # Use GPU if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

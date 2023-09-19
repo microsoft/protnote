@@ -22,6 +22,7 @@ class ProTCLTrainer:
         timestamp: str,
         run_name: str,
         use_wandb: bool = False,
+
     ):
         """_summary_
 
@@ -51,35 +52,31 @@ class ProTCLTrainer:
         self.num_epochs = config["params"]["NUM_EPOCHS"]
         self.train_sequence_encoder = config["params"]["TRAIN_SEQUENCE_ENCODER"]
         self.train_label_encoder = config["params"]["TRAIN_LABEL_ENCODER"]
-        self.use_batch_labels_only = config["params"]["USE_BATCH_LABELS_ONLY"]
+
         self.normalize_probabilities = config["params"]["NORMALIZE_PROBABILITIES"]
         self.validation_frequency = config["params"]["VALIDATION_FREQUENCY"]
         self.gradient_accumulation_steps = config["params"]["GRADIENT_ACCUMULATION_STEPS"]
-
-
-    
-        self.label_vocabulary = config["relative_paths"]["GO_LABEL_VOCAB_PATH"]
+        self.label_vocabulary = config["paths"]["GO_LABEL_VOCAB_PATH"]
         self.label_normalizer = load_gz_json(
-            config["relative_paths"]["PARENTHOOD_LIB_PATH"]
+            config["paths"]["PARENTHOOD_LIB_PATH"]
         )
-        self.output_model_dir = config["relative_paths"]["OUTPUT_MODEL_DIR"]
+        self.output_model_dir = config["paths"]["OUTPUT_MODEL_DIR"]
         self.scaler = GradScaler()
         self.cached_label_embeddings = None
+        self.label_sample_size = config["params"]["LABEL_SAMPLE_SIZE"]
         self._set_optimizer(config)
 
-        # Load pre-trained weights for the sequence encoder. 
-
-    def _set_optimizer(self,config):
+    def _set_optimizer(self, config):
 
         trainable_params = []
         trainable_params_names = []
-                
-        for name,param in self.model.named_parameters():
-            
-            if (name.startswith('sequence_encoder')&(not self.train_sequence_encoder)):
+
+        for name, param in self.model.named_parameters():
+
+            if (name.startswith('sequence_encoder') & (not self.train_sequence_encoder)):
                 param.requires_grad = False
 
-            if (name.startswith('label_encoder')&(not self.train_label_encoder)):
+            if (name.startswith('label_encoder') & (not self.train_label_encoder)):
                 param.requires_grad = False
 
             if param.requires_grad:
@@ -100,9 +97,6 @@ class ProTCLTrainer:
         :rtype: tuple
         """
 
-        # If testing, always use all the labels
-        _use_batch_labels_only = self.use_batch_labels_only and not testing
-
         # Unpack the validation batch
         sequence_ids, sequence_onehots, label_multihots, sequence_lengths = batch
 
@@ -111,28 +105,28 @@ class ProTCLTrainer:
         sequences = sequence_onehots.to(self.device)
         sequence_lengths = sequence_lengths.to(self.device)
 
-        considered_labels = (
-            labels if _use_batch_labels_only else torch.ones_like(labels)
-        )
+        # Consider all labels for the validation loop
+        considered_labels = torch.arange(labels.size(1)).to(self.device)
 
         # Forward pass
-        P_e, L_e = self.model(
-            sequences, considered_labels, sequence_lengths, is_training=False
-        )
+        with autocast():
+            P_e, L_e = self.model(
+                sequences, considered_labels, sequence_lengths
+            )
 
         # Compute validation loss for the batch
         loss = contrastive_loss(
             P_e,
             L_e,
             self.model.t,
-            labels[:, torch.any(labels, dim=0)] if _use_batch_labels_only else labels,
+            labels,
         )
         # Compute temperature normalized cosine similarities
         logits = torch.mm(P_e, L_e.t()) / self.model.t
 
         return loss.item(), logits, labels, sequence_ids
 
-    def validation_step(self,val_loader: torch.utils.data.DataLoader,best_val_loss: float):
+    def validation_step(self, val_loader: torch.utils.data.DataLoader, best_val_loss: float):
 
         self.logger.info("Running validation...")
 
@@ -189,11 +183,12 @@ class ProTCLTrainer:
         best_th = 0.0
         best_score = 0.0
 
-        with torch.no_grad():
+        with torch.no_grad(), autocast():
             all_probabilities = []
             all_labels = []
             for batch in data_loader:
-                _, logits, labels, _ = self.evaluation_step(batch=batch, testing=True)
+                _, logits, labels, _ = self.evaluation_step(
+                    batch=batch, testing=True)
 
                 # Apply sigmoid to get the probabilities for multi-label classification
                 probabilities = torch.sigmoid(logits)
@@ -221,7 +216,8 @@ class ProTCLTrainer:
                 num_labels=self.num_labels, threshold=th, device=self.device
             ).get_metric_collection(type="all")
 
-            optimization_metric = getattr(eval_metrics, optimization_metric_name)
+            optimization_metric = getattr(
+                eval_metrics, optimization_metric_name)
 
             optimization_metric(all_probabilities, all_labels)
             score = optimization_metric.compute()
@@ -253,14 +249,6 @@ class ProTCLTrainer:
         :rtype: dict
         """
 
-        # If testing, always use all the labels
-        _use_batch_labels_only = self.use_batch_labels_only and not testing
-
-        if _use_batch_labels_only & (eval_metrics is not None):
-            raise ValueError(
-                "Cannot use batch labels only and eval metrics within the training or validation loop at the same time."
-            )
-
         self.model.eval()
         total_loss = 0
         test_results = defaultdict(list)
@@ -289,7 +277,8 @@ class ProTCLTrainer:
                     eval_metrics(probabilities, labels)
 
                     test_results["sequence_ids"].append(
-                        sequence_ids # could use .repeat_interleave(num_labels) to make long format
+                        # could use .repeat_interleave(num_labels) to make long format
+                        sequence_ids
                     )
                     test_results["probabilities"].append(probabilities)
                     test_results["labels"].append(labels)
@@ -315,7 +304,6 @@ class ProTCLTrainer:
         val_loader: torch.utils.data.DataLoader
     ):
         """Train model
-
         :param train_loader: _description_
         :type train_loader: torch.utils.data.DataLoader
         :param val_loader: _description_
@@ -336,16 +324,18 @@ class ProTCLTrainer:
         best_val_loss = float("inf")
 
         num_training_steps = len(train_loader) * self.num_epochs
-        
-        self.logger.info(f"Total number of training steps: {num_training_steps}")
+
+        self.logger.info(
+            f"Total number of training steps: {num_training_steps}")
 
         for epoch in range(self.num_epochs):
             ####### TRAINING LOOP #######
             for train_batch in train_loader:
                 print(batch_count)
                 # Unpack batch
+                # TODO: Modify datasets and data loaders to no longer return sequence_ids
                 (
-                    sequence_ids,
+                    _,
                     sequence_onehots,
                     label_multihots,
                     sequence_lengths,
@@ -356,23 +346,18 @@ class ProTCLTrainer:
                 sequence_lengths = sequence_lengths.to(self.device)
                 sequences = sequence_onehots.to(self.device)
 
+                # Randomly sample n labels from the batch
+                random_indices = torch.randperm(labels.size(1))[
+                    :self.label_sample_size].to(self.device)
 
-                # Forward pass (project sequences and relevant labels to latent space
-                # Labels can be only the labels that are present in the batch (if self.USE_BATCH_LABELS is True) or all the labels (if False)
-                considered_labels = (
-                    labels if self.use_batch_labels_only else torch.ones_like(labels)
-                )
+                # Forward pass
                 with autocast():
                     P_e, L_e = self.model(
-                        sequences, considered_labels, sequence_lengths
+                        sequences, random_indices, sequence_lengths
                     )
 
-                # Compute target (note that the target shape varies depending on whether we are using batch labels only or not)
-                target = (
-                    labels[:, torch.any(labels, dim=0)]
-                    if self.use_batch_labels_only
-                    else labels
-                )
+                # Compute target
+                target = labels.index_select(1, random_indices)
 
                 # Assert that first dimension of L_e is the same as the second dimension of target, otherwise we have a mismatch
                 assert L_e.shape[0] == target.shape[1], (
@@ -381,36 +366,39 @@ class ProTCLTrainer:
                 )
 
                 # Compute loss
-                loss = contrastive_loss(P_e, L_e, self.model.t, target) / self.gradient_accumulation_steps
+                loss = contrastive_loss(
+                    P_e, L_e, self.model.t, target) / self.gradient_accumulation_steps
 
                 # Log metrics to W&B
                 if self.use_wandb:
                     wandb.log({"training_loss": loss.item()})
 
-                # print("Running backward pass...")
-
-                # Backward pass
+                # Backward pass with mixed precision
                 self.scaler.scale(loss).backward()
-                
-                #Gradient accumulation every GRADIENT_ACCUMULATION_STEPS
+
+                # Gradient accumulation every GRADIENT_ACCUMULATION_STEPS
                 if ((batch_count) % self.gradient_accumulation_steps == 0):
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
                     self.optimizer.zero_grad()
-                
 
                 # Run validation and log progress every n batches
                 if batch_count % self.validation_frequency == 0:
                     ####### VALIDATION LOOP #######
+                    # Force model to recompute all label embeddings
+                    self.model.clear_label_embeddings_cache()
+                    # Run validation
                     val_metrics, best_val_loss = self.validation_step(val_loader=val_loader,
                                                                       best_val_loss=best_val_loss)
 
                     self.logger.info(
                         f"Epoch {epoch+1}/{self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}, Validation Loss: {val_metrics['avg_loss']}"
                     )
-                #Log training progress percentage every 5%
+
+                # Log training progress percentage every 5%
                 if num_training_steps > 20 and batch_count % int(num_training_steps/20) == 0:
-                    self.logger.info(f"Training progress: {100*batch_count/num_training_steps}%")
+                    self.logger.info(
+                        f"Training progress: {100*batch_count/num_training_steps}%")
 
                 # Increment batch count
                 batch_count += 1

@@ -18,16 +18,19 @@ class ProteinDataset(Dataset):
         """
         paths (dict): Dictionary containing paths to the data and vocabularies.
             data_path (str): Path to the FASTA file containing the protein sequences and corresponding GO annotations
-            amino_acid_vocabulary_path (str): Path to the JSON file containing the amino acid vocabulary.
-            label_vocabulary_path (str): Path to the JSON file containing the label vocabulary.
-            sequence_id_vocabulary_path (str): Path to the JSON file containing the sequence ID vocabulary.
+            dataset_type (str): One of 'train', 'validation', or 'test'
+            amino_acid_vocabulary_path (str): Path to the JSON file containing the amino acid vocabulary (Optional) (default: None)
+            label_vocabulary_path (str): Path to the JSON file containing the label vocabulary (Optional) (default: None)
+            sequence_id_vocabulary_path (str): Path to the JSON file containing the sequence ID vocabulary (Optional) (default: None)
+            go_descriptions_path (str): Path to the pickled file containing the GO term descriptions mapped to GO term IDs
         deduplicate (bool): Whether to remove duplicate sequences (default: False)
         """
         # Error handling: check for missing keys
         required_keys = ["data_path", "dataset_type"]
         for key in required_keys:
             if key not in paths:
-                raise ValueError(f"Missing required key in paths dictionary: {key}")
+                raise ValueError(
+                    f"Missing required key in paths dictionary: {key}")
 
         assert paths["dataset_type"] in [
             "train",
@@ -38,7 +41,8 @@ class ProteinDataset(Dataset):
         # Set default values for paths not provided
         self.data_path = paths["data_path"]
         self.dataset_type = paths["dataset_type"]
-        self.amino_acid_vocabulary_path = paths.get("amino_acid_vocabulary_path", None)
+        self.amino_acid_vocabulary_path = paths.get(
+            "amino_acid_vocabulary_path", None)
         self.label_vocabulary_path = paths.get("label_vocabulary_path", None)
         self.sequence_id_vocabulary_path = paths.get(
             "sequence_id_vocabulary_path", None
@@ -61,8 +65,6 @@ class ProteinDataset(Dataset):
         # Load vocabularies
         self._process_vocab()
 
-        # Create map from sequence ID to unique integer ID
-
     def _remove_duplicates(self):
         """
         Remove duplicate sequences from self.data, keeping only the first instance of each sequence
@@ -84,13 +86,13 @@ class ProteinDataset(Dataset):
 
     def _process_amino_acid_vocab(self):
         if self.amino_acid_vocabulary_path is not None:
-            self.amino_acid_vocabulary = read_json(self.amino_acid_vocabulary_path)
+            self.amino_acid_vocabulary = read_json(
+                self.amino_acid_vocabulary_path)
         else:
-            logging.info("No amino acid vocabulary path given. Generating...")
-            self.amino_acid_vocabulary = set()
-            for obs in self.data:
-                self.amino_acid_vocabulary.update(list(obs[0]))
-            self.amino_acid_vocabulary = sorted(list(self.amino_acid_vocabulary))
+            # Throw an error if the amino acid vocabulary path is not provided
+            raise ValueError(
+                "No amino acid vocabulary path provided. Please provide an amino acid vocabulary path."
+            )
         self.aminoacid2int, self.int2aminoacid = get_vocab_mappings(
             self.amino_acid_vocabulary
         )
@@ -99,22 +101,25 @@ class ProteinDataset(Dataset):
         if self.label_vocabulary_path is not None:
             self.label_vocabulary = read_json(self.label_vocabulary_path)
         else:
-            logging.info("No label vocabulary path given. Generating...")
-            self.label_vocabulary = set()
-            for obs in self.data:
-                self.label_vocabulary.update(obs[1][1:])
-            self.label_vocabulary = sorted(list(self.label_vocabulary))
-        self.label2int, self.int2label = get_vocab_mappings(self.label_vocabulary)
+            # Throw an error if the label vocabulary path is not provided
+            raise ValueError(
+                "No label vocabulary path provided. Please provide a label vocabulary path. \
+                The vocabulary should be a JSON file containing a list of labels, inclusive of train, validation, and test sets."
+            )
+        self.label2int, self.int2label = get_vocab_mappings(
+            self.label_vocabulary)
 
     def _process_sequence_id_vocab(self):
         if self.sequence_id_vocabulary_path is not None:
-            self.sequence_id_vocabulary = read_json(self.sequence_id_vocabulary_path)
+            self.sequence_id_vocabulary = read_json(
+                self.sequence_id_vocabulary_path)
         else:
             logging.info("No sequence id vocabulary path given. Generating...")
             self.sequence_id_vocabulary = set()
             for obs in self.data:
                 self.sequence_id_vocabulary.add(obs[1][0])
-            self.sequence_id_vocabulary = sorted(list(self.sequence_id_vocabulary))
+            self.sequence_id_vocabulary = sorted(
+                list(self.sequence_id_vocabulary))
         self.sequence_id2int, self.int2sequence_id = get_vocab_mappings(
             self.sequence_id_vocabulary
         )
@@ -146,6 +151,7 @@ class ProteinDataset(Dataset):
         sequence_id_alphanumeric, labels = labels[0], labels[1:]
 
         # Get the integer sequence ID and convert to tensor
+        # TODO: If we don't cache sequence embeddings, we can remove this
         sequence_id_numeric = torch.tensor(
             self.sequence_id2int[sequence_id_alphanumeric], dtype=torch.long
         )
@@ -187,7 +193,8 @@ class ProteinDataset(Dataset):
         """
         datasets = defaultdict(list)
         for paths in paths_list:
-            datasets[paths["dataset_type"]].append(cls(paths, deduplicate=deduplicate))
+            datasets[paths["dataset_type"]].append(
+                cls(paths, deduplicate=deduplicate))
         return datasets
 
 
@@ -243,7 +250,8 @@ def create_multiple_loaders(
                 batch_size=params[f"{dataset_type.upper()}_BATCH_SIZE"],
                 shuffle=True
                 if dataset_type == "train"
-                else False,  # only shuffle train. No need to shuffle val or test.
+                # only shuffle train. No need to shuffle val or test.
+                else False,
                 collate_fn=collate_variable_sequence_length,
                 num_workers=num_workers,
                 pin_memory=pin_memory,
