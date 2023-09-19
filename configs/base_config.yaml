@@ -21,7 +21,7 @@ params:
   NORMALIZE_PROBABILITIES: False
   SEED: 42
   NUM_LABELS: 32102
-  GRADIENT_ACCUMULATION_STEPS: 1 #1 is essentially no gradient accumulation
+  GRADIENT_ACCUMULATION_STEPS: 1 # 1 is essentially no gradient accumulation
   LABEL_ENCODER_CHECKPOINT: microsoft/biogpt
   LABEL_SAMPLE_SIZE: 300
   LABEL_BATCH_SIZE_LIMIT: 300
@@ -58,7 +58,7 @@ relative_paths:
   EMBEDDING_DIR: data/embeddings
   LABEL_EMBEDDING_PATH: data/embeddings/frozen_PubMedBERT_label_embeddings.pkl
   SEQUENCE_EMBEDDING_PATH: data/embeddings/frozen_proteinfer_sequence_embeddings.pkl
-
+ 
   # Where to save the model
   OUTPUT_MODEL_DIR: models/ProTCL
 

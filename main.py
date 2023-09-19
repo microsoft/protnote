@@ -2,7 +2,6 @@ import logging
 from src.utils.data import (
     load_model_weights,
     seed_everything,
-    create_ordered_tensor,
     read_pickle,
 )
 from src.data.datasets import ProteinDataset, create_multiple_loaders
@@ -282,15 +281,14 @@ if args.test_paths_names is not None:
         ).get_metric_collection(type="all")
 
         final_metrics, test_results = Trainer.evaluate(
-            data_loader=test_loader, eval_metrics=eval_metrics, testing=True
-        )
+            data_loader=test_loader, eval_metrics=eval_metrics)
 
-        save_evaluation_results(results=test_results,
-                                label_vocabulary=label_vocabulary,
-                                run_name=args.name,
-                                output_dir=os.path.join(
-                                    ROOT_PATH, paths["RESULTS_DIR"])
-                                )
+        # save_evaluation_results(results=test_results,
+        #                         label_vocabulary=label_vocabulary,
+        #                         run_name=args.name,
+        #                         output_dir=os.path.join(
+        #                             ROOT_PATH, paths["RESULTS_DIR"])
+        #                         )
 
         # Convert all metrics to float
         final_metrics = {

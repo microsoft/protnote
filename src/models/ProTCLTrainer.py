@@ -3,7 +3,6 @@ from src.utils.data import load_gz_json
 from src.utils.losses import contrastive_loss
 from src.utils.evaluation import EvalMetrics
 from src.utils.proteinfer import normalize_confidences
-from typing import Literal
 import numpy as np
 import torch
 import wandb
@@ -26,7 +25,6 @@ class ProTCLTrainer:
 
     ):
         """_summary_
-
         :param model: pytorch model
         :type model: torch.nn.Module
         :param device: decide for training on cpu or gpu
@@ -89,7 +87,7 @@ class ProTCLTrainer:
             trainable_params, lr=config["params"]["LEARNING_RATE"]
         )
 
-    def evaluation_step(self, batch, testing=False) -> tuple:
+    def evaluation_step(self, batch) -> tuple:
         """Perform a single evaluation step.
 
         :param batch: _description_
@@ -256,8 +254,7 @@ class ProTCLTrainer:
         with torch.no_grad(), autocast():
             for batch in data_loader:
                 loss, logits, labels, sequence_ids = self.evaluation_step(
-                    batch=batch, testing=testing
-                )
+                    batch=batch)
                 num_labels = labels.shape[1]
                 if eval_metrics is not None:
                     # Apply sigmoid to get the probabilities for multi-label classification
@@ -391,13 +388,14 @@ class ProTCLTrainer:
 
                     # Run validation
                     val_metrics, best_val_loss = self.validate(val_loader=val_loader,
-                                                                      best_val_loss=best_val_loss)
+                                                               best_val_loss=best_val_loss)
 
                     self.logger.info(
                         f"Epoch {epoch+1}/{self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}, Validation Loss: {val_metrics['avg_loss']}"
                     )
 
-                    self.logger.info(f"Validation metrics:\n{json.dumps(val_metrics, indent=4)}")
+                    self.logger.info(
+                        f"Validation metrics:\n{json.dumps(val_metrics, indent=4)}")
                 # Log training progress percentage every 5%
                 if num_training_steps > 20 and batch_count % int(num_training_steps/20) == 0:
                     self.logger.info(

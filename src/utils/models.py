@@ -8,35 +8,51 @@ from contextlib import nullcontext
 
 def count_parameters_by_layer(model):
     """
-    Logs the number of total and trainable parameters for each layer of a PyTorch model.
+    Logs the number of total and trainable parameters for each major category of a PyTorch model.
 
     Args:
         model (torch.nn.Module): The PyTorch model for which parameters are to be counted.
 
     Outputs:
-        Logs layer names along with their total and trainable parameters.
+        Logs major categories along with their total and trainable parameters.
     """
     total_params = 0
     trainable_params = 0
-
-    logging.info("Layer-wise parameter details:")
-    logging.info(
-        f"{'Layer Name':<{max([len(name) for name, _ in model.named_parameters()])}} {'Total Parameters':<20} {'Trainable Parameters'}")
+    category_params = {}
 
     for name, param in model.named_parameters():
+        category = name.split('.')[0]
         num_params = param.numel()
-        total_params += num_params
 
+        if category not in category_params:
+            category_params[category] = {'total': 0, 'trainable': 0}
+
+        category_params[category]['total'] += num_params
+        if param.requires_grad:
+            category_params[category]['trainable'] += num_params
+
+        total_params += num_params
         if param.requires_grad:
             trainable_params += num_params
 
+    max_name_length = max([len(category)
+                          for category in category_params.keys()])
+
+    # Formatting and logging
+    line = "=" * 120
+    logging.info(line)
+    logging.info(
+        f"{'Major Category':<{max_name_length}} {'Total Parameters':<20} {'Trainable Parameters'}")
+    logging.info(line)
+    for category, params in category_params.items():
+        logging.info(
+            f"{category:<{max_name_length}} {params['total']:<20} {params['trainable']}")
+
     assert trainable_params > 0, "No trainable parameters found. Check the config file to ensure that the model is not frozen."
-
+    logging.info(line)
     logging.info(
-        f"{name:<{max([len(name) for name, _ in model.named_parameters()])}} {num_params:<20} {num_params if param.requires_grad else 0}")
-
-    logging.info(
-        f"{'TOTAL':<{max([len(name) for name, _ in model.named_parameters()])}} {total_params:<20} {trainable_params}")
+        f"{'TOTAL':<{max_name_length}} {total_params:<20} {trainable_params}")
+    logging.info(line)
 
 
 def get_embeddings(text, tokenizer, model, batch_size=300, max_length=1024):

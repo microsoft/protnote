@@ -94,4 +94,7 @@ target/
 # wandb
 /wandb/
 
+# results
+/results/
+
 ```

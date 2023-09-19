@@ -23,9 +23,6 @@ def transfer_tf_weights_to_torch(torch_model: torch.nn.Module, tf_weights_path: 
     state_dict = torch_model.state_dict()
     state_dict_list = [(k, v) for k, v in state_dict.items()]
 
-    print('Pytorch num variables:', len(state_dict))
-    print('Tensorflow num variables:', len(tf_weights))
-    print('\n')
     with torch.no_grad():
         for (name, param), (tf_name, tf_param) in zip(state_dict_list, tf_weights.items()):
 
@@ -35,8 +32,6 @@ def transfer_tf_weights_to_torch(torch_model: torch.nn.Module, tf_weights_path: 
                                             sorted(range(tf_param.ndim), reverse=True))
                                         )
 
-            print(f'{name}:{param.shape}', '<-->',
-                  f'{tf_name}:{tf_param.shape}')
             assert tf_param.shape == param.detach().numpy(
             ).shape, f"{name} and {tf_name} don't have the same shape"
             state_dict[name] = torch.from_numpy(tf_param)
