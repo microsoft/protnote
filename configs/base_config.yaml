@@ -3,18 +3,21 @@
 #TODO: Optimizer can also be a hyperparameter
 params:
   LEARNING_RATE: 0.0003
-  TEMPERATURE: 0.1
+  TEMPERATURE: 0.1 #Not used right now b/c of new loss
+  SYMMETRIC_LOSS: False
   PROTEIN_EMBEDDING_DIM: 1100
   LABEL_EMBEDDING_DIM: 1024
-  LATENT_EMBEDDING_DIM: 1062
+  LATENT_EMBEDDING_DIM: 1024
+  OUTPUT_DIM: 1024
+  OUTPUT_NUM_LAYERS: 2
   NUM_EPOCHS: 1
   TRAIN_BATCH_SIZE: 128
-  VALIDATION_BATCH_SIZE: 128
-  TEST_BATCH_SIZE: 128
+  VALIDATION_BATCH_SIZE: 32
+  TEST_BATCH_SIZE: 32
   LABEL_BATCH_SIZE: 500
   VALIDATION_FREQUENCY: 500
-  DECISION_TH: 0.84 # Set to null if you want to use the best threshold from validation
-  NUM_WORKERS: 4
+  DECISION_TH: 0.92 # Set to null if you want to use the best threshold from validation
+  NUM_WORKERS: 2
   TRAIN_SEQUENCE_ENCODER: False
   TRAIN_LABEL_ENCODER: False
   TRAIN_PROJECTION_HEAD: True

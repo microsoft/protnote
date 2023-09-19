@@ -1,14 +1,13 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
-from src.utils.data import read_fasta, read_pickle, read_json, get_vocab_mappings
-from typing import Optional, Text, Dict
+from src.utils.data import read_fasta, read_json, get_vocab_mappings
+from typing import Dict
 import pandas as pd
 import logging
 from typing import List
 from src.data.collators import collate_variable_sequence_length
 from collections import defaultdict
-
-
+from joblib import Parallel, delayed, cpu_count
 class ProteinDataset(Dataset):
     """
     Dataset class for protein sequences with GO annotations.
@@ -196,6 +195,28 @@ class ProteinDataset(Dataset):
             datasets[paths["dataset_type"]].append(
                 cls(paths, deduplicate=deduplicate))
         return datasets
+    
+def calculate_pos_weight(data:list, num_labels:int):
+    def count_labels(chunk):
+        num_positive_labels_chunk = 0
+        num_negative_labels_chunk = 0
+        for _, labels in chunk:
+            labels = labels[1:]
+            num_positive = len(labels)
+            num_positive_labels_chunk += num_positive
+            num_negative_labels_chunk += num_labels - num_positive
+        return num_positive_labels_chunk, num_negative_labels_chunk
+
+    chunk_size = len(data) // cpu_count()  # Adjust chunk size if necessary.
+
+    results = Parallel(n_jobs=-1)(
+        delayed(count_labels)(data[i:i+chunk_size]) for i in range(0, len(data), chunk_size)
+    )
+
+    num_positive_labels = sum(res[0] for res in results)
+    num_negative_labels = sum(res[1] for res in results)
+    pos_weight = torch.tensor((num_negative_labels / num_positive_labels))
+    return pos_weight
 
 
 def set_padding_to_sentinel(

@@ -1,6 +1,6 @@
 import logging
 from src.utils.data import load_gz_json
-from src.utils.losses import contrastive_loss
+from src.utils.losses import MultiLabelBCE
 from src.utils.evaluation import EvalMetrics
 from src.utils.proteinfer import normalize_confidences
 import numpy as np
@@ -22,6 +22,7 @@ class ProTCLTrainer:
         timestamp: str,
         run_name: str,
         use_wandb: bool = False,
+        pos_weight: torch.Tensor = None,
 
     ):
         """_summary_
@@ -51,6 +52,7 @@ class ProTCLTrainer:
         self.num_epochs = config["params"]["NUM_EPOCHS"]
         self.train_sequence_encoder = config["params"]["TRAIN_SEQUENCE_ENCODER"]
         self.train_label_encoder = config["params"]["TRAIN_LABEL_ENCODER"]
+        self.train_projection_head = config["params"]["TRAIN_PROJECTION_HEAD"]
 
         self.normalize_probabilities = config["params"]["NORMALIZE_PROBABILITIES"]
         self.validation_frequency = config["params"]["VALIDATION_FREQUENCY"]
@@ -64,6 +66,11 @@ class ProTCLTrainer:
         self.cached_label_embeddings = None
         self.label_sample_size = config["params"]["LABEL_SAMPLE_SIZE"]
         self._set_optimizer(config)
+        self.loss_fn = MultiLabelBCE(pos_weight=pos_weight, symmetric=config["params"]["SYMMETRIC_LOSS"])
+
+    #TODO: Eventually use factory method to get loss_fn based on config
+    def _get_loss_fn(self, config):
+        pass
 
     def _set_optimizer(self, config):
 
@@ -78,11 +85,16 @@ class ProTCLTrainer:
             if (name.startswith('label_encoder') & (not self.train_label_encoder)):
                 param.requires_grad = False
 
+            if (name.startswith('W_p.weight') | name.startswith('W_l.weight')) & (not self.train_projection_head):
+                param.requires_grad = False
+
             if param.requires_grad:
                 trainable_params.append(param)
                 trainable_params_names.append(name)
 
         self.trainable_params_names = trainable_params_names
+        self.logger.info(
+            f"Trainable parameters: {self.trainable_params_names}")
         self.optimizer = torch.optim.Adam(
             trainable_params, lr=config["params"]["LEARNING_RATE"]
         )
@@ -109,19 +121,13 @@ class ProTCLTrainer:
 
         # Forward pass
         with autocast():
-            P_e, L_e = self.model(
+            logits = self.model(
                 sequences, considered_labels, sequence_lengths
             )
 
         # Compute validation loss for the batch
-        loss = contrastive_loss(
-            P_e,
-            L_e,
-            self.model.t,
-            labels,
-        )
-        # Compute temperature normalized cosine similarities
-        logits = torch.mm(P_e, L_e.t()) / self.model.t
+        loss =  self.loss_fn(logits = logits,
+                               target = labels)
 
         return loss.item(), logits, labels, sequence_ids
 
@@ -349,22 +355,16 @@ class ProTCLTrainer:
 
                 # Forward pass
                 with autocast():
-                    P_e, L_e = self.model(
+                    logits = self.model(
                         sequences, random_indices, sequence_lengths
                     )
 
                 # Compute target
                 target = labels.index_select(1, random_indices)
 
-                # Assert that first dimension of L_e is the same as the second dimension of target, otherwise we have a mismatch
-                assert L_e.shape[0] == target.shape[1], (
-                    f"Expected the first dimension of L_e shape ({L_e.shape[1]}) to be the same as "
-                    f"target shape second dimension ({target.shape[1]}), but they are different."
-                )
-
                 # Compute loss
-                loss = contrastive_loss(
-                    P_e, L_e, self.model.t, target) / self.gradient_accumulation_steps
+                loss = self.loss_fn(logits = logits,
+                                    target = target) / self.gradient_accumulation_steps
 
                 # Log metrics to W&B
                 if self.use_wandb:

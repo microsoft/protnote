@@ -17,9 +17,10 @@ class ProTCL(nn.Module):
         int_label_id_map,
         sequence_encoder,
         label_embedding_matrix,
-        train_projection_head,
         train_label_encoder,
-        train_sequence_encoder
+        train_sequence_encoder,
+        output_dim,
+        output_num_layers
     ):
         super().__init__()
 
@@ -45,11 +46,6 @@ class ProTCL(nn.Module):
         self.W_p = nn.Linear(protein_embedding_dim, latent_dim, bias=False)
         self.W_l = nn.Linear(label_embedding_dim, latent_dim, bias=False)
 
-        # Optionally freeze projection head weights
-        if not train_projection_head:
-            self.W_p.weight.requires_grad = False
-            self.W_l.weight.requires_grad = False
-
         # Temperature parameter
         self.t = temperature
 
@@ -61,6 +57,25 @@ class ProTCL(nn.Module):
             self.cached_label_embeddings = nn.Embedding.from_pretrained(
                 label_embedding_matrix, freeze=True
             )
+
+        #TODO: This could change. Currently keeping latent dim.
+        self.output_layer = get_mlp(latent_dim*2,output_dim,output_num_layers)
+       
+    def _get_joint_embeddings(self, P_e, L_e):
+        # Input stats
+        num_sequences = P_e.shape[0]
+        num_labels = L_e.shape[0]
+        sequence_embedding_dim = P_e.shape[1]
+        label_embedding_dim = L_e.shape[1]
+
+        
+        # Expand protein and label embeddings to all combinations of sequences and labels.
+        P_e_expanded = P_e.unsqueeze(1).expand(-1, num_labels, -1).reshape(-1, sequence_embedding_dim)
+        L_e_expanded = L_e.unsqueeze(0).expand(num_sequences, -1, -1).reshape(-1, label_embedding_dim)
+
+        # Conatenate protein and label embeddings. Shape: (batch_size, latent_dim*2)
+        joint_embeddings = torch.cat([P_e_expanded, L_e_expanded], dim=1)
+        return joint_embeddings,num_sequences,num_labels
 
     def forward(self, P, L, sequence_lengths):
         """
@@ -100,11 +115,34 @@ class ProTCL(nn.Module):
         # Get sequence embeddings
         P_f = self.sequence_encoder.get_embeddings(P, sequence_lengths)
 
-        # Project protein and label embeddings to latent space and L2 normalize
-        P_e = F.normalize(self.W_p(P_f), dim=1)
-        L_e = F.normalize(self.W_l(L_f), dim=1)
+        # Project protein and label embeddings to common latent space.
+        P_e = self.W_p(P_f)
+        L_e = self.W_l(L_f)
 
-        return P_e, L_e
+        joint_embeddings,num_sequences,num_labels = self._get_joint_embeddings(P_e, L_e)
+
+        #Feed through MLP
+        logits = self.output_layer(joint_embeddings)
+
+        # Reshape for loss function
+        logits = logits.reshape(num_sequences, num_labels)
+        
+        return logits
 
     def clear_label_embeddings_cache(self):
         self.cached_label_embeddings = None
+
+#Create variable length MLP that can change dimension and then all layers 
+#are the same size.
+#TODO: Should we add batch norm?
+def get_mlp(input_dim,output_dim,num_layers):
+    layers = []
+    layers.append(nn.Linear(input_dim,output_dim))
+    layers.append(nn.BatchNorm1d(output_dim))
+    layers.append(nn.ReLU())
+    for _ in range(num_layers-1):
+        layers.append(nn.Linear(output_dim,output_dim))
+        layers.append(nn.BatchNorm1d(output_dim))
+        layers.append(nn.ReLU())
+    layers.append(nn.Linear(output_dim,1))
+    return nn.Sequential(*layers)

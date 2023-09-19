@@ -4,7 +4,7 @@ from src.utils.data import (
     seed_everything,
     read_pickle,
 )
-from src.data.datasets import ProteinDataset, create_multiple_loaders
+from src.data.datasets import ProteinDataset, create_multiple_loaders, calculate_pos_weight
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
 from src.models.protein_encoders import ProteInfer
@@ -205,6 +205,8 @@ sequence_encoder = ProteInfer.from_pretrained(
     bottleneck_factor=config["embed_sequences_params"]["BOTTLENECK_FACTOR"],
 )
 
+
+
 model = ProTCL(
     # Parameters
     protein_embedding_dim=params["PROTEIN_EMBEDDING_DIM"],
@@ -218,12 +220,22 @@ model = ProTCL(
     int_label_id_map=int_label_id_map,
     # Sequence encoder
     sequence_encoder=sequence_encoder,
+    #Output Layer
+    output_dim = params["OUTPUT_DIM"],
+    output_num_layers = params["OUTPUT_NUM_LAYERS"],
     # Training options
-    train_projection_head=params["TRAIN_PROJECTION_HEAD"],
     train_label_encoder=params["TRAIN_LABEL_ENCODER"],
     train_sequence_encoder=params["TRAIN_SEQUENCE_ENCODER"],
     label_embedding_matrix=label_embedding_matrix
 ).to(device)
+
+
+#Calculate pos_weight based on the training set
+logger.info(f"Calculating pos_weight...")
+pos_weight = calculate_pos_weight(datasets["train"][0].data,
+                                  datasets["train"][0].get_label_vocabulary_size()
+                                  ).to(device)
+logger.info(f"Calculated pos_weight= {pos_weight.item()}")
 
 # Initialize trainer class to handle model training, validation, and testing
 Trainer = ProTCLTrainer(
@@ -234,6 +246,7 @@ Trainer = ProTCLTrainer(
     timestamp=timestamp,
     run_name=args.name,
     use_wandb=args.use_wandb,
+    pos_weight=pos_weight
 )
 
 # Log the number of parameters by layer
@@ -282,13 +295,13 @@ if args.test_paths_names is not None:
 
         final_metrics, test_results = Trainer.evaluate(
             data_loader=test_loader, eval_metrics=eval_metrics)
-
-        # save_evaluation_results(results=test_results,
-        #                         label_vocabulary=label_vocabulary,
-        #                         run_name=args.name,
-        #                         output_dir=os.path.join(
-        #                             ROOT_PATH, paths["RESULTS_DIR"])
-        #                         )
+        '''
+        save_evaluation_results(results=test_results,
+                                 label_vocabulary=label_vocabulary,
+                                 run_name=args.name,
+                                 output_dir=os.path.join(
+                                     ROOT_PATH, paths["RESULTS_DIR"])
+                                 )'''
 
         # Convert all metrics to float
         final_metrics = {
