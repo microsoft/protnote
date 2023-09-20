@@ -139,6 +139,7 @@ if args.use_wandb:
         project="protein-functions",
         name=f"{args.name}_{timestamp}",
         config={**params, **vars(args)},
+        entity = "microsoft-research-incubation"
     )
 
 # Log the configuration and arguments

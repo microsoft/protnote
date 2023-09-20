@@ -66,6 +66,7 @@ class ProTCLTrainer:
         self.label_sample_size = config["params"]["LABEL_SAMPLE_SIZE"]
         self._set_optimizer(config)
         self.loss_fn = torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight)
+        print(pos_weight)
 
     #TODO: Eventually use factory method to get loss_fn based on config
     def _get_loss_fn(self, config):
@@ -232,7 +233,7 @@ class ProTCLTrainer:
         self.logger.info(
             f"Best validation score: {best_score}, Best val threshold: {best_th}"
         )
-
+        self.model.train()
         return best_th, best_score
 
     def evaluate(
@@ -295,7 +296,8 @@ class ProTCLTrainer:
             avg_loss = total_loss / len(data_loader)
             final_metrics = eval_metrics.compute() if eval_metrics is not None else {}
             final_metrics.update({"avg_loss": avg_loss})
-
+        
+        self.model.train()
         return final_metrics, test_results
 
     def train(
@@ -364,7 +366,7 @@ class ProTCLTrainer:
 
                 # Log metrics to W&B
                 if self.use_wandb:
-                    wandb.log({"training_loss": loss.item()})
+                    wandb.log({"train_loss": loss.item()})
 
                 # Backward pass with mixed precision
                 self.scaler.scale(loss).backward()

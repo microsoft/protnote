@@ -134,15 +134,12 @@ class ProTCL(nn.Module):
 
 #Create variable length MLP that can change dimension and then all layers 
 #are the same size.
-#TODO: Should we add batch norm?
 def get_mlp(input_dim,output_dim,num_layers):
     layers = []
     layers.append(nn.Linear(input_dim,output_dim))
-    layers.append(nn.BatchNorm1d(output_dim))
     layers.append(nn.ReLU())
     for _ in range(num_layers-1):
         layers.append(nn.Linear(output_dim,output_dim))
-        layers.append(nn.BatchNorm1d(output_dim))
         layers.append(nn.ReLU())
     layers.append(nn.Linear(output_dim,1))
     return nn.Sequential(*layers)
