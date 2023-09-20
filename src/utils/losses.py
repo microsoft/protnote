@@ -51,11 +51,11 @@ def compute_asymmetric_loss(logits, target, dim):
     return ((loss_pos / (num_pos + epsilon)) + (loss_neg / (num_neg + epsilon))).mean()
 
 
-class MultiLabelBCE(torch.nn.Module):
+class WeightedBCE(torch.nn.Module):
     """Binary Cross Entropy for Multi Label classification
 
     """    
-    def __init__(self, pos_weight=None, symmetric=False):
+    def __init__(self):
         """
         :param pos_weight: weight for positive examples, defaults to None
         :type pos_weight: torch.Tensor, optional
@@ -63,9 +63,7 @@ class MultiLabelBCE(torch.nn.Module):
         :type symmetric: bool, optional
         """
         super().__init__()
-        self.pos_weight = pos_weight
-        self.symmetric = symmetric
-        self.bce_with_logits = torch.nn.BCEWithLogitsLoss(reduction='none', pos_weight=pos_weight)
+        
     
     def forward(self, logits, target):
         """        
@@ -74,16 +72,10 @@ class MultiLabelBCE(torch.nn.Module):
         :param target: Tensor of shape (batch_size, num_labels)
         :type target: torch.Tensor
         """
-        loss = self.bce_with_logits(logits, target.float())
+        num_positive = target.sum()
+        num_negative = target.numel() - num_positive
+        self.bce_with_logits = torch.nn.BCEWithLogitsLoss(reduction='mean',pos_weight=num_negative/num_positive)
+        return self.bce_with_logits(logits, target)
 
-        #Compute standard multilabel BCE loss. Loss per example is summed over all labels
-        standard_loss = loss.sum(dim=1).mean()
 
-        if self.symmetric:
-            #Compute loss as if the targets where the examples. Loss per label is summed over all examples.
-            inverted_loss = loss.sum(dim=0).mean()
-            
-            return (standard_loss + inverted_loss)/2
-        else:
-            return standard_loss
 

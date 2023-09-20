@@ -92,11 +92,14 @@ args = parser.parse_args()
 
 # TODO: This could be more elegant with parser.add_subparsers()
 # Raise error if only one of train or val path is provided
+
+#TODO: We should be able to run without train but with val or test
+'''
 if (args.train_path_name is None) ^ (args.validation_path_name is None):
     parser.error(
         "You must provide both --train-path-name and --val-path-name, or neither."
     )
-
+'''
 # Raise error if none of the paths are provided
 if args.test_paths_names is None and \
    (args.train_path_name is None or args.validation_path_name is None):
@@ -105,15 +108,13 @@ if args.test_paths_names is None and \
                  "--train-path-name and --validation-path-name together\n"
                  "All three options\nPlease provide the required option(s) and try again.")
 
-# Raise error if only test path is provided and no model is loaded
+# Raise error if no train path is provided and no model is loaded
 if (
     (args.train_path_name is None)
-    and (args.validation_path_name is None)
-    and (args.test_paths_names is not None)
     and (args.load_model is None)
 ):
     parser.error(
-        "You must provide --load-model if you only provide --test-path-names.")
+        "You must provide --load-model if no --train-path-names is provided")
 
 (config, params, paths, paths_list, timestamp, logger, device, ROOT_PATH) = get_setup(
     config_path=args.config,
@@ -231,11 +232,17 @@ model = ProTCL(
 
 
 #Calculate pos_weight based on the training set
-logger.info(f"Calculating pos_weight...")
-pos_weight = calculate_pos_weight(datasets["train"][0].data,
-                                  datasets["train"][0].get_label_vocabulary_size()
-                                  ).to(device)
-logger.info(f"Calculated pos_weight= {pos_weight.item()}")
+if (params["POS_WEIGHT"] is None)&(args.train_path_name is not None):
+    logger.info(f"Calculating pos_weight...")
+    pos_weight = calculate_pos_weight(datasets["train"][0].data,
+                                    datasets["train"][0].get_label_vocabulary_size()
+                                    ).to(device)
+    logger.info(f"Calculated pos_weight= {pos_weight.item()}")
+elif (params["POS_WEIGHT"] is not None):
+    pos_weight = torch.tensor(params["POS_WEIGHT"]).to(device)
+else:
+    raise ValueError("pos_weight is not provided and no training set is provided to calculate it.")
+
 
 # Initialize trainer class to handle model training, validation, and testing
 Trainer = ProTCLTrainer(
@@ -285,6 +292,26 @@ if args.test_paths_names is not None:
             raise ValueError(
                 "Decision threshold not provided and no validation set provided to find optimal."
             )
+    if args.validation_path_name is not None:
+        for idx, val_loader in enumerate(loaders["validation"]):
+            logger.info(f"====Testing on validation set====")
+            # Evaluate model on test set
+            eval_metrics = EvalMetrics(
+                num_labels=params["NUM_LABELS"], threshold=best_val_th, device=device
+            ).get_metric_collection(type="all")
+
+            validation_metrics, _ = Trainer.evaluate(
+                data_loader=val_loader, eval_metrics=eval_metrics)
+
+            # Convert all metrics to float
+            validation_metrics = {
+                k: (v.item() if isinstance(v, torch.Tensor) else v)
+                for k, v in validation_metrics.items()
+            }
+
+            logger.info(json.dumps(validation_metrics, indent=4))
+            logger.info("Final validation complete.")
+
 
     for idx, test_loader in enumerate(loaders["test"]):
         logger.info(f"====Testing on test set #{idx}====")

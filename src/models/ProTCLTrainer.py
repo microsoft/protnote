@@ -1,6 +1,5 @@
 import logging
 from src.utils.data import load_gz_json
-from src.utils.losses import MultiLabelBCE
 from src.utils.evaluation import EvalMetrics
 from src.utils.proteinfer import normalize_confidences
 import numpy as np
@@ -66,7 +65,7 @@ class ProTCLTrainer:
         self.cached_label_embeddings = None
         self.label_sample_size = config["params"]["LABEL_SAMPLE_SIZE"]
         self._set_optimizer(config)
-        self.loss_fn = MultiLabelBCE(pos_weight=pos_weight, symmetric=config["params"]["SYMMETRIC_LOSS"])
+        self.loss_fn = torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight)
 
     #TODO: Eventually use factory method to get loss_fn based on config
     def _get_loss_fn(self, config):
@@ -93,8 +92,7 @@ class ProTCLTrainer:
                 trainable_params_names.append(name)
 
         self.trainable_params_names = trainable_params_names
-        self.logger.info(
-            f"Trainable parameters: {self.trainable_params_names}")
+        
         self.optimizer = torch.optim.Adam(
             trainable_params, lr=config["params"]["LEARNING_RATE"]
         )
@@ -126,8 +124,7 @@ class ProTCLTrainer:
             )
 
         # Compute validation loss for the batch
-        loss =  self.loss_fn(logits = logits,
-                               target = labels)
+        loss =  self.loss_fn(logits,labels.float())
 
         return loss.item(), logits, labels, sequence_ids
 
@@ -135,7 +132,7 @@ class ProTCLTrainer:
 
         self.logger.info("Running validation...")
 
-        val_metrics, _ = self.evaluate(data_loader=val_loader, testing=True)
+        val_metrics, _ = self.evaluate(data_loader=val_loader)
 
         self.logger.info(val_metrics)
 
@@ -193,7 +190,7 @@ class ProTCLTrainer:
             all_labels = []
             for batch in data_loader:
                 _, logits, labels, _ = self.evaluation_step(
-                    batch=batch, testing=True)
+                    batch=batch)
 
                 # Apply sigmoid to get the probabilities for multi-label classification
                 probabilities = torch.sigmoid(logits)
@@ -241,8 +238,7 @@ class ProTCLTrainer:
     def evaluate(
         self,
         data_loader: torch.utils.data.DataLoader,
-        eval_metrics: EvalMetrics = None,
-        testing=False,
+        eval_metrics: EvalMetrics = None
     ) -> tuple[dict, dict]:
         """Evaluate the model on the given data loader.
 
@@ -353,18 +349,18 @@ class ProTCLTrainer:
                 random_indices = torch.randperm(labels.size(1))[
                     :self.label_sample_size].to(self.device)
 
+
+                # Compute target
+                target = labels.index_select(1, random_indices)
+
                 # Forward pass
                 with autocast():
                     logits = self.model(
                         sequences, random_indices, sequence_lengths
                     )
 
-                # Compute target
-                target = labels.index_select(1, random_indices)
-
                 # Compute loss
-                loss = self.loss_fn(logits = logits,
-                                    target = target) / self.gradient_accumulation_steps
+                loss = self.loss_fn(logits,target.float()) / self.gradient_accumulation_steps
 
                 # Log metrics to W&B
                 if self.use_wandb:

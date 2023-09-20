@@ -10,13 +10,14 @@ params:
   LATENT_EMBEDDING_DIM: 1024
   OUTPUT_DIM: 1024
   OUTPUT_NUM_LAYERS: 2
-  NUM_EPOCHS: 1
+  NUM_EPOCHS: 10
   TRAIN_BATCH_SIZE: 128
   VALIDATION_BATCH_SIZE: 32
   TEST_BATCH_SIZE: 32
   LABEL_BATCH_SIZE: 500
   VALIDATION_FREQUENCY: 500
-  DECISION_TH: 0.92 # Set to null if you want to use the best threshold from validation
+  DECISION_TH: null # Set to null if you want to use the best threshold from validation
+  POS_WEIGHT: 1 #671.7130737304688
   NUM_WORKERS: 2
   TRAIN_SEQUENCE_ENCODER: False
   TRAIN_LABEL_ENCODER: False
@@ -26,7 +27,7 @@ params:
   NUM_LABELS: 32102
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 is essentially no gradient accumulation
   LABEL_ENCODER_CHECKPOINT: microsoft/biogpt
-  LABEL_SAMPLE_SIZE: 300
+  LABEL_SAMPLE_SIZE: 500
   LABEL_BATCH_SIZE_LIMIT: 300
 
 #Constants for protein encoder model (e.g. ProteInfer). Not really params since 
