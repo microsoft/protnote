@@ -3,39 +3,89 @@
 # After updating, make script executable with: chmod +x run_multiple.sh
 # Run script with: ./run_multiple.sh
 
-# Runs to optimize temperature (using all the labels)
-python train.py --name 'train_label_embedding_t0.25_batch_only' --override TEMPERATURE 0.1 --use-wandb
-python train.py --name 'train_label_embedding_t0.1_batch_only' --override TEMPERATURE 0.09 --use-wandb
-python train.py --name 'train_label_embedding_t0.075_batch_only' --override TEMPERATURE 0.08 --use-wandb
-python train.py --name 'train_label_embedding_t0.075_batch_only' --override TEMPERATURE 0.07 --use-wandb
-python train.py --name 'train_label_embedding_t0.075_batch_only' --override TEMPERATURE 0.06 --use-wandb
+# Optimize positive weight
+python main.py \
+    --name 'pos_weight_0_4' \
+    --train-path-name TRAIN_DATA_PATH \
+    --validation-path-name VAL_DATA_PATH \
+    --test-paths-names TEST_DATA_PATH \
+    --override POSITIVE_WEIGHT 0.4 \
+    --use-wandb 
 
-# python train.py --name 'base_run_t3' --override TEMPERATURE 0.05 --use-wandb
-# python train.py --name 'base_run_t4' --override TEMPERATURE 0.01 --use-wandb
-# python train.py --name 'let_label_embedding_train_t1' --override TEMPERATURE 1 --use-wandb
-# python train.py --name 'let_label_embedding_train_t1' --override TEMPERATURE 0.5 --use-wandb
-# python train.py --name 'let_label_embedding_train_t1' --override TEMPERATURE 0.05 --use-wandb
-# python train.py --name 'let_label_embedding_train_t1' --override TEMPERATURE 0.01 --use-wandb
 
-# # Runs to optimize temperature (batch labels only)
-# python train.py --name 'base_run_t1_batch_labels_only' --override TEMPERATURE 1 USE_BATCH_LABELS_ONLY True --use-wandb
-# python train.py --name 'base_run_t2_batch_labels_only' --override TEMPERATURE 0.5 USE_BATCH_LABELS_ONLY True --use-wandb
-# python train.py --name 'base_run_t3_batch_labels_only' --override TEMPERATURE 0.05 USE_BATCH_LABELS_ONLY True --use-wandb
-# python train.py --name 'base_run_t4_batch_labels_only' --override TEMPERATURE 0.01 USE_BATCH_LABELS_ONLY True --use-wandb
-# python train.py --name 'let_label_embedding_train_t1_batch_labels_only' --override TEMPERATURE 1 USE_BATCH_LABELS_ONLY True --use-wandb
-# python train.py --name 'let_label_embedding_train_t2_batch_labels_only' --override TEMPERATURE 0.5 USE_BATCH_LABELS_ONLY True --use-wandb
-# python train.py --name 'let_label_embedding_train_t3_batch_labels_only' --override TEMPERATURE 0.05 USE_BATCH_LABELS_ONLY True --use-wandb
-# python train.py --name 'let_label_embedding_train_t4_batch_labels_only' --override TEMPERATURE 0.01 USE_BATCH_LABELS_ONLY True --use-wandb
+python main.py \
+    --name 'pos_weight_0_45' \
+    --train-path-name TRAIN_DATA_PATH \
+    --validation-path-name VAL_DATA_PATH \
+    --test-paths-names TEST_DATA_PATH \
+    --override POSITIVE_WEIGHT 0.45 \
+    --use-wandb 
 
-# # Runs with default config (using all the labels)
-# python train.py --name 'base_run' --use-wandb
-# python train.py --name 'let_label_embedding_matrix_train' --override TRAIN_LABEL_EMBEDDING_MATRIX True --use-wandb
-# python train.py --name 'let_sequence_embedding_matrix_train' --override TRAIN_SEQUENCE_EMBEDDING_MATRIX True TRAIN_LABEL_EMBEDDING_MATRIX True --use-wandb
-# python train.py --name 'let_both_matrices_train' --override TRAIN_LABEL_EMBEDDING_MATRIX True --use-wandb
-# # python train.py --name 'let_label_encoder_train' --override TRAIN_LABEL_ENCODER True --use-wandb
 
-# # Runs with default config (batch labels only)
-# python train.py --name 'base_run_batch_labels_only' --override USE_BATCH_LABELS_ONLY True --use-wandb
-# python train.py --name 'let_label_embedding_matrix_train_batch_labels_only' --override TRAIN_LABEL_EMBEDDING_MATRIX True USE_BATCH_LABELS_ONLY True --use-wandb
-# python train.py --name 'let_sequence_embedding_matrix_train_batch_labels_only' --override TRAIN_SEQUENCE_EMBEDDING_MATRIX True TRAIN_LABEL_EMBEDDING_MATRIX True USE_BATCH_LABELS_ONLY True --use-wandb
-# python train.py --name 'let_both_matrices_train_batch_labels_only' --override TRAIN_LABEL_EMBEDDING_MATRIX True USE_BATCH_LABELS_ONLY True --use-wandb
+python main.py \
+    --name 'pos_weight_0_5' \
+    --train-path-name TRAIN_DATA_PATH \
+    --validation-path-name VAL_DATA_PATH \
+    --test-paths-names TEST_DATA_PATH \
+    --override POSITIVE_WEIGHT 0.5 \
+    --use-wandb 
+
+
+python main.py \
+    --name 'pos_weight_0_55' \
+    --train-path-name TRAIN_DATA_PATH \
+    --validation-path-name VAL_DATA_PATH \
+    --test-paths-names TEST_DATA_PATH \
+    --override POSITIVE_WEIGHT 0.55 \
+    --use-wandb 
+
+python main.py \
+    --name 'pos_weight_0_6' \
+    --train-path-name TRAIN_DATA_PATH \
+    --validation-path-name VAL_DATA_PATH \
+    --test-paths-names TEST_DATA_PATH \
+    --override POSITIVE_WEIGHT 0.6 \
+    --use-wandb 
+
+
+# Try different batch sizes
+python main.py \
+    --name 'batch_size_16' \
+    --train-path-name TRAIN_DATA_PATH \
+    --validation-path-name VAL_DATA_PATH \
+    --test-paths-names TEST_DATA_PATH \
+    --override BATCH_SIZE 16 \
+    --use-wandb
+
+python main.py \
+    --name 'batch_size_32' \
+    --train-path-name TRAIN_DATA_PATH \
+    --validation-path-name VAL_DATA_PATH \
+    --test-paths-names TEST_DATA_PATH \
+    --override BATCH_SIZE 32 \
+    --use-wandb
+
+python main.py \
+    --name 'batch_size_64' \
+    --train-path-name TRAIN_DATA_PATH \
+    --validation-path-name VAL_DATA_PATH \
+    --test-paths-names TEST_DATA_PATH \
+    --override BATCH_SIZE 64 \
+    --use-wandb
+
+python main.py \
+    --name 'batch_size_128' \
+    --train-path-name TRAIN_DATA_PATH \
+    --validation-path-name VAL_DATA_PATH \
+    --test-paths-names TEST_DATA_PATH \
+    --override BATCH_SIZE 128 \
+    --use-wandb
+
+# Run for many epochs
+python main.py \
+    --name 'epochs_10' \
+    --train-path-name TRAIN_DATA_PATH \
+    --validation-path-name VAL_DATA_PATH \
+    --test-paths-names TEST_DATA_PATH \
+    --override EPOCHS 10 \
+    --use-wandb

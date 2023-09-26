@@ -8,7 +8,7 @@ params:
   LATENT_EMBEDDING_DIM: 1024
   OUTPUT_DIM: 1024
   OUTPUT_NUM_LAYERS: 2
-  NUM_EPOCHS: 3
+  NUM_EPOCHS: 5
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 is essentially no gradient accumulation
   POS_WEIGHT: 50 #671.7130737304688
   
@@ -20,26 +20,24 @@ params:
   LABEL_ENCODER_CHECKPOINT: microsoft/biogpt
 
   # Batch sizes
-  TRAIN_BATCH_SIZE: 256
+  TRAIN_BATCH_SIZE: 128
   VALIDATION_BATCH_SIZE: 32
-  TEST_BATCH_SIZE: 128
+  TEST_BATCH_SIZE: 32
 
   # Sampling
-  IN_BATCH_SAMPLING: False # Not implemented
-  TRAIN_LABEL_SAMPLE_SIZE: 1000 # Set to null if you want to use all labels
-  # TODO: This doesn't work yet because of find_optimal_threshold
-  VALIDATION_LABEL_SAMPLE_SIZE: null # Set to null if you want to use all labels
-  LABEL_BATCH_SIZE_LIMIT: 400
+  TRAIN_LABEL_SAMPLE_SIZE: 2000 # Set to null if you want to use all labels
+  VALIDATION_LABEL_SAMPLE_SIZE: 2000 # Set to null if you want to use all labels
+  LABEL_BATCH_SIZE_LIMIT: 300
 
   # Subset fractions (for rapid prototyping; set to 1 for final model)
   TRAIN_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
-  VALIDATION_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
-  TEST_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
+  VALIDATION_SUBSET_FRACTION: 0.3 # Set to 1.0 if you want to use all data
+  TEST_SUBSET_FRACTION: 0.3 # Set to 1.0 if you want to use all data
 
   # Constants
   SEED: 42
   NUM_LABELS: 32102
-  VALIDATIONS_PER_EPOCH: 5
+  VALIDATIONS_PER_EPOCH: 3
   NUM_WORKERS: 3
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
 

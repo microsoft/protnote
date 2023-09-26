@@ -11,12 +11,14 @@ from src.models.protein_encoders import ProteInfer
 from src.utils.evaluation import EvalMetrics, save_evaluation_results
 from src.utils.models import count_parameters_by_layer, get_or_generate_label_embeddings
 from src.utils.configs import get_setup
+from torch.utils.data import DataLoader
 import torch
 import wandb
 import os
 import argparse
 import json
 from transformers import AutoTokenizer, AutoModel
+from src.data.collators import collate_variable_sequence_length
 
 """
  Sample usage: python main.py --train-path-name TRAIN_DATA_PATH --validation-path-name VAL_DATA_PATH --test-paths-names TEST_DATA_PATH TEST_DATA_PATH 
@@ -302,79 +304,62 @@ else:
 ####### TESTING LOOP #######
 all_test_results = []
 all_test_metrics = []
-if args.test_paths_names is not None:
-    logger.info("Starting testing...")
-    best_val_th = params["DECISION_TH"]
+
+# Setup for validation
+if args.validation_path_name:
+    val_loader = DataLoader(
+        datasets["validation"][0],
+        batch_size=params["TEST_BATCH_SIZE"],
+        shuffle=False,
+        collate_fn=collate_variable_sequence_length,
+        num_workers=params["NUM_WORKERS"],
+        pin_memory=True,
+    )
 
     # If no decision threshold is provided, find the optimal threshold on the validation set
-    if params["DECISION_TH"] is None:
-        # TODO: Create a new dataset from the validation set instead
-        if args.validation_path_name is not None:
-            logger.info("Decision threshold not provided.")
+    if not params["DECISION_TH"]:
+        logger.info("Decision threshold not provided.")
+        best_val_th, _ = Trainer.find_optimal_threshold(
+            data_loader=val_loader,
+            optimization_metric_name="f1_micro",
+        )
+    else:
+        best_val_th = params["DECISION_TH"]
 
-            best_val_th, best_val_score = Trainer.find_optimal_threshold(
-                data_loader=loaders["validation"][0],
-                optimization_metric_name="f1_micro",
-            )
-        else:
-            raise ValueError(
-                "Decision threshold not provided and no validation set provided to find optimal."
-            )
+    logger.info("====Testing on validation set====")
+    eval_metrics = EvalMetrics(
+        num_labels=params["NUM_LABELS"], threshold=best_val_th, device=device
+    ).get_metric_collection(type="all")
+    validation_metrics, _ = Trainer.evaluate(
+        data_loader=val_loader, eval_metrics=eval_metrics
+    )
+    validation_metrics = {
+        k: v.item() if isinstance(v, torch.Tensor) else v for k, v in validation_metrics.items()
+    }
+    logger.info(json.dumps(validation_metrics, indent=4))
+    logger.info("Final validation complete.")
 
-    # if args.validation_path_name is not None:
-    #     for idx, val_loader in enumerate(loaders["validation"]):
-    #         logger.info("====Testing on validation set====")
-
-    #         # Evaluate model on test set
-    #         eval_metrics = EvalMetrics(
-    #             num_labels=params["NUM_LABELS"], threshold=best_val_th, device=device
-    #         ).get_metric_collection(type="all")
-    #         validation_metrics, _ = Trainer.evaluate(
-    #             data_loader=val_loader, eval_metrics=eval_metrics)
-
-    #         # Convert all metrics to float
-    #         validation_metrics = {
-    #             k: (v.item() if isinstance(v, torch.Tensor) else v)
-    #             for k, v in validation_metrics.items()
-    #         }
-
-    #         logger.info(json.dumps(validation_metrics, indent=4))
-    #         logger.info("Final validation complete.")
-
+# Setup for testing
+if args.test_paths_names:
+    logger.info("Starting testing...")
     for idx, test_loader in enumerate(loaders["test"]):
         logger.info(f"====Testing on test set #{idx}====")
-        # Evaluate model on test set
         eval_metrics = EvalMetrics(
             num_labels=params["NUM_LABELS"], threshold=best_val_th, device=device
         ).get_metric_collection(type="all")
-
-        final_metrics, test_results = Trainer.evaluate(
-            data_loader=test_loader, eval_metrics=eval_metrics)
-        '''
-        save_evaluation_results(results=test_results,
-                                 label_vocabulary=label_vocabulary,
-                                 run_name=args.name,
-                                 output_dir=os.path.join(
-                                     ROOT_PATH, paths["RESULTS_DIR"])
-                                 )'''
-
-        # Convert all metrics to float
-        final_metrics = {
-            k: (v.item() if isinstance(v, torch.Tensor) else v)
-            for k, v in final_metrics.items()
-        }
-
+        metrics, test_results = Trainer.evaluate(
+            data_loader=test_loader, eval_metrics=eval_metrics
+        )
+        metrics = {k: v.item() if isinstance(v, torch.Tensor)
+                   else v for k, v in metrics.items()}
         all_test_results.append(test_results)
-        all_test_metrics.append(final_metrics)
-
-        logger.info(json.dumps(final_metrics, indent=4))
+        all_test_metrics.append(metrics)
+        logger.info(json.dumps(metrics, indent=4))
         logger.info("Testing complete.")
 
-
 # Close the W&B run
-if args.use_wandb:
-    # TODO: Check to ensure W&B is logging these test metrics correctly
-    wandb.log(final_metrics)
+if args.use_wandb and all_test_metrics:
+    wandb.log(all_test_metrics[-1])
     wandb.finish()
 
 # Clear GPU cache

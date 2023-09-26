@@ -330,13 +330,15 @@ class ProTCLTrainer:
         num_training_steps = len(train_loader) * self.num_epochs
         self.logger.info(
             f"Total number of training steps: {num_training_steps}")
+        batch_count = 0
 
         for epoch in range(self.num_epochs):
             ####### TRAINING LOOP #######
             with torch.autograd.profiler.emit_nvtx():
                 nvtx.range_push("Data loading")  # Profiling: Data loading
-                # TODO: Modify datasets and data loaders to no longer return sequence_ids
-                for batch_idx, batch in enumerate(train_loader):
+                for batch in train_loader:
+                    # Increment batch index
+                    batch_count += 1
                     nvtx.range_pop()  # Profiling: End data loading
 
                     # Unpack the training batch
@@ -349,10 +351,10 @@ class ProTCLTrainer:
                         batch["label_embeddings"]
                     )
 
-                    if batch_idx == 100:
+                    if batch_count == 100:
                         torch.cuda.cudart().cudaProfilerStart()  # Profiling: Start profiling
                     # Profiling: Batch
-                    nvtx.range_push("Batch" + str(batch_idx))
+                    nvtx.range_push("Batch" + str(batch_count))
 
                     # Profiling: Copy to device
                     nvtx.range_push("Copy to device")
@@ -388,7 +390,7 @@ class ProTCLTrainer:
                     loss.backward()
 
                     # Gradient accumulation every GRADIENT_ACCUMULATION_STEPS
-                    if ((batch_idx) % self.gradient_accumulation_steps == 0):
+                    if (batch_count % self.gradient_accumulation_steps == 0):
                         self.optimizer.step()
                         self.optimizer.zero_grad()
 
@@ -397,15 +399,15 @@ class ProTCLTrainer:
                     nvtx.range_pop()  # Profiling: End batch
 
                     # Log training progress percentage every 2%
-                    if num_training_steps > 50 and batch_idx % int(num_training_steps/50) == 0:
+                    if num_training_steps > 50 and batch_count % int(num_training_steps/50) == 0:
                         self.logger.info(
-                            f"Training progress: {round(100*batch_idx/num_training_steps,2)}%")
+                            f"Training progress: {round(100*batch_count/num_training_steps,2)}%")
 
-                    if batch_idx == 150:
+                    if batch_count == 150:
                         torch.cuda.cudart().cudaProfilerStop()  # Profiling: Stop profiling
 
                     # Run validation and log progress every n batches
-                    if batch_idx != 0 and batch_idx % (len(train_loader) // self.validations_per_epoch) == 0:
+                    if batch_count != 0 and batch_count % (len(train_loader) // self.validations_per_epoch) == 0:
                         ####### VALIDATION LOOP #######
                         # Force model to recompute all label embeddings
                         if self.train_label_encoder:
@@ -416,7 +418,7 @@ class ProTCLTrainer:
                                                                    best_val_loss=best_val_loss)
 
                         self.logger.info(
-                            f"Epoch {epoch+1}/{self.num_epochs}, Batch {batch_idx}, Training Loss: {loss.item()}, Validation Loss: {val_metrics['avg_loss']}"
+                            f"Epoch {epoch+1}/{self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}, Validation Loss: {val_metrics['avg_loss']}"
                         )
 
                         self.logger.info(
