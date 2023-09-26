@@ -39,10 +39,6 @@ def download_and_process_obo(url: str, output_file: str):
     # Create a new column called "label"
     df["label"] = df.apply(calculate_label, axis=1)
 
-    # Extract the integer parts from the GO label IDs and set them as the new index
-    df["numeric_id"] = df.index.map(lambda x: int(x[3:]))
-    df.set_index("numeric_id", inplace=True)
-
     # Filter the dataframe to retain only 'label' column, with the 'id' column as the index
     df_filtered = df[['label']]
 

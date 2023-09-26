@@ -60,6 +60,7 @@ def get_setup(
         "amino_acid_vocabulary_path": paths["AMINO_ACID_VOCAB_PATH"],
         "label_vocabulary_path": paths["GO_LABEL_VOCAB_PATH"],
         "sequence_id_vocabulary_path": paths["SEQUENCE_ID_VOCAB_PATH"],
+        "go_annotations_path": paths['GO_ANNOTATIONS_PATH']
     }
 
     train_paths_list = (

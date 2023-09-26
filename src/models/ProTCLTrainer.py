@@ -7,8 +7,8 @@ import torch
 import wandb
 import os
 import json
-from torch.cuda.amp import GradScaler, autocast
 from collections import defaultdict
+import torch.cuda.nvtx as nvtx
 
 
 class ProTCLTrainer:
@@ -54,38 +54,36 @@ class ProTCLTrainer:
         self.train_projection_head = config["params"]["TRAIN_PROJECTION_HEAD"]
 
         self.normalize_probabilities = config["params"]["NORMALIZE_PROBABILITIES"]
-        self.validation_frequency = config["params"]["VALIDATION_FREQUENCY"]
+        self.validations_per_epoch = config["params"]["VALIDATIONS_PER_EPOCH"]
         self.gradient_accumulation_steps = config["params"]["GRADIENT_ACCUMULATION_STEPS"]
         self.label_vocabulary = config["paths"]["GO_LABEL_VOCAB_PATH"]
         self.label_normalizer = load_gz_json(
             config["paths"]["PARENTHOOD_LIB_PATH"]
         )
         self.output_model_dir = config["paths"]["OUTPUT_MODEL_DIR"]
-        self.scaler = GradScaler()
-        self.cached_label_embeddings = None
-        self.label_sample_size = config["params"]["LABEL_SAMPLE_SIZE"]
-        self._set_optimizer(config)
-        self.loss_fn = torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight)
-        print(pos_weight)
+        self._set_optimizer(config["params"]["LEARNING_RATE"])
+        self.loss_fn = torch.nn.BCEWithLogitsLoss(
+            reduction='mean', pos_weight=pos_weight)
 
-    #TODO: Eventually use factory method to get loss_fn based on config
+    # TODO: Eventually use factory method to get loss_fn based on config
     def _get_loss_fn(self, config):
         pass
 
-    def _set_optimizer(self, config):
+    def to_device(self, *args):
+        return [item.to(self.device) if item is not None else None for item in args]
 
+    def _set_optimizer(self, lr):
         trainable_params = []
         trainable_params_names = []
 
         for name, param in self.model.named_parameters():
-
-            if (name.startswith('sequence_encoder') & (not self.train_sequence_encoder)):
+            if name.startswith('sequence_encoder') and (not self.train_sequence_encoder):
                 param.requires_grad = False
 
-            if (name.startswith('label_encoder') & (not self.train_label_encoder)):
+            if name.startswith('label_encoder') and (not self.train_label_encoder):
                 param.requires_grad = False
 
-            if (name.startswith('W_p.weight') | name.startswith('W_l.weight')) & (not self.train_projection_head):
+            if (name.startswith('W_p.weight') or name.startswith('W_l.weight')) and (not self.train_projection_head):
                 param.requires_grad = False
 
             if param.requires_grad:
@@ -93,9 +91,9 @@ class ProTCLTrainer:
                 trainable_params_names.append(name)
 
         self.trainable_params_names = trainable_params_names
-        
+
         self.optimizer = torch.optim.Adam(
-            trainable_params, lr=config["params"]["LEARNING_RATE"]
+            trainable_params, lr=lr
         )
 
     def evaluation_step(self, batch) -> tuple:
@@ -107,27 +105,34 @@ class ProTCLTrainer:
         :rtype: tuple
         """
 
-        # Unpack the validation batch
-        sequence_ids, sequence_onehots, label_multihots, sequence_lengths = batch
+        # Unpack the validation or testing batch
+        sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = (
+            batch["sequence_onehots"],
+            batch["sequence_embeddings"],
+            batch["sequence_lengths"],
+            batch["label_multihots"],
+            batch["tokenized_labels"],
+            batch["label_embeddings"]
+        )
 
-        # Move sequences and labels to GPU, if available
-        labels = label_multihots.to(self.device)
-        sequences = sequence_onehots.to(self.device)
-        sequence_lengths = sequence_lengths.to(self.device)
+        # Move all unpacked batch elements to GPU, if available
+        sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = self.to_device(
+            sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings)
 
-        # Consider all labels for the validation loop
-        considered_labels = torch.arange(labels.size(1)).to(self.device)
-
-        # Forward pass
-        with autocast():
-            logits = self.model(
-                sequences, considered_labels, sequence_lengths
-            )
+       # Forward pass
+        inputs = {
+            "sequence_onehots": sequence_onehots,
+            "sequence_embeddings": sequence_embeddings,
+            "sequence_lengths": sequence_lengths,
+            "tokenized_labels": tokenized_labels,
+            "label_embeddings": label_embeddings
+        }
+        logits = self.model(**inputs)
 
         # Compute validation loss for the batch
-        loss =  self.loss_fn(logits,labels.float())
+        loss = self.loss_fn(logits, label_multihots.float())
 
-        return loss.item(), logits, labels, sequence_ids
+        return loss.item(), logits, label_multihots
 
     def validate(self, val_loader: torch.utils.data.DataLoader, best_val_loss: float):
 
@@ -186,11 +191,11 @@ class ProTCLTrainer:
         best_th = 0.0
         best_score = 0.0
 
-        with torch.no_grad(), autocast():
+        with torch.no_grad():
             all_probabilities = []
-            all_labels = []
+            all_label_multihots = []
             for batch in data_loader:
-                _, logits, labels, _ = self.evaluation_step(
+                _, logits, label_multihots = self.evaluation_step(
                     batch=batch)
 
                 # Apply sigmoid to get the probabilities for multi-label classification
@@ -209,10 +214,10 @@ class ProTCLTrainer:
                     )
 
                 all_probabilities.append(probabilities)
-                all_labels.append(labels)
+                all_label_multihots.append(label_multihots)
 
             all_probabilities = torch.cat(all_probabilities)
-            all_labels = torch.cat(all_labels)
+            all_label_multihots = torch.cat(all_label_multihots)
 
         for th in np.arange(0.1, 1, 0.01):
             eval_metrics = EvalMetrics(
@@ -222,14 +227,14 @@ class ProTCLTrainer:
             optimization_metric = getattr(
                 eval_metrics, optimization_metric_name)
 
-            optimization_metric(all_probabilities, all_labels)
-            score = optimization_metric.compute()
+            optimization_metric(all_probabilities, all_label_multihots)
+            score = optimization_metric.compute().item()
             if score > best_score:
                 best_score = score
                 best_th = th
             print("TH:", th, "F1:", score)
 
-        best_score = best_score.item()
+        best_score = best_score
         self.logger.info(
             f"Best validation score: {best_score}, Best val threshold: {best_th}"
         )
@@ -242,7 +247,6 @@ class ProTCLTrainer:
         eval_metrics: EvalMetrics = None
     ) -> tuple[dict, dict]:
         """Evaluate the model on the given data loader.
-
         :param data_loader: pytorch data loader
         :type data_loader: torch.utils.data.DataLoader
         :param eval_metrics: an eval metrics class to calculate metrics like F1 score, defaults to None
@@ -250,15 +254,15 @@ class ProTCLTrainer:
         :return: dictionary with evaluation metrics. Always return avg_loss and if eval_metrics is not None, it will return the metrics from eval_metrics.compute()
         :rtype: dict
         """
-
         self.model.eval()
         total_loss = 0
         test_results = defaultdict(list)
-        with torch.no_grad(), autocast():
+        with torch.no_grad():
             for batch in data_loader:
-                loss, logits, labels, sequence_ids = self.evaluation_step(
+                loss, logits, labels = self.evaluation_step(
                     batch=batch)
                 num_labels = labels.shape[1]
+                # Time the evaluation metrics computation
                 if eval_metrics is not None:
                     # Apply sigmoid to get the probabilities for multi-label classification
                     probabilities = torch.sigmoid(logits)
@@ -277,16 +281,16 @@ class ProTCLTrainer:
                     # Update eval metrics
                     eval_metrics(probabilities, labels)
 
-                    test_results["sequence_ids"].append(
-                        # could use .repeat_interleave(num_labels) to make long format
-                        sequence_ids
-                    )
+                    # TODO: I stopped returning sequence ids. Do we still need this?
+                    # test_results["sequence_ids"].append(
+                    #     # could use .repeat_interleave(num_labels) to make long format
+                    #     sequence_ids
+                    # )
                     test_results["probabilities"].append(probabilities)
                     test_results["labels"].append(labels)
 
                 # Accumulate loss
                 total_loss += loss
-
             for key in test_results.keys():
                 test_results[key] = (
                     torch.cat(test_results[key]).detach().cpu().numpy()
@@ -296,7 +300,7 @@ class ProTCLTrainer:
             avg_loss = total_loss / len(data_loader)
             final_metrics = eval_metrics.compute() if eval_metrics is not None else {}
             final_metrics.update({"avg_loss": avg_loss})
-        
+
         self.model.train()
         return final_metrics, test_results
 
@@ -319,85 +323,104 @@ class ProTCLTrainer:
         if self.use_wandb:
             wandb.watch(self.model)
 
-        # Keep track of batches for logging
-        batch_count = 1
-
         # Initialize the best validation loss to a high value
         best_val_loss = float("inf")
 
+        # Compute total number of training steps
         num_training_steps = len(train_loader) * self.num_epochs
-
         self.logger.info(
             f"Total number of training steps: {num_training_steps}")
 
         for epoch in range(self.num_epochs):
             ####### TRAINING LOOP #######
-            for train_batch in train_loader:
-                # Unpack batch
+            with torch.autograd.profiler.emit_nvtx():
+                nvtx.range_push("Data loading")  # Profiling: Data loading
                 # TODO: Modify datasets and data loaders to no longer return sequence_ids
-                (
-                    _,
-                    sequence_onehots,
-                    label_multihots,
-                    sequence_lengths,
-                ) = train_batch
+                for batch_idx, batch in enumerate(train_loader):
+                    nvtx.range_pop()  # Profiling: End data loading
 
-                # Move sequences, labels and sequence_lengths to GPU, if available
-                labels = label_multihots.to(self.device)
-                sequence_lengths = sequence_lengths.to(self.device)
-                sequences = sequence_onehots.to(self.device)
-
-                # Randomly sample n labels from the batch
-                random_indices = torch.randperm(labels.size(1))[
-                    :self.label_sample_size].to(self.device)
-
-
-                # Compute target
-                target = labels.index_select(1, random_indices)
-
-                # Forward pass
-                with autocast():
-                    logits = self.model(
-                        sequences, random_indices, sequence_lengths
+                    # Unpack the training batch
+                    sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = (
+                        batch["sequence_onehots"],
+                        batch["sequence_embeddings"],
+                        batch["sequence_lengths"],
+                        batch["label_multihots"],
+                        batch["tokenized_labels"],
+                        batch["label_embeddings"]
                     )
 
-                # Compute loss
-                loss = self.loss_fn(logits,target.float()) / self.gradient_accumulation_steps
+                    if batch_idx == 100:
+                        torch.cuda.cudart().cudaProfilerStart()  # Profiling: Start profiling
+                    # Profiling: Batch
+                    nvtx.range_push("Batch" + str(batch_idx))
 
-                # Log metrics to W&B
-                if self.use_wandb:
-                    wandb.log({"train_loss": loss.item()})
+                    # Profiling: Copy to device
+                    nvtx.range_push("Copy to device")
+                    # Move all unpacked batch elements to GPU, if available
+                    sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = self.to_device(
+                        sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings)
 
-                # Backward pass with mixed precision
-                self.scaler.scale(loss).backward()
+                    nvtx.range_pop()  # Profiling: End copy to device
 
-                # Gradient accumulation every GRADIENT_ACCUMULATION_STEPS
-                if ((batch_count) % self.gradient_accumulation_steps == 0):
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                    self.optimizer.zero_grad()
+                    nvtx.range_push("Forward pass")  # Profiling: Forward pass
+                    # Forward pass
+                    inputs = {
+                        "sequence_onehots": sequence_onehots,
+                        "sequence_embeddings": sequence_embeddings,
+                        "sequence_lengths": sequence_lengths,
+                        "tokenized_labels": tokenized_labels,
+                        "label_embeddings": label_embeddings
+                    }
+                    logits = self.model(**inputs)
 
-                # Run validation and log progress every n batches
-                if batch_count % self.validation_frequency == 0:
-                    ####### VALIDATION LOOP #######
-                    # Force model to recompute all label embeddings
-                    if self.train_label_encoder:
-                        self.model.clear_label_embeddings_cache()
+                    # Compute loss
+                    loss = self.loss_fn(logits, label_multihots.float()) / \
+                        self.gradient_accumulation_steps
 
-                    # Run validation
-                    val_metrics, best_val_loss = self.validate(val_loader=val_loader,
-                                                               best_val_loss=best_val_loss)
+                    # Log metrics to W&B
+                    if self.use_wandb:
+                        wandb.log({"train_loss": loss.item()})
+                    nvtx.range_pop()  # Profiling: End forward pass
 
-                    self.logger.info(
-                        f"Epoch {epoch+1}/{self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}, Validation Loss: {val_metrics['avg_loss']}"
-                    )
+                    # Profiling: Backward pass
+                    nvtx.range_push("Backward pass")
+                    # Backward pass
+                    loss.backward()
 
-                    self.logger.info(
-                        f"Validation metrics:\n{json.dumps(val_metrics, indent=4)}")
-                # Log training progress percentage every 5%
-                if num_training_steps > 20 and batch_count % int(num_training_steps/20) == 0:
-                    self.logger.info(
-                        f"Training progress: {round(100*batch_count/num_training_steps,2)}%")
+                    # Gradient accumulation every GRADIENT_ACCUMULATION_STEPS
+                    if ((batch_idx) % self.gradient_accumulation_steps == 0):
+                        self.optimizer.step()
+                        self.optimizer.zero_grad()
 
-                # Increment batch count
-                batch_count += 1
+                    nvtx.range_pop()  # Profiling: End backward pass
+
+                    nvtx.range_pop()  # Profiling: End batch
+
+                    # Log training progress percentage every 2%
+                    if num_training_steps > 50 and batch_idx % int(num_training_steps/50) == 0:
+                        self.logger.info(
+                            f"Training progress: {round(100*batch_idx/num_training_steps,2)}%")
+
+                    if batch_idx == 150:
+                        torch.cuda.cudart().cudaProfilerStop()  # Profiling: Stop profiling
+
+                    # Run validation and log progress every n batches
+                    if batch_idx != 0 and batch_idx % (len(train_loader) // self.validations_per_epoch) == 0:
+                        ####### VALIDATION LOOP #######
+                        # Force model to recompute all label embeddings
+                        if self.train_label_encoder:
+                            self.model.clear_label_embeddings_cache()
+
+                        # Run validation
+                        val_metrics, best_val_loss = self.validate(val_loader=val_loader,
+                                                                   best_val_loss=best_val_loss)
+
+                        self.logger.info(
+                            f"Epoch {epoch+1}/{self.num_epochs}, Batch {batch_idx}, Training Loss: {loss.item()}, Validation Loss: {val_metrics['avg_loss']}"
+                        )
+
+                        self.logger.info(
+                            f"Validation metrics:\n{json.dumps(val_metrics, indent=4)}")
+
+                    nvtx.range_push("Data loading")  # Profiling: Data loading
+                nvtx.range_pop()  # Profiling: End data loading
