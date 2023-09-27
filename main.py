@@ -4,27 +4,26 @@ from src.utils.data import (
     seed_everything,
     read_pickle,
 )
-from src.data.datasets import ProteinDataset, create_multiple_loaders, calculate_pos_weight
+from src.data.datasets import ProteinDataset, calculate_pos_weight, create_multiple_loaders
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
 from src.models.protein_encoders import ProteInfer
 from src.utils.evaluation import EvalMetrics, save_evaluation_results
-from src.utils.models import count_parameters_by_layer, get_embeddings
+from src.utils.models import count_parameters_by_layer, get_or_generate_label_embeddings
 from src.utils.configs import get_setup
+from torch.utils.data import DataLoader
 import torch
 import wandb
 import os
 import argparse
 import json
 from transformers import AutoTokenizer, AutoModel
+from src.data.collators import collate_variable_sequence_length
 
 """
  Sample usage: python main.py --train-path-name TRAIN_DATA_PATH --validation-path-name VAL_DATA_PATH --test-paths-names TEST_DATA_PATH TEST_DATA_PATH 
  here we pass the same test set twice as an example.
 """
-
-# Set the TOKENIZERS_PARALLELISM environment variable to False
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Argument parser setup
 parser = argparse.ArgumentParser(
@@ -85,6 +84,7 @@ parser.add_argument(
     help="Log outputs to console instead of the default logfile.",
 )
 
+
 # TODO: Add an option to serialize and save config with a name corresponding to the model save path
 
 # TODO: Make Optimization metric and normalize probabilities part of arguments
@@ -93,7 +93,7 @@ args = parser.parse_args()
 # TODO: This could be more elegant with parser.add_subparsers()
 # Raise error if only one of train or val path is provided
 
-#TODO: We should be able to run without train but with val or test
+# TODO: We should be able to run without train but with val or test
 '''
 if (args.train_path_name is None) ^ (args.validation_path_name is None):
     parser.error(
@@ -126,8 +126,25 @@ if (
     test_paths_names=args.test_paths_names,
 )
 
+# Log the params
+logger.info(json.dumps(params, indent=4))
+
+# Initialize label tokenizer
+label_tokenizer = AutoTokenizer.from_pretrained(
+    params['LABEL_ENCODER_CHECKPOINT'])
+
 # Create datasets
-datasets = ProteinDataset.create_multiple_datasets(paths_list)
+datasets = ProteinDataset.create_multiple_datasets(
+    paths_list,
+    label_tokenizer=label_tokenizer,
+    subset_fractions={
+        "train": params["TRAIN_SUBSET_FRACTION"],
+        "validation": params["VALIDATION_SUBSET_FRACTION"],
+        "test": params["TEST_SUBSET_FRACTION"]}
+)
+
+# Seed everything so we don't go crazy
+seed_everything(params["SEED"], device)
 
 # Initialize new run
 logger.info(
@@ -139,60 +156,56 @@ if args.use_wandb:
         project="protein-functions",
         name=f"{args.name}_{timestamp}",
         config={**params, **vars(args)},
-        entity = "microsoft-research-incubation"
+        entity="microsoft-research-incubation"
     )
 
-# Log the configuration and arguments
-logger.info(f"Configuration: {config}")
-logger.info(f"Arguments: {args}")
+# Define label sample sizes for train, validation, and test loaders
+label_sample_sizes = {
+    "train": params["TRAIN_LABEL_SAMPLE_SIZE"],
+    "validation": params["VALIDATION_LABEL_SAMPLE_SIZE"],
+    "test": None  # No sampling for the test set
+}
 
 # Define data loaders
 loaders = create_multiple_loaders(
-    datasets=datasets,
-    params=params,
+    datasets,
+    params,
+    label_sample_sizes=label_sample_sizes,
     num_workers=params["NUM_WORKERS"],
-    pin_memory=True,
 )
 
-# mappings. A bit hacky, but it works
+# Mappings. A bit hacky, but it works
 # TODO: Is there a cleaner way of doing this? It feels awkward that we define "label2int" based on only train (even though it's the same)
 # Maybe we load label2int from the JSON vocabulary upfront and pass that to the dataset?
 label2int = datasets[list(datasets.keys())[0]][0].label2int
 int2label = datasets[list(datasets.keys())[0]][0].int2label
 label_vocabulary = datasets[list(datasets.keys())[0]][0].label_vocabulary
+label_annotation_map = datasets[list(datasets.keys())[
+    0]][0].label_annotation_map
 
-# TODO: Get rid of this one (sequence ids should be dynamically loaded in the future; no caching)
-sequence_id2int = datasets[list(datasets.keys())[0]][0].sequence_id2int
+# Load label encoder
+label_encoder = AutoModel.from_pretrained("microsoft/biogpt")
 
-# Create a map from GO alphanumeric id to numberic id
-int_label_id_map = {k: int(v[3:]) for k, v in int2label.items()}
-
-# Load the map from numeric label id to text label
-label_annotation_map = {key: value['label'] for key, value in read_pickle(
-    paths['GO_ANNOTATIONS_PATH']).to_dict(orient='index').items()}
-
-# Load the tokenizer and model
-label_tokenizer = AutoTokenizer.from_pretrained(
-    params['LABEL_ENCODER_CHECKPOINT'])
-label_encoder = AutoModel.from_pretrained("microsoft/biogpt").to(device)
-
-# Generate all label embeddings upfront, if not training the encoder
+# Generate all label embeddings upfront, if not training the label encoder
 label_embedding_matrix = None
 if not params["TRAIN_LABEL_ENCODER"]:
     # Create a list of text labels
-    label_annotations = [label_annotation_map[int(label_id[3:])]
-                         for label_id in label_vocabulary]
+    sorted_labels = sorted(label_vocabulary, key=lambda x: label2int[x])
+    label_annotations = [label_annotation_map[label_id]
+                         for label_id in sorted_labels]
+    label_encoder = label_encoder.to(device)
+    label_embedding_matrix = get_or_generate_label_embeddings(
+        paths,
+        device,
+        label_annotations,
+        label_tokenizer,
+        label_encoder,
+        logger,
+        label_batch_size_limit=params["LABEL_BATCH_SIZE_LIMIT"]
+    )
 
-    # Tokenize the labels in batches
-    logger.info("Tokenizing all labels and getting embeddings...")
-    with torch.no_grad():
-        label_embedding_matrix = get_embeddings(
-            label_annotations, label_tokenizer, label_encoder, batch_size=params[
-                "LABEL_BATCH_SIZE_LIMIT"]
-        )
-
-# Seed everything so we don't go crazy
-seed_everything(params["SEED"], device)
+    # Move the label encoder to CPU
+    label_encoder = label_encoder.cpu()
 
 # Initialize ProteInfer
 sequence_encoder = ProteInfer.from_pretrained(
@@ -207,43 +220,58 @@ sequence_encoder = ProteInfer.from_pretrained(
     bottleneck_factor=config["embed_sequences_params"]["BOTTLENECK_FACTOR"],
 )
 
+# Generate all sequence embeddings upfront, if not training the sequence encoder
+sequence_embedding_dict = None
+if not params["TRAIN_SEQUENCE_ENCODER"]:
+    # TODO: Add option to compute sequence embeddings on the fly (could create a new dataset by combining all datasets)
+    # If not training the sequence encoder and given a pre-computed sequence embedding file, load the sequence embeddings from disk
+    sequence_embedding_dict = read_pickle(
+        paths["SEQUENCE_EMBEDDING_PATH"])
+    # Convert values from arrays to tensors
+    sequence_embedding_dict = {k: torch.tensor(
+        v) for k, v in sequence_embedding_dict.items()}
+    logger.info(
+        f"Loaded sequence embeddings from {paths['SEQUENCE_EMBEDDING_PATH']}")
 
+# Loop through all the datasets and set the label and sequence embedding matrices
+for dataset in datasets.values():
+    for subset in dataset:
+        if not params["TRAIN_LABEL_ENCODER"]:
+            subset.set_label_embedding_matrix(label_embedding_matrix.cpu())
+        if not params["TRAIN_SEQUENCE_ENCODER"]:
+            subset.set_sequence_embedding_dict(sequence_embedding_dict)
 
 model = ProTCL(
     # Parameters
     protein_embedding_dim=params["PROTEIN_EMBEDDING_DIM"],
     label_embedding_dim=params["LABEL_EMBEDDING_DIM"],
     latent_dim=params["LATENT_EMBEDDING_DIM"],
-    temperature=params["TEMPERATURE"],
-    # Label encoder
+
+    # Encoders
     label_encoder=label_encoder,
-    label_tokenizer=label_tokenizer,
-    label_annotation_map=label_annotation_map,
-    int_label_id_map=int_label_id_map,
-    # Sequence encoder
     sequence_encoder=sequence_encoder,
-    #Output Layer
-    output_dim = params["OUTPUT_DIM"],
-    output_num_layers = params["OUTPUT_NUM_LAYERS"],
+
+    # Output Layer
+    output_dim=params["OUTPUT_DIM"],
+    output_num_layers=params["OUTPUT_NUM_LAYERS"],
+
     # Training options
     train_label_encoder=params["TRAIN_LABEL_ENCODER"],
     train_sequence_encoder=params["TRAIN_SEQUENCE_ENCODER"],
-    label_embedding_matrix=label_embedding_matrix
 ).to(device)
 
-
-#Calculate pos_weight based on the training set
-if (params["POS_WEIGHT"] is None)&(args.train_path_name is not None):
-    logger.info(f"Calculating pos_weight...")
+# Calculate pos_weight based on the training set
+if (params["POS_WEIGHT"] is None) & (args.train_path_name is not None):
+    logger.info("Calculating pos_weight...")
     pos_weight = calculate_pos_weight(datasets["train"][0].data,
-                                    datasets["train"][0].get_label_vocabulary_size()
-                                    ).to(device)
+                                      datasets["train"][0].get_label_vocabulary_size()
+                                      ).to(device)
     logger.info(f"Calculated pos_weight= {pos_weight.item()}")
 elif (params["POS_WEIGHT"] is not None):
     pos_weight = torch.tensor(params["POS_WEIGHT"]).to(device)
 else:
-    raise ValueError("pos_weight is not provided and no training set is provided to calculate it.")
-
+    raise ValueError(
+        "POS_WEIGHT is not provided and no training set is provided to calculate it.")
 
 # Initialize trainer class to handle model training, validation, and testing
 Trainer = ProTCLTrainer(
@@ -276,80 +304,66 @@ else:
 ####### TESTING LOOP #######
 all_test_results = []
 all_test_metrics = []
-if args.test_paths_names is not None:
-    logger.info("Starting testing...")
-    best_val_th = params["DECISION_TH"]
+
+# Setup for validation
+if args.validation_path_name:
+    val_loader = DataLoader(
+        datasets["validation"][0],
+        batch_size=params["TEST_BATCH_SIZE"],
+        shuffle=False,
+        collate_fn=collate_variable_sequence_length,
+        num_workers=params["NUM_WORKERS"],
+        pin_memory=True,
+    )
 
     # If no decision threshold is provided, find the optimal threshold on the validation set
-    if params["DECISION_TH"] is None:
-        if args.validation_path_name is not None:
-            logger.info("Decision threshold not provided.")
+    if not params["DECISION_TH"]:
+        logger.info("Decision threshold not provided.")
+        best_val_th, _ = Trainer.find_optimal_threshold(
+            data_loader=val_loader,
+            optimization_metric_name="f1_micro",
+        )
+    else:
+        best_val_th = params["DECISION_TH"]
 
-            best_val_th, best_val_score = Trainer.find_optimal_threshold(
-                data_loader=loaders["validation"][0],
-                optimization_metric_name="f1_micro",
-            )
-        else:
-            raise ValueError(
-                "Decision threshold not provided and no validation set provided to find optimal."
-            )
-    if args.validation_path_name is not None:
-        for idx, val_loader in enumerate(loaders["validation"]):
-            logger.info(f"====Testing on validation set====")
-            # Evaluate model on test set
-            eval_metrics = EvalMetrics(
-                num_labels=params["NUM_LABELS"], threshold=best_val_th, device=device
-            ).get_metric_collection(type="all")
+    logger.info("====Testing on validation set====")
+    eval_metrics = EvalMetrics(
+        num_labels=params["NUM_LABELS"], threshold=best_val_th, device=device
+    ).get_metric_collection(type="all")
+    validation_metrics, validation_results = Trainer.evaluate(
+        data_loader=val_loader, eval_metrics=eval_metrics        
+    )
 
-            validation_metrics, validation_results = Trainer.evaluate(
-                data_loader=val_loader, eval_metrics=eval_metrics)
-        
+    save_evaluation_results(results=validation_results,
+                            label_vocabulary=label_vocabulary,
+                            run_name=args.name,
+                            output_dir=os.path.join(
+                                ROOT_PATH, paths["RESULTS_DIR"])
+                            )
 
-            # Convert all metrics to float
-            validation_metrics = {
-                k: (v.item() if isinstance(v, torch.Tensor) else v)
-                for k, v in validation_metrics.items()
-            }
+    logger.info(json.dumps(validation_metrics, indent=4))
+    logger.info("Final validation complete.")
 
-            save_evaluation_results(results=validation_results,
-                                    label_vocabulary=label_vocabulary,
-                                    run_name=args.name,
-                                    output_dir=os.path.join(
-                                        ROOT_PATH, paths["RESULTS_DIR"])
-                                    )
-
-            logger.info(json.dumps(validation_metrics, indent=4))
-            logger.info("Final validation complete.")
-
-
+# Setup for testing
+if args.test_paths_names:
+    logger.info("Starting testing...")
     for idx, test_loader in enumerate(loaders["test"]):
         logger.info(f"====Testing on test set #{idx}====")
-        # Evaluate model on test set
         eval_metrics = EvalMetrics(
             num_labels=params["NUM_LABELS"], threshold=best_val_th, device=device
         ).get_metric_collection(type="all")
-
-        final_metrics, test_results = Trainer.evaluate(
-            data_loader=test_loader, eval_metrics=eval_metrics)
-
-
-        # Convert all metrics to float
-        final_metrics = {
-            k: (v.item() if isinstance(v, torch.Tensor) else v)
-            for k, v in final_metrics.items()
-        }
+        test_metrics, test_results = Trainer.evaluate(
+            data_loader=test_loader, eval_metrics=eval_metrics
+        )
 
         all_test_results.append(test_results)
-        all_test_metrics.append(final_metrics)
-
-        logger.info(json.dumps(final_metrics, indent=4))
+        all_test_metrics.append(test_metrics)
+        logger.info(json.dumps(test_metrics, indent=4))
         logger.info("Testing complete.")
 
-
 # Close the W&B run
-if args.use_wandb:
-    # TODO: Check to ensure W&B is logging these test metrics correctly
-    wandb.log(final_metrics)
+if args.use_wandb and all_test_metrics:
+    wandb.log(all_test_metrics[-1])
     wandb.finish()
 
 # Clear GPU cache

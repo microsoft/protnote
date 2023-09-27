@@ -8,6 +8,7 @@ import yaml
 import random
 import numpy as np
 import wget
+from transformers.tokenization_utils_base import BatchEncoding
 
 
 def read_fasta(data_path: str, sep=" "):
@@ -56,10 +57,18 @@ def read_pickle(file_path: str):
     return item
 
 
-def chunks(lst, n):
-    """Yield successive n-sized chunks from lst."""
-    for i in range(0, len(lst), n):
-        yield lst[i:i + n]
+def chunks(data, n):
+    """Yield successive n-sized chunks from data."""
+    if isinstance(data, dict) or isinstance(data, BatchEncoding):
+        num_items = len(next(iter(data.values())))
+        for i in range(0, num_items, n):
+            yield {key: value[i:i + n] for key, value in data.items()}
+    elif isinstance(data, list) or isinstance(data, tuple):
+        for i in range(0, len(data), n):
+            yield data[i:i + n]
+    else:
+        raise ValueError(
+            f"Data type {type(data)} not supported for chunking.")
 
 
 def load_gz_json(path):

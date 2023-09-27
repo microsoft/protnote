@@ -1,9 +1,8 @@
-from transformers import AutoTokenizer, AutoModel
+import os
 import torch
-from torch.cuda.amp import autocast
 import logging
-from src.utils.data import chunks
-from contextlib import nullcontext
+import sys
+import select
 
 
 def count_parameters_by_layer(model):
@@ -55,31 +54,103 @@ def count_parameters_by_layer(model):
     logging.info(line)
 
 
-def get_embeddings(text, tokenizer, model, batch_size=300, max_length=1024):
+def get_or_generate_label_embeddings(
+    paths,
+    device,
+    label_annotations,
+    label_tokenizer,
+    label_encoder,
+    logger,
+    label_batch_size_limit
+):
     """
-    Get embeddings for a list of text strings.
+    Load or generate label embeddings based on the provided paths and parameters.
+
+    Returns:
+        label_embedding_matrix: The ordered matrix of label embeddings.
+    """
+    if os.path.exists(paths["LABEL_EMBEDDING_PATH"]):
+        label_embedding_matrix = torch.load(
+            paths["LABEL_EMBEDDING_PATH"], map_location=device)
+        logger.info(
+            f"Loaded label embeddings from {paths['LABEL_EMBEDDING_PATH']}")
+    else:
+        # Tokenize the labels
+        logger.info("Tokenzing all labels...")
+        tokenized_labels = tokenize_labels(label_annotations, label_tokenizer)
+
+        logger.info("Getting embeddings for all tokenized labels...")
+        with torch.no_grad():
+            label_embedding_matrix = get_label_embeddings(
+                tokenized_labels, label_encoder, batch_size_limit=label_batch_size_limit
+            ).cpu()
+
+        logger.info("Done tokenizing all labels and getting embeddings.")
+
+        # Prompt the user for the file path to save the label embeddings
+        print("Enter the full file path to save the label embeddings, or hit enter to continue without saving: ")
+
+        # Wait for user input for up to 60 seconds
+        rlist, _, _ = select.select([sys.stdin], [], [], 60)
+
+        # Check if user input was received
+        if rlist:
+            file_path = sys.stdin.readline().strip()
+            if file_path:
+                torch.save(label_embedding_matrix, file_path)
+                print(f"Saved label embeddings to {file_path}")
+            else:
+                print("Label embeddings not saved.")
+        else:
+            print("No input received. Continuing without saving label embeddings.")
+
+    return label_embedding_matrix
+
+
+def tokenize_labels(text, tokenizer, max_length=1024):
+    """
+    Tokenize a list of text strings.
 
     Args:
-        text (list): The list of text strings. If the list of text strings is too large, it will be split into batches.
+        text (list): The list of text strings.
         tokenizer (transformers.PreTrainedTokenizer): The tokenizer.
+
+    Returns:
+        dict: A dictionary containing tokenized labels as 'input_ids' and 'attention_mask'.
+    """
+    return tokenizer(
+        text, padding='longest', truncation=True, max_length=max_length, return_tensors="pt"
+    )
+
+
+def get_label_embeddings(tokenized_labels, model, batch_size_limit=300):
+    """
+    Get embeddings for a list of tokenized labels.
+
+    Args:
+        tokenized_labels (BatchEncoding): Tokenized labels.
         model (transformers.PreTrainedModel): The model.
+        batch_size_limit (int): The maximum number of labels to process in a single batch.
 
     Returns:
         torch.Tensor: The embeddings.
     """
     all_label_embeddings = []
 
-    # Tokenize the labels in batches
-    for batch in chunks(text, batch_size):
-        # TODO: Consider identifying the max_length in the dataset to improve speed
-        tokenized_labels = tokenizer(
-            batch, padding=True, truncation=True, max_length=max_length, return_tensors="pt"
-        ).to(model.device)
+    # Move the entire tokenized data to GPU
+    tokenized_labels = {key: value.to(model.device)
+                        for key, value in tokenized_labels.items()}
+
+    total_labels = len(tokenized_labels["input_ids"])
+
+    for start_idx in range(0, total_labels, batch_size_limit):
+        end_idx = min(start_idx + batch_size_limit, total_labels)
+        batch = {key: value[start_idx:end_idx]
+                 for key, value in tokenized_labels.items()}
 
         # Get the label embeddings (average across all tokens of the last hidden state)
-        with autocast():
-            outputs = model(**tokenized_labels)
-            label_embeddings = outputs.last_hidden_state.mean(dim=1)
+        outputs = model(**batch)
+        label_embeddings = outputs.last_hidden_state.mean(dim=1)
         all_label_embeddings.append(label_embeddings)
 
     # Concatenate all the label embeddings

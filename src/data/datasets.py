@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
-from src.utils.data import read_fasta, read_json, get_vocab_mappings
+from src.utils.data import read_fasta, read_json, get_vocab_mappings, read_pickle
+from src.utils.models import tokenize_labels
 from typing import Dict
 import pandas as pd
 import logging
@@ -8,12 +9,15 @@ from typing import List
 from src.data.collators import collate_variable_sequence_length
 from collections import defaultdict
 from joblib import Parallel, delayed, cpu_count
+from functools import partial
+
+
 class ProteinDataset(Dataset):
     """
     Dataset class for protein sequences with GO annotations.
     """
 
-    def __init__(self, paths: dict, deduplicate: bool = False):
+    def __init__(self, paths: dict, label_tokenizer=None, subset_fraction: float = 1.0):
         """
         paths (dict): Dictionary containing paths to the data and vocabularies.
             data_path (str): Path to the FASTA file containing the protein sequences and corresponding GO annotations
@@ -24,7 +28,7 @@ class ProteinDataset(Dataset):
             go_descriptions_path (str): Path to the pickled file containing the GO term descriptions mapped to GO term IDs
         deduplicate (bool): Whether to remove duplicate sequences (default: False)
         """
-        # Error handling: check for missing keys
+        # Error handling: check for missing keys and invalid dataset types
         required_keys = ["data_path", "dataset_type"]
         for key in required_keys:
             if key not in paths:
@@ -38,7 +42,6 @@ class ProteinDataset(Dataset):
         ], "dataset_type must be one of 'train', 'val', or 'test'"
 
         # Set default values for paths not provided
-        self.data_path = paths["data_path"]
         self.dataset_type = paths["dataset_type"]
         self.amino_acid_vocabulary_path = paths.get(
             "amino_acid_vocabulary_path", None)
@@ -48,36 +51,41 @@ class ProteinDataset(Dataset):
         )
 
         # Initialize class variables
-        self.data = read_fasta(self.data_path)
-        self.max_seq_len = None
-        self.amino_acid_vocabulary_size = None
-        self.label_vocabulary_size = None
-        self.sequence_id_vocabulary_size = None
+        self.data = read_fasta(paths["data_path"])
+        self.amino_acid_vocabulary_size = self.label_vocabulary_size = self.sequence_id_vocabulary_size = None
+        self.label_embedding_matrix = self.sequence_embedding_dict = None
 
-        if deduplicate:
+        # Subset the data if subset_fraction is provided (to improve training speed)
+        if subset_fraction < 1.0:
             logging.info(
-                "Removing duplicates, keeping only the first instance of each sequence..."
+                f"Subsetting {subset_fraction*100}% of the {self.dataset_type} set..."
             )
-            # Deduplicate sequences
-            self._remove_duplicates()
+            self.data = self.data[:int(subset_fraction * len(self.data))]
 
         # Load vocabularies
         self._process_vocab()
 
-    def _remove_duplicates(self):
-        """
-        Remove duplicate sequences from self.data, keeping only the first instance of each sequence
-        Use pandas to improve performance
-        """
-        # Convert self.data to a DataFrame
-        df = pd.DataFrame(self.data, columns=["sequence", "labels"])
+        # Load the map from alphanumeric label id to text label
+        self.label_annotation_map = {key: value['label'] for key, value in read_pickle(
+            paths["go_annotations_path"]).to_dict(orient='index').items()}
 
-        # Drop duplicate rows based on the 'sequence' column, keeping the first instance
-        df = df.drop_duplicates(subset="sequence", keep="first")
+        # Loop through the label IDs and tokenize the labels if a label tokenizer is provided
+        label_list = []
+        for label_id in self.label_vocabulary:
+            label_list.append(self.label_annotation_map[label_id])
+        self.tokenized_labels = None
+        if label_tokenizer is not None:
+            self.tokenized_labels = tokenize_labels(
+                label_list, label_tokenizer)
 
-        # Convert the DataFrame back to the list of tuples format
-        self.data = list(df.itertuples(index=False, name=None))
+    # Helper functions for setting embedding dictionaries
+    def set_sequence_embedding_dict(self, embedding_dict: torch.Tensor):
+        self.sequence_embedding_dict = embedding_dict
 
+    def set_label_embedding_matrix(self, embedding_matrix: torch.Tensor):
+        self.label_embedding_matrix = embedding_matrix
+
+    # Helper functions for processing and loading vocabularies
     def _process_vocab(self):
         self._process_amino_acid_vocab()
         self._process_label_vocab()
@@ -113,7 +121,6 @@ class ProteinDataset(Dataset):
             self.sequence_id_vocabulary = read_json(
                 self.sequence_id_vocabulary_path)
         else:
-            logging.info("No sequence id vocabulary path given. Generating...")
             self.sequence_id_vocabulary = set()
             for obs in self.data:
                 self.sequence_id_vocabulary.add(obs[1][0])
@@ -122,11 +129,6 @@ class ProteinDataset(Dataset):
         self.sequence_id2int, self.int2sequence_id = get_vocab_mappings(
             self.sequence_id_vocabulary
         )
-
-    def get_max_seq_len(self):
-        if self.max_seq_len is None:
-            self.max_seq_len = max(len(i[0]) for i in self.data)
-        return self.max_seq_len
 
     def get_amino_acid_vocabulary_size(self):
         if self.amino_acid_vocabulary_size is None:
@@ -146,22 +148,16 @@ class ProteinDataset(Dataset):
     def __len__(self) -> int:
         return len(self.data)
 
-    def process_example(self, sequence: str, labels: list[str]) -> tuple:
+    def process_example(self, sequence: str, labels: list[str]) -> dict:
         sequence_id_alphanumeric, labels = labels[0], labels[1:]
 
-        # Get the integer sequence ID and convert to tensor
-        # TODO: If we don't cache sequence embeddings, we can remove this
-        sequence_id_numeric = torch.tensor(
-            self.sequence_id2int[sequence_id_alphanumeric], dtype=torch.long
-        )
-
-        # Convert the sequence and labels to integers
+        # Convert the sequence and labels to integers for one-hot encoding
         amino_acid_ints = torch.tensor(
             [self.aminoacid2int[aa] for aa in sequence], dtype=torch.long
         )
 
         labels_ints = torch.tensor(
-            [self.label2int[l] for l in labels], dtype=torch.long
+            [self.label2int[label] for label in labels], dtype=torch.long
         )
 
         # Get the length of the sequence
@@ -175,8 +171,26 @@ class ProteinDataset(Dataset):
             labels_ints, num_classes=self.get_label_vocabulary_size()
         ).sum(dim=0)
 
-        # Return the integer id, the one-hod sequence, the multi-hot sequence, and the sequence length
-        return sequence_id_numeric, sequence_onehots, label_multihots, sequence_length
+        # Set the label embeddings, if provided
+        label_embeddings = self.label_embedding_matrix if self.label_embedding_matrix is not None else None
+
+        # Get the sequence embedding, if provided
+        sequence_embedding = None
+        if self.sequence_embedding_dict is not None:
+            sequence_embedding = self.sequence_embedding_dict[sequence_id_alphanumeric]
+
+        # Get the tokenized labels, if provided
+        tokenized_labels = self.tokenized_labels if self.tokenized_labels is not None else None
+
+        # Return a dict containing the processed example
+        return {
+            "sequence_onehots": sequence_onehots,
+            "sequence_embedding": sequence_embedding,
+            "sequence_length": sequence_length,
+            "label_multihots": label_multihots,
+            "tokenized_labels": tokenized_labels,
+            "label_embeddings": label_embeddings,
+        }
 
     def __getitem__(self, idx) -> tuple:
         sequence, labels = self.data[idx]
@@ -184,19 +198,23 @@ class ProteinDataset(Dataset):
 
     @classmethod
     def create_multiple_datasets(
-        cls, paths_list: List[Dict[str, str]], deduplicate: bool = False
+        cls, paths_list: List[Dict[str, str]], subset_fractions: dict = None, label_tokenizer=None,
     ) -> List[Dataset]:
         """
         paths_list (List[Dict[str, str]]): List of dictionaries, each containing paths to the data and vocabularies.
-        Deduplicate (bool): Whether to remove duplicate sequences (default: False). Applies to all datasets in paths_list.
+        subset_fractions (dict): Dictionary containing the subset fraction for each dataset type (default: None)
         """
         datasets = defaultdict(list)
+        subset_fractions = subset_fractions or {}
         for paths in paths_list:
             datasets[paths["dataset_type"]].append(
-                cls(paths, deduplicate=deduplicate))
+                cls(paths, label_tokenizer=label_tokenizer, subset_fraction=subset_fractions.get(
+                    paths["dataset_type"], 1.0))
+            )
         return datasets
-    
-def calculate_pos_weight(data:list, num_labels:int):
+
+
+def calculate_pos_weight(data: list, num_labels: int):
     def count_labels(chunk):
         num_positive_labels_chunk = 0
         num_negative_labels_chunk = 0
@@ -251,8 +269,8 @@ def set_padding_to_sentinel(
     mask = mask.unsqueeze(1).expand(-1, dim, -1)
 
     # Use the mask to set the padding values to sentinel
-    padded_representations = torch.where(mask, sentinel, padded_representations)
-
+    padded_representations = torch.where(
+        mask, sentinel, padded_representations)
 
     return padded_representations
 
@@ -260,20 +278,27 @@ def set_padding_to_sentinel(
 def create_multiple_loaders(
     datasets: dict,
     params: dict,
+    label_sample_sizes: dict = None,
     num_workers: int = 2,
     pin_memory: bool = True,
 ) -> List[DataLoader]:
     loaders = defaultdict(list)
-    for dataset_type in datasets.keys():
-        for dataset in datasets[dataset_type]:
-            loader = torch.utils.data.DataLoader(
+    for dataset_type, dataset_list in datasets.items():
+        should_shuffle = dataset_type == "train"
+        batch_size_for_type = params[f"{dataset_type.upper()}_BATCH_SIZE"]
+
+        # Get the number of labels to sample for the current dataset type, if provided
+        label_sample_size = None
+        if label_sample_sizes:
+            label_sample_size = label_sample_sizes.get(dataset_type)
+
+        for dataset in dataset_list:
+            loader = DataLoader(
                 dataset,
-                batch_size=params[f"{dataset_type.upper()}_BATCH_SIZE"],
-                shuffle=True
-                if dataset_type == "train"
-                # only shuffle train. No need to shuffle val or test.
-                else False,
-                collate_fn=collate_variable_sequence_length,
+                batch_size=batch_size_for_type,
+                shuffle=should_shuffle,
+                collate_fn=partial(
+                    collate_variable_sequence_length, label_sample_size=label_sample_size),
                 num_workers=num_workers,
                 pin_memory=pin_memory,
             )
