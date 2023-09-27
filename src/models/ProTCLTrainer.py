@@ -1,6 +1,7 @@
 import logging
 from src.utils.data import load_gz_json
 from src.utils.evaluation import EvalMetrics
+from src.utils.losses import WeightedBCE
 from src.utils.proteinfer import normalize_confidences
 import numpy as np
 import torch
@@ -133,12 +134,16 @@ class ProTCLTrainer:
 
         self.logger.info("Running validation...")
 
-        val_metrics, _ = self.evaluate(data_loader=val_loader)
+        eval_metrics = EvalMetrics(
+            num_labels=self.num_labels, threshold=0.85, device=self.device
+        ).get_metric_collection(type="all")
+
+        val_metrics, _ = self.evaluate(data_loader=val_loader,eval_metrics=eval_metrics)
 
         self.logger.info(val_metrics)
 
         if self.use_wandb:
-            wandb.log({"validation_loss": val_metrics["avg_loss"]})
+            wandb.log({"validation_loss": val_metrics["avg_loss"],"validation_map_micro": val_metrics["map_micro"]})
 
         # Save the model if it has the best validation loss so far
         if val_metrics["avg_loss"] < best_val_loss:
@@ -258,7 +263,6 @@ class ProTCLTrainer:
             for batch in data_loader:
                 loss, logits, labels, sequence_ids = self.evaluation_step(
                     batch=batch)
-                num_labels = labels.shape[1]
                 if eval_metrics is not None:
                     # Apply sigmoid to get the probabilities for multi-label classification
                     probabilities = torch.sigmoid(logits)
@@ -296,6 +300,20 @@ class ProTCLTrainer:
             avg_loss = total_loss / len(data_loader)
             final_metrics = eval_metrics.compute() if eval_metrics is not None else {}
             final_metrics.update({"avg_loss": avg_loss})
+
+            final_metrics = {
+                k: (v.item() if isinstance(v, torch.Tensor) else v)
+                for k, v in final_metrics.items()
+            }
+
+            for k, v in final_metrics.items():
+                if isinstance(v, torch.Tensor):
+                    final_metrics[k] = v.item()
+                
+                #Cast numpy floats to float32. Needed to store as parquet
+                # because pyarrow doesn't support float16 from mixed precision
+                if np.issubdtype(type(v), np.floating):
+                    final_metrics[k] = v.astype("float32")
         
         self.model.train()
         return final_metrics, test_results
@@ -360,6 +378,13 @@ class ProTCLTrainer:
                     logits = self.model(
                         sequences, random_indices, sequence_lengths
                     )
+
+
+                # log average probabilities to W&B
+                if self.use_wandb:
+                    with torch.no_grad():
+                        wandb.log({"avg_probabilities": torch.mean(torch.sigmoid(logits))})
+
 
                 # Compute loss
                 loss = self.loss_fn(logits,target.float()) / self.gradient_accumulation_steps

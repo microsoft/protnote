@@ -301,14 +301,22 @@ if args.test_paths_names is not None:
                 num_labels=params["NUM_LABELS"], threshold=best_val_th, device=device
             ).get_metric_collection(type="all")
 
-            validation_metrics, _ = Trainer.evaluate(
+            validation_metrics, validation_results = Trainer.evaluate(
                 data_loader=val_loader, eval_metrics=eval_metrics)
+        
 
             # Convert all metrics to float
             validation_metrics = {
                 k: (v.item() if isinstance(v, torch.Tensor) else v)
                 for k, v in validation_metrics.items()
             }
+
+            save_evaluation_results(results=validation_results,
+                                    label_vocabulary=label_vocabulary,
+                                    run_name=args.name,
+                                    output_dir=os.path.join(
+                                        ROOT_PATH, paths["RESULTS_DIR"])
+                                    )
 
             logger.info(json.dumps(validation_metrics, indent=4))
             logger.info("Final validation complete.")
@@ -323,13 +331,7 @@ if args.test_paths_names is not None:
 
         final_metrics, test_results = Trainer.evaluate(
             data_loader=test_loader, eval_metrics=eval_metrics)
-        '''
-        save_evaluation_results(results=test_results,
-                                 label_vocabulary=label_vocabulary,
-                                 run_name=args.name,
-                                 output_dir=os.path.join(
-                                     ROOT_PATH, paths["RESULTS_DIR"])
-                                 )'''
+
 
         # Convert all metrics to float
         final_metrics = {

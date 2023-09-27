@@ -52,30 +52,25 @@ def compute_asymmetric_loss(logits, target, dim):
 
 
 class WeightedBCE(torch.nn.Module):
-    """Binary Cross Entropy for Multi Label classification
-
-    """    
-    def __init__(self):
-        """
-        :param pos_weight: weight for positive examples, defaults to None
-        :type pos_weight: torch.Tensor, optional
-        :param symmetric: whether to compute the symmetric loss, defaults to False. 
-        :type symmetric: bool, optional
-        """
+    def __init__(self, epsilon=1e-10):
         super().__init__()
-        
-    
-    def forward(self, logits, target):
-        """        
-        :param logits: Tensor of shape (batch_size, num_labels)
-        :type logits: torch.Tensor
-        :param target: Tensor of shape (batch_size, num_labels)
-        :type target: torch.Tensor
-        """
-        num_positive = target.sum()
-        num_negative = target.numel() - num_positive
-        self.bce_with_logits = torch.nn.BCEWithLogitsLoss(reduction='mean',pos_weight=num_negative/num_positive)
-        return self.bce_with_logits(logits, target)
 
+        self.epsilon = epsilon
+
+    def forward(self, output, target):
+        # Count the number of positives and negatives in the batch
+        num_positives = target.sum() + self.epsilon  
+        num_negatives = target.numel() - num_positives + self.epsilon  
+
+        # Calculate the weights for positives and negatives
+        total = num_positives + num_negatives
+        weight_positives = (1.0 / num_positives) * (total / 2.0)
+        weight_negatives = (1.0 / num_negatives) * (total / 2.0)
+        
+        # Create a weight tensor with the same shape as target
+        weight_tensor = target * weight_positives + (1 - target) * weight_negatives
+        
+        # Compute weighted binary cross-entropy loss
+        return torch.nn.functional.binary_cross_entropy_with_logits(output, target, weight=weight_tensor)
 
 

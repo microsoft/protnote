@@ -130,8 +130,8 @@ class EvalMetrics:
                 average=average,
             ).to(self.device)
 
-        label_centered_metrics["map"] = AveragePrecision(
-            num_labels=self.num_labels, task="multilabel", thresholds=100
+        label_centered_metrics["map_micro"] = AveragePrecision(
+            num_labels=self.num_labels, task="multilabel", thresholds=100,average='micro'
         ).to(self.device)
 
         return label_centered_metrics
