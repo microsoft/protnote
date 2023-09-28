@@ -41,8 +41,8 @@ parser.add_argument(
 parser.add_argument(
     "--optimization-metric-name",
     type=str,
-    default="f1_macro",
-    help="Specify the desired metric to optimize for. Default is f1_macro.",
+    default="f1_micro",
+    help="Specify the desired metric to optimize for. Default is f1_micro.",
 )
 
 parser.add_argument(
@@ -68,6 +68,12 @@ parser.add_argument(
     "--override", nargs="*", help="Override parameters in key-value pairs."
 )
 
+parser.add_argument(
+    "--normalize-probabilities",
+    action="store_true",
+    help="Normalize probabilities using the label vocabulary and applicable label dictionary."
+)
+
 # TODO: Add an option to serialize and save config with a name corresponding to the model save path
 
 # TODO: Make Optimization metric and normalize probabilities part of arguments
@@ -80,6 +86,7 @@ args = parser.parse_args()
     overrides=args.override,
     val_path_name=args.validation_path_name,
     test_paths_names=args.test_paths_names,
+    log_to_console=True
 )
 
 # Create datasets
@@ -140,14 +147,16 @@ if best_th is None:
 
             logits = model(sequences, sequence_lengths)
             probabilities = torch.sigmoid(logits)
-            probabilities = torch.tensor(
-                normalize_confidences(
-                    predictions=probabilities.detach().cpu().numpy(),
-                    label_vocab=vocab,
-                    applicable_label_dict=label_normalizer,
-                ),
-                device=probabilities.device,
-            )
+
+            if args.normalize_probabilities:
+                probabilities = torch.tensor(
+                    normalize_confidences(
+                        predictions=probabilities.detach().cpu().numpy(),
+                        label_vocab=vocab,
+                        applicable_label_dict=label_normalizer,
+                    ),
+                    device=probabilities.device,
+                )
 
             val_probas.append(probabilities)
             val_labels.append(labels)
@@ -192,14 +201,15 @@ with torch.no_grad():
 
         logits = model(sequences, sequence_lengths)
         probabilities = torch.sigmoid(logits)
-        probabilities = torch.tensor(
-            normalize_confidences(
-                predictions=probabilities.detach().cpu().numpy(),
-                label_vocab=vocab,
-                applicable_label_dict=label_normalizer,
-            ),
-            device=probabilities.device,
-        )
+        if args.normalize_probabilities:
+            probabilities = torch.tensor(
+                normalize_confidences(
+                    predictions=probabilities.detach().cpu().numpy(),
+                    label_vocab=vocab,
+                    applicable_label_dict=label_normalizer,
+                ),
+                device=probabilities.device,
+            )
 
         eval_metrics(probabilities, labels)
 

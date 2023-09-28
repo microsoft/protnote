@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
 
-
 # NOT CURRENTLY USING THIS
 # def contrastive_loss(P_e, L_e, t, target):
 #     """
@@ -54,29 +53,60 @@ import torch.nn.functional as F
 
 
 class WeightedBCE(torch.nn.Module):
-    """
-    Binary Cross Entropy for Multi Label classification with class imbalance.
-    Weights based on the number of positive and negative labels within the batch.
-    """
-
-    def __init__(self):
-        """
-        :param pos_weight: weight for positive examples, defaults to None
-        :type pos_weight: torch.Tensor, optional
-        :param symmetric: whether to compute the symmetric loss, defaults to False. 
-        :type symmetric: bool, optional
-        """
+    def __init__(self, epsilon=1e-10):
         super().__init__()
 
-    def forward(self, logits, target):
-        """        
-        :param logits: Tensor of shape (batch_size, num_labels)
-        :type logits: torch.Tensor
-        :param target: Tensor of shape (batch_size, num_labels)
-        :type target: torch.Tensor
-        """
-        num_positive = target.sum()
-        num_negative = target.numel() - num_positive
-        self.bce_with_logits = torch.nn.BCEWithLogitsLoss(
-            reduction='mean', pos_weight=num_negative/num_positive)
-        return self.bce_with_logits(logits, target)
+        self.epsilon = epsilon
+
+    def forward(self, input, target):
+        # Count the number of positives and negatives in the batch
+        num_positives = target.sum() + self.epsilon  
+        num_negatives = target.numel() - num_positives + self.epsilon  
+
+        # Calculate the weights for positives and negatives
+        total = num_positives + num_negatives
+        weight_positives = (1.0 / num_positives) * (total / 2.0)
+        weight_negatives = (1.0 / num_negatives) * (total / 2.0)
+        
+        # Create a weight tensor with the same shape as target
+        weight_tensor = target * weight_positives + (1 - target) * weight_negatives
+        
+        # Compute weighted binary cross-entropy loss
+        return torch.nn.functional.binary_cross_entropy_with_logits(input, target, weight=weight_tensor)
+    
+class FocalLoss(torch.nn.Module):
+    def __init__(self, gamma=2, alpha=0.25, reduction='mean', epsilon=1e-10):
+        super().__init__()
+
+        self.gamma = gamma
+        self.alpha = alpha
+        self.epsilon = epsilon
+        self.reduction = reduction
+
+
+    def forward(self, input, target):
+        # Compute the focal loss
+        p = torch.sigmoid(input)
+        ce_loss = F.binary_cross_entropy_with_logits(input, target, reduction="none")
+        p_t = p * target + (1 - p) * (1 - target)
+        loss = ce_loss * ((1 - p_t) ** self.gamma)
+
+        if self.alpha >= 0:
+            alpha_t = self.alpha * target + (1 - self.alpha) * (1 - target)
+            loss = alpha_t * loss
+
+        # Check reduction option and return loss accordingly
+        if self.reduction == "none":
+            pass
+        elif self.reduction == "mean":
+            loss = loss.mean()
+        elif self.reduction == "sum":
+            loss = loss.sum()
+        else:
+            raise ValueError(
+                f"Invalid Value for arg 'reduction': '{self.reduction} \n Supported reduction modes: 'none', 'mean', 'sum'"
+            )
+        return loss
+            
+
+
