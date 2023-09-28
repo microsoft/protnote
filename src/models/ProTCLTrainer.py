@@ -63,7 +63,7 @@ class ProTCLTrainer:
         )
         self.output_model_dir = config["paths"]["OUTPUT_MODEL_DIR"]
         self._set_optimizer(config["params"]["LEARNING_RATE"])
-        self.loss_fn = FocalLoss()#torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight)
+        self.loss_fn = torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight)
         self.model_path = self._get_saved_model_path()
 
     def _get_saved_model_path(self):

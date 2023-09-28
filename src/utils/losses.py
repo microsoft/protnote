@@ -75,7 +75,7 @@ class WeightedBCE(torch.nn.Module):
         return torch.nn.functional.binary_cross_entropy_with_logits(input, target, weight=weight_tensor)
     
 class FocalLoss(torch.nn.Module):
-    def __init__(self, gamma=2, alpha=0.25, reduction='mean', epsilon=1e-10):
+    def __init__(self, gamma=2, alpha=0.25, reduction='sum', epsilon=1e-10):
         super().__init__()
 
         self.gamma = gamma
