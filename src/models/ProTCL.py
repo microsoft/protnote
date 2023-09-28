@@ -35,23 +35,40 @@ class ProTCL(nn.Module):
         # TODO: This could change. Currently keeping latent dim.
         self.output_layer = get_mlp(
             latent_dim*2, output_dim, output_num_layers)
-
-    def _get_joint_embeddings(self, P_e, L_e):
-        # Input stats
+    
+    def _get_joint_embeddings(self, P_e, L_e, num_chunks=10):
         num_sequences = P_e.shape[0]
         num_labels = L_e.shape[0]
         sequence_embedding_dim = P_e.shape[1]
         label_embedding_dim = L_e.shape[1]
 
-        # Expand protein and label embeddings to all combinations of sequences and labels.
-        P_e_expanded = P_e.unsqueeze(
-            1).expand(-1, num_labels, -1).reshape(-1, sequence_embedding_dim)
-        L_e_expanded = L_e.unsqueeze(0).expand(
-            num_sequences, -1, -1).reshape(-1, label_embedding_dim)
-
-        # Conatenate protein and label embeddings. Shape: (batch_size, latent_dim*2)
-        joint_embeddings = torch.cat([P_e_expanded, L_e_expanded], dim=1)
+        # Calculate chunk size to distribute sequences into equal chunks, 
+        # with the last chunk possibly being smaller.
+        chunk_size = (num_sequences + num_chunks - 1) // num_chunks
+        
+        joint_embeddings_list = []
+        
+        for i in range(0, num_sequences, chunk_size):
+            # Get chunk of protein embeddings. The last chunk may be smaller than chunk_size.
+            P_e_chunk = P_e[i:i + chunk_size]
+            current_chunk_size = P_e_chunk.shape[0] 
+            
+            # Expand the current chunk of protein and label embeddings 
+            # to all combinations of sequences and labels within the chunk.
+            P_e_expanded = P_e_chunk.unsqueeze(1).expand(-1, num_labels, -1).reshape(-1, sequence_embedding_dim)
+            
+            # Note: It's important to use current_chunk_size here to ensure that we do not 
+            # expand more than necessary in case of the last smaller chunk.
+            L_e_expanded = L_e.unsqueeze(0).expand(current_chunk_size, -1, -1).reshape(-1, label_embedding_dim)
+            
+            # Concatenate protein and label embeddings and append to the list.
+            joint_embeddings_list.append(torch.cat([P_e_expanded, L_e_expanded], dim=1))
+        
+        # Concatenate all the processed chunks to get the final joint embeddings tensor.
+        joint_embeddings = torch.cat(joint_embeddings_list, dim=0)
+        
         return joint_embeddings, num_sequences, num_labels
+
 
     def forward(
         self,

@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
 
-
 # NOT CURRENTLY USING THIS
 # def contrastive_loss(P_e, L_e, t, target):
 #     """
@@ -59,7 +58,7 @@ class WeightedBCE(torch.nn.Module):
 
         self.epsilon = epsilon
 
-    def forward(self, output, target):
+    def forward(self, input, target):
         # Count the number of positives and negatives in the batch
         num_positives = target.sum() + self.epsilon  
         num_negatives = target.numel() - num_positives + self.epsilon  
@@ -73,6 +72,41 @@ class WeightedBCE(torch.nn.Module):
         weight_tensor = target * weight_positives + (1 - target) * weight_negatives
         
         # Compute weighted binary cross-entropy loss
-        return torch.nn.functional.binary_cross_entropy_with_logits(output, target, weight=weight_tensor)
+        return torch.nn.functional.binary_cross_entropy_with_logits(input, target, weight=weight_tensor)
+    
+class FocalLoss(torch.nn.Module):
+    def __init__(self, gamma=2, alpha=0.25, reduction='mean', epsilon=1e-10):
+        super().__init__()
+
+        self.gamma = gamma
+        self.alpha = alpha
+        self.epsilon = epsilon
+        self.reduction = reduction
+
+
+    def forward(self, input, target):
+        # Compute the focal loss
+        p = torch.sigmoid(input)
+        ce_loss = F.binary_cross_entropy_with_logits(input, target, reduction="none")
+        p_t = p * target + (1 - p) * (1 - target)
+        loss = ce_loss * ((1 - p_t) ** self.gamma)
+
+        if self.alpha >= 0:
+            alpha_t = self.alpha * target + (1 - self.alpha) * (1 - target)
+            loss = alpha_t * loss
+
+        # Check reduction option and return loss accordingly
+        if self.reduction == "none":
+            pass
+        elif self.reduction == "mean":
+            loss = loss.mean()
+        elif self.reduction == "sum":
+            loss = loss.sum()
+        else:
+            raise ValueError(
+                f"Invalid Value for arg 'reduction': '{self.reduction} \n Supported reduction modes: 'none', 'mean', 'sum'"
+            )
+        return loss
+            
 
 

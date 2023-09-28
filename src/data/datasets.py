@@ -10,6 +10,7 @@ from src.data.collators import collate_variable_sequence_length
 from collections import defaultdict
 from joblib import Parallel, delayed, cpu_count
 from functools import partial
+from collections import Counter
 
 
 class ProteinDataset(Dataset):
@@ -235,6 +236,30 @@ def calculate_pos_weight(data: list, num_labels: int):
     num_negative_labels = sum(res[1] for res in results)
     pos_weight = torch.tensor((num_negative_labels / num_positive_labels))
     return pos_weight
+
+def calculate_label_weights(data: list):
+    def count_labels(chunk):
+        label_freq = Counter()
+        for _, labels in chunk:
+            labels = labels[1:]
+            label_freq.update(labels)
+        return label_freq
+
+    chunk_size = max(len(data) // cpu_count(),1)  # Adjust chunk size if necessary.
+
+
+    results = Parallel(n_jobs=-1)(
+        delayed(count_labels)(data[i:i+chunk_size]) for i in range(0, len(data), chunk_size)
+    )
+
+    label_freq = Counter()
+    for result in results:
+        label_freq.update(result)
+    
+    #Inverse frequency
+    total = sum(label_freq.values())
+    label_inv_freq = {k: total/v for k, v in label_freq.items()}
+    return label_inv_freq
 
 
 def set_padding_to_sentinel(

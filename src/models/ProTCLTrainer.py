@@ -1,7 +1,7 @@
 import logging
 from src.utils.data import load_gz_json
 from src.utils.evaluation import EvalMetrics
-from src.utils.losses import WeightedBCE
+from src.utils.losses import WeightedBCE, FocalLoss
 from src.utils.proteinfer import normalize_confidences
 import numpy as np
 import torch
@@ -63,8 +63,21 @@ class ProTCLTrainer:
         )
         self.output_model_dir = config["paths"]["OUTPUT_MODEL_DIR"]
         self._set_optimizer(config["params"]["LEARNING_RATE"])
-        self.loss_fn = torch.nn.BCEWithLogitsLoss(
-            reduction='mean', pos_weight=pos_weight)
+        self.loss_fn = FocalLoss()#torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight)
+        self.model_path = self._get_saved_model_path()
+
+    def _get_saved_model_path(self):
+            # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
+        if not os.path.exists(self.output_model_dir):
+            os.makedirs(self.output_model_dir)
+
+        model_name = (
+            self.run_name if self.run_name else "best_ProTCL.pt"
+        )
+        model_path = os.path.join(
+            self.output_model_dir, f"{self.timestamp}_{model_name}.pt"
+        )
+        return model_path
 
     # TODO: Eventually use factory method to get loss_fn based on config
     def _get_loss_fn(self, config):
@@ -139,16 +152,12 @@ class ProTCLTrainer:
 
         self.logger.info("Running validation...")
 
-        eval_metrics = EvalMetrics(
-            num_labels=self.num_labels, threshold=0.85, device=self.device
-        ).get_metric_collection(type="all")
-
-        val_metrics, _ = self.evaluate(data_loader=val_loader,eval_metrics=eval_metrics)
+        val_metrics, _ = self.evaluate(data_loader=val_loader)
 
         self.logger.info(val_metrics)
 
         if self.use_wandb:
-            wandb.log({"validation_loss": val_metrics["avg_loss"],"validation_map_micro": val_metrics["map_micro"]})
+            wandb.log({"validation_loss": val_metrics["avg_loss"]})
 
         # Save the model if it has the best validation loss so far
         if val_metrics["avg_loss"] < best_val_loss:
@@ -157,18 +166,8 @@ class ProTCLTrainer:
             )
             best_val_loss = val_metrics["avg_loss"]
 
-            # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
-            if not os.path.exists(self.output_model_dir):
-                os.makedirs(self.output_model_dir)
-
-            model_name = (
-                self.run_name if self.run_name else "best_ProTCL.pt"
-            )
-            model_path = os.path.join(
-                self.output_model_dir, f"{self.timestamp}_{model_name}.pt"
-            )
-            torch.save(self.model.state_dict(), model_path)
-            self.logger.info(f"Saved model to {model_path}.")
+            torch.save(self.model.state_dict(), self.model_path)
+            self.logger.info(f"Saved model to {self.model_path}.")
 
             if self.use_wandb:
                 wandb.save(f"{self.timestamp}_best_ProTCL.pt")
@@ -302,12 +301,6 @@ class ProTCLTrainer:
             # Compute average validation loss
             avg_loss = total_loss / len(data_loader)
             final_metrics = eval_metrics.compute() if eval_metrics is not None else {}
-            final_metrics.update({"avg_loss": avg_loss})
-
-            final_metrics = {
-                k: (v.item() if isinstance(v, torch.Tensor) else v)
-                for k, v in final_metrics.items()
-            }
 
             for k, v in final_metrics.items():
                 if isinstance(v, torch.Tensor):
@@ -317,7 +310,9 @@ class ProTCLTrainer:
                 # because pyarrow doesn't support float16 from mixed precision
                 if np.issubdtype(type(v), np.floating):
                     final_metrics[k] = v.astype("float32")
-        
+
+            final_metrics.update({"avg_loss": avg_loss})
+            
         self.model.train()
         return final_metrics, test_results
 
@@ -450,3 +445,7 @@ class ProTCLTrainer:
 
                     nvtx.range_push("Data loading")  # Profiling: Data loading
                 nvtx.range_pop()  # Profiling: End data loading
+
+        #Set weights to best model
+        self.model.load_state_dict(torch.load(self.model_path))
+        self.logger.info("Restoring model to best validation loss...")
