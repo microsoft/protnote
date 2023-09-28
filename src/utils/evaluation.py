@@ -131,8 +131,8 @@ class EvalMetrics:
                 average=average,
             ).to(self.device)
 
-        label_centered_metrics["map"] = AveragePrecision(
-            num_labels=self.num_labels, task="multilabel", thresholds=100
+        label_centered_metrics["map_micro"] = AveragePrecision(
+            num_labels=self.num_labels, task="multilabel", thresholds=100,average='micro'
         ).to(self.device)
 
         return label_centered_metrics
@@ -168,6 +168,16 @@ class EvalMetrics:
         else:
             raise ValueError(f"Unknown type {type}")
         return MetricCollection(metrics)
+    
+    def get_metric_collection_with_regex(
+            self,pattern:str
+    ):  
+        import re
+        metrics = self.get_metric_collection(type="all")
+        metrics = {k: v for k, v in metrics.items() if re.match(pattern, k)}
+        return MetricCollection(metrics)
+
+
 
 
 def save_evaluation_results(results, label_vocabulary, run_name, output_dir):

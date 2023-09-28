@@ -100,13 +100,11 @@ args = parser.parse_args()
 # TODO: This could be more elegant with parser.add_subparsers()
 # Raise error if only one of train or val path is provided
 
-# TODO: We should be able to run without train but with val or test
-'''
-if (args.train_path_name is None) ^ (args.validation_path_name is None):
+if (args.train_path_name is not None)&(args.validation_path_name is None):
     parser.error(
-        "You must provide both --train-path-name and --val-path-name, or neither."
+        "If providing --train-path-name you must provide --val-path-name."
     )
-'''
+
 # Raise error if none of the paths are provided
 if args.test_paths_names is None and \
    (args.train_path_name is None or args.validation_path_name is None):
@@ -310,8 +308,8 @@ if args.load_model:
 ####### TRAINING AND VALIDATION LOOPS #######
 if args.train_path_name is not None:
     # Train function
-    Trainer.train(train_loader=loaders["train"]
-                  [0], val_loader=loaders["validation"][0])
+    Trainer.train(train_loader=loaders["train"][0],
+                  val_loader=loaders["validation"][0])
 else:
     logger.info("Skipping training...")
 
@@ -347,12 +345,17 @@ if args.validation_path_name:
     eval_metrics = EvalMetrics(
         num_labels=len(vocabularies["GO_label_vocab"]), threshold=best_val_th, device=device
     ).get_metric_collection(type="all")
-    validation_metrics, _ = Trainer.evaluate(
-        data_loader=val_loader, eval_metrics=eval_metrics
+    validation_metrics, validation_results = Trainer.evaluate(
+        data_loader=val_loader, eval_metrics=eval_metrics        
     )
-    validation_metrics = {
-        k: v.item() if isinstance(v, torch.Tensor) else v for k, v in validation_metrics.items()
-    }
+
+    # save_evaluation_results(results=validation_results,
+    #                         label_vocabulary=label_vocabulary,
+    #                         run_name=args.name,
+    #                         output_dir=os.path.join(
+    #                             ROOT_PATH, paths["RESULTS_DIR"])
+    #                         )
+
     logger.info(json.dumps(validation_metrics, indent=4))
     logger.info("Final validation complete.")
 
@@ -365,14 +368,13 @@ if args.test_paths_names:
         eval_metrics = EvalMetrics(
             num_labels=len(vocabularies["GO_label_vocab"]), threshold=best_val_th, device=device
         ).get_metric_collection(type="all")
-        metrics, test_results = Trainer.evaluate(
+        test_metrics, test_results = Trainer.evaluate(
             data_loader=test_loader, eval_metrics=eval_metrics
         )
-        metrics = {k: v.item() if isinstance(v, torch.Tensor)
-                   else v for k, v in metrics.items()}
+
         all_test_results.append(test_results)
-        all_test_metrics.append(metrics)
-        logger.info(json.dumps(metrics, indent=4))
+        all_test_metrics.append(test_metrics)
+        logger.info(json.dumps(test_metrics, indent=4))
         logger.info("Testing complete.")
 
 # Close the W&B run
