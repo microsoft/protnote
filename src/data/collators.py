@@ -29,6 +29,7 @@ def collate_variable_sequence_length(batch: List[Tuple], label_sample_size=None)
 
     # Initialize lists to store the processed values
     processed_sequence_onehots = []
+    processed_sequence_ids = []
     processed_sequence_embeddings = []
     processed_sequence_lengths = []
     processed_label_multihots = []
@@ -67,6 +68,7 @@ def collate_variable_sequence_length(batch: List[Tuple], label_sample_size=None)
     for row in batch:
         # Get the sequence onehots, sequence embedding, sequence length, label multihots, tokenized labels, and label embedding
         sequence_onehots = row["sequence_onehots"]
+        sequence_id = row["sequence_id"]
         sequence_embedding = row["sequence_embedding"]
         sequence_length = row["sequence_length"]
         label_multihots = row["label_multihots"]
@@ -93,6 +95,7 @@ def collate_variable_sequence_length(batch: List[Tuple], label_sample_size=None)
             processed_sequence_embeddings.append(sequence_embedding)
         processed_sequence_lengths.append(sequence_length)
         processed_label_multihots.append(label_multihots)
+        processed_sequence_ids.append(sequence_id)
 
     if len(processed_sequence_embeddings) == len(processed_sequence_onehots):
         processed_sequence_embeddings = torch.stack(
@@ -100,6 +103,7 @@ def collate_variable_sequence_length(batch: List[Tuple], label_sample_size=None)
 
     return {
         "sequence_onehots": torch.stack(processed_sequence_onehots),
+        "sequence_ids": processed_sequence_ids,
         "sequence_embeddings": processed_sequence_embeddings,
         "sequence_lengths": torch.stack(processed_sequence_lengths),
         "label_multihots": torch.stack(processed_label_multihots),

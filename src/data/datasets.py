@@ -17,14 +17,11 @@ class ProteinDataset(Dataset):
     Dataset class for protein sequences with GO annotations.
     """
 
-    def __init__(self, paths: dict, label_tokenizer=None, subset_fraction: float = 1.0):
+    def __init__(self, paths: dict, vocabularies: dict, label_tokenizer=None, subset_fraction: float = 1.0):
         """
         paths (dict): Dictionary containing paths to the data and vocabularies.
             data_path (str): Path to the FASTA file containing the protein sequences and corresponding GO annotations
             dataset_type (str): One of 'train', 'validation', or 'test'
-            amino_acid_vocabulary_path (str): Path to the JSON file containing the amino acid vocabulary (Optional) (default: None)
-            label_vocabulary_path (str): Path to the JSON file containing the label vocabulary (Optional) (default: None)
-            sequence_id_vocabulary_path (str): Path to the JSON file containing the sequence ID vocabulary (Optional) (default: None)
             go_descriptions_path (str): Path to the pickled file containing the GO term descriptions mapped to GO term IDs
         deduplicate (bool): Whether to remove duplicate sequences (default: False)
         """
@@ -43,16 +40,17 @@ class ProteinDataset(Dataset):
 
         # Set default values for paths not provided
         self.dataset_type = paths["dataset_type"]
-        self.amino_acid_vocabulary_path = paths.get(
-            "amino_acid_vocabulary_path", None)
-        self.label_vocabulary_path = paths.get("label_vocabulary_path", None)
-        self.sequence_id_vocabulary_path = paths.get(
-            "sequence_id_vocabulary_path", None
-        )
+
+        self.data_path = paths["data_path"]
+
+        # Set and process the vocabularies
+        self.amino_acid_vocabulary = vocabularies["amino_acid_vocab"]
+        self.label_vocabulary = vocabularies["GO_label_vocab"]
+        self.sequence_id_vocabulary = vocabularies["sequence_id_vocab"]
+        self._process_vocab()
 
         # Initialize class variables
         self.data = read_fasta(paths["data_path"])
-        self.amino_acid_vocabulary_size = self.label_vocabulary_size = self.sequence_id_vocabulary_size = None
         self.label_embedding_matrix = self.sequence_embedding_dict = None
 
         # Subset the data if subset_fraction is provided (to improve training speed)
@@ -61,9 +59,6 @@ class ProteinDataset(Dataset):
                 f"Subsetting {subset_fraction*100}% of the {self.dataset_type} set..."
             )
             self.data = self.data[:int(subset_fraction * len(self.data))]
-
-        # Load vocabularies
-        self._process_vocab()
 
         # Load the map from alphanumeric label id to text label
         self.label_annotation_map = {key: value['label'] for key, value in read_pickle(
@@ -92,58 +87,18 @@ class ProteinDataset(Dataset):
         self._process_sequence_id_vocab()
 
     def _process_amino_acid_vocab(self):
-        if self.amino_acid_vocabulary_path is not None:
-            self.amino_acid_vocabulary = read_json(
-                self.amino_acid_vocabulary_path)
-        else:
-            # Throw an error if the amino acid vocabulary path is not provided
-            raise ValueError(
-                "No amino acid vocabulary path provided. Please provide an amino acid vocabulary path."
-            )
         self.aminoacid2int, self.int2aminoacid = get_vocab_mappings(
             self.amino_acid_vocabulary
         )
 
     def _process_label_vocab(self):
-        if self.label_vocabulary_path is not None:
-            self.label_vocabulary = read_json(self.label_vocabulary_path)
-        else:
-            # Throw an error if the label vocabulary path is not provided
-            raise ValueError(
-                "No label vocabulary path provided. Please provide a label vocabulary path. \
-                The vocabulary should be a JSON file containing a list of labels, inclusive of train, validation, and test sets."
-            )
         self.label2int, self.int2label = get_vocab_mappings(
             self.label_vocabulary)
 
     def _process_sequence_id_vocab(self):
-        if self.sequence_id_vocabulary_path is not None:
-            self.sequence_id_vocabulary = read_json(
-                self.sequence_id_vocabulary_path)
-        else:
-            self.sequence_id_vocabulary = set()
-            for obs in self.data:
-                self.sequence_id_vocabulary.add(obs[1][0])
-            self.sequence_id_vocabulary = sorted(
-                list(self.sequence_id_vocabulary))
         self.sequence_id2int, self.int2sequence_id = get_vocab_mappings(
             self.sequence_id_vocabulary
         )
-
-    def get_amino_acid_vocabulary_size(self):
-        if self.amino_acid_vocabulary_size is None:
-            self.amino_acid_vocabulary_size = len(self.amino_acid_vocabulary)
-        return self.amino_acid_vocabulary_size
-
-    def get_label_vocabulary_size(self):
-        if self.label_vocabulary_size is None:
-            self.label_vocabulary_size = len(self.label_vocabulary)
-        return self.label_vocabulary_size
-
-    def get_sequence_id_vocabulary_size(self):
-        if self.sequence_id_vocabulary_size is None:
-            self.sequence_id_vocabulary_size = len(self.sequence_id_vocabulary)
-        return self.sequence_id_vocabulary_size
 
     def __len__(self) -> int:
         return len(self.data)
@@ -165,10 +120,10 @@ class ProteinDataset(Dataset):
 
         # Get multi-hot encoding of sequence and labels
         sequence_onehots = torch.nn.functional.one_hot(
-            amino_acid_ints, num_classes=self.get_amino_acid_vocabulary_size()
+            amino_acid_ints, num_classes=len(self.amino_acid_vocabulary)
         ).permute(1, 0)
         label_multihots = torch.nn.functional.one_hot(
-            labels_ints, num_classes=self.get_label_vocabulary_size()
+            labels_ints, num_classes=len(self.label_vocabulary)
         ).sum(dim=0)
 
         # Set the label embeddings, if provided
@@ -185,6 +140,7 @@ class ProteinDataset(Dataset):
         # Return a dict containing the processed example
         return {
             "sequence_onehots": sequence_onehots,
+            "sequence_id": sequence_id_alphanumeric,
             "sequence_embedding": sequence_embedding,
             "sequence_length": sequence_length,
             "label_multihots": label_multihots,
@@ -198,7 +154,7 @@ class ProteinDataset(Dataset):
 
     @classmethod
     def create_multiple_datasets(
-        cls, paths_list: List[Dict[str, str]], subset_fractions: dict = None, label_tokenizer=None,
+        cls, paths_list: List[Dict[str, str]], vocabularies: dict, subset_fractions: dict = None, label_tokenizer=None,
     ) -> List[Dataset]:
         """
         paths_list (List[Dict[str, str]]): List of dictionaries, each containing paths to the data and vocabularies.
@@ -208,7 +164,7 @@ class ProteinDataset(Dataset):
         subset_fractions = subset_fractions or {}
         for paths in paths_list:
             datasets[paths["dataset_type"]].append(
-                cls(paths, label_tokenizer=label_tokenizer, subset_fraction=subset_fractions.get(
+                cls(paths, vocabularies, label_tokenizer=label_tokenizer, subset_fraction=subset_fractions.get(
                     paths["dataset_type"], 1.0))
             )
         return datasets

@@ -17,6 +17,7 @@ class ProTCLTrainer:
         model: torch.nn.Module,
         device: str,
         config: dict,
+        vocabularies: dict,
         logger: logging.Logger,
         timestamp: str,
         run_name: str,
@@ -47,7 +48,7 @@ class ProTCLTrainer:
         self.logger = logger
         self.timestamp = timestamp
         self.use_wandb = use_wandb
-        self.num_labels = config["params"]["NUM_LABELS"]
+        self.num_labels = len(vocabularies["GO_label_vocab"])
         self.num_epochs = config["params"]["NUM_EPOCHS"]
         self.train_sequence_encoder = config["params"]["TRAIN_SEQUENCE_ENCODER"]
         self.train_label_encoder = config["params"]["TRAIN_LABEL_ENCODER"]
@@ -56,7 +57,7 @@ class ProTCLTrainer:
         self.normalize_probabilities = config["params"]["NORMALIZE_PROBABILITIES"]
         self.validations_per_epoch = config["params"]["VALIDATIONS_PER_EPOCH"]
         self.gradient_accumulation_steps = config["params"]["GRADIENT_ACCUMULATION_STEPS"]
-        self.label_vocabulary = config["paths"]["GO_LABEL_VOCAB_PATH"]
+        self.vocabularies = vocabularies
         self.label_normalizer = load_gz_json(
             config["paths"]["PARENTHOOD_LIB_PATH"]
         )
@@ -207,7 +208,7 @@ class ProTCLTrainer:
                     probabilities = torch.tensor(
                         normalize_confidences(
                             predictions=probabilities.detach().cpu().numpy(),
-                            label_vocab=self.label_vocabulary,
+                            label_vocab=self.vocabularies["GO_label_vocab"],
                             applicable_label_dict=self.label_normalizer,
                         ),
                         device=self.device,
@@ -273,7 +274,7 @@ class ProTCLTrainer:
                         probabilities = torch.tensor(
                             normalize_confidences(
                                 predictions=probabilities.detach().cpu().numpy(),
-                                label_vocab=self.label_vocabulary,
+                                label_vocab=self.vocabularies["GO_label_vocab"],
                                 applicable_label_dict=self.label_normalizer,
                             ),
                             device=self.device,

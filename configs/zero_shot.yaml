@@ -8,9 +8,9 @@ params:
   LATENT_EMBEDDING_DIM: 1024
   OUTPUT_DIM: 1024
   OUTPUT_NUM_LAYERS: 2
-  NUM_EPOCHS: 5
+  NUM_EPOCHS: 20
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 is essentially no gradient accumulation
-  POS_WEIGHT: 50 # 671.7130737304688
+  POS_WEIGHT: 50 #671.7130737304688
   
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False
@@ -55,24 +55,24 @@ embed_sequences_params:
 # Paths to data, vocabularies, embeddings, and models
 relative_paths:
   # ProteInfer data paths
-  TRAIN_DATA_PATH: data/swissprot/proteinfer_splits/random/train_GO.fasta
-  VAL_DATA_PATH: data/swissprot/proteinfer_splits/random/dev_GO.fasta
-  TEST_DATA_PATH: data/swissprot/proteinfer_splits/random/test_GO.fasta
-  FULL_DATA_PATH: data/swissprot/proteinfer_splits/random/full_GO.fasta # used to generate vocabularies
+  # TRAIN_DATA_PATH: data/swissprot/proteinfer_splits/random/train_GO.fasta
+  # VAL_DATA_PATH: data/swissprot/proteinfer_splits/random/dev_GO.fasta
+  # TEST_DATA_PATH: data/swissprot/proteinfer_splits/random/test_GO.fasta
+  # FULL_DATA_PATH: data/swissprot/proteinfer_splits/random/full_GO.fasta # used to generate vocabularies
 
   # Zero shot data paths
   ZERO_SHOT_DATA_PATH: data/zero_shot/SwissProt_2023_unseen_sequences_and_labels.fasta
 
   # Vocabulary paths
-  VOCABULARIES_DIR: data/vocabularies/proteinfer
-  GO_ANNOTATIONS_PATH: data/annotations/go_annotations_2019_07_01.pkl
+  VOCABULARIES_DIR: data/vocabularies/zero_shot
+  GO_ANNOTATIONS_PATH: data/annotations/go_annotations_2023_07_23.pkl
 
   # Embeddings paths (if using frozen pre-trained models)
-  LABEL_EMBEDDING_PATH: data/embeddings/proteinfer/frozen_BioGPT_label_embeddings.pkl
-  SEQUENCE_EMBEDDING_PATH: data/embeddings/proteinfer/frozen_proteinfer_sequence_embeddings.pkl
+  # LABEL_EMBEDDING_PATH: data/embeddings/proteinfer/frozen_BioGPT_label_embeddings.pkl
+  # SEQUENCE_EMBEDDING_PATH: data/embeddings/proteinfer/frozen_proteinfer_sequence_embeddings.pkl
  
   # Where to save the model
-  OUTPUT_MODEL_DIR: models/ProTCL
+  OUTPUT_MODEL_DIR: models/ProTCL/zero_shot
 
   # Where to save results
   RESULTS_DIR: results/

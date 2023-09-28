@@ -55,6 +55,10 @@ def process_data(data_file_path, sequence_embedding_file_path, label_embedding_f
     df_2023['subcellular_location'] = df_2023.cc.apply(
         lambda x: x.get('SUBCELLULAR LOCATION'))
 
+    # Save df_2023 to a file
+    df_2023.to_pickle(
+        "/home/ncorley/protein/ProteinFunctions/data/swissprot/swissprot_2023.pkl")
+
     # Load the sequence embeddings from the file and make a set of the sequence strings
     # TODO: Pass something other than the sequence embedding file path. Maybe the sequence embedding vocabulary, or even the ProteInfer data file?
     with open(sequence_embedding_file_path, 'rb') as f:
@@ -116,8 +120,9 @@ def process_data(data_file_path, sequence_embedding_file_path, label_embedding_f
 if __name__ == "__main__":
     """
     Example usage:
-    python make_zero_shot_dataset.py data/swissprot/uniprot_sprot.dat data/embeddings/frozen_proteinfer_sequence_embeddings.pkl data/embeddings/frozen_PubMedBERT_label_embeddings.pkl data/zero_shot/SwissProt_2023_unseen_sequences_and_labels.fasta
+    python make_zero_shot_dataset.py data/swissprot/uniprot_sprot.dat data/embeddings/proteinfer/frozen_proteinfer_sequence_embeddings.pkl data/embeddings/proteinfer/frozen_BioGPT_label_embeddings.pkl data/zero_shot/SwissProt_2023_unseen_sequences_and_labels.fasta
     """
+    # TODO: Refactor this into two scripts, and use vocabularies instead of embeddings
     parser = argparse.ArgumentParser(
         description="Process SwissProt data and generate a FASTA file.")
     parser.add_argument("data_file_path", type=str,

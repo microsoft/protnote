@@ -71,7 +71,8 @@ class SamplewiseCoverage(Metric):
 
     def update(self, probas: torch.Tensor, _labels: torch.Tensor):
         # Count samples that have at least one positive prediction
-        self.at_least_one_positive_pred += (probas > self.threshold).any(axis=1).sum()
+        self.at_least_one_positive_pred += (probas >
+                                            self.threshold).any(axis=1).sum()
         # Count total samples
         self.total_samples += probas.size(0)
 
@@ -168,17 +169,19 @@ class EvalMetrics:
             raise ValueError(f"Unknown type {type}")
         return MetricCollection(metrics)
 
+
 def save_evaluation_results(results, label_vocabulary, run_name, output_dir):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     label_df = pd.DataFrame(results['labels'],
-                        columns=label_vocabulary,
-                        index=results['sequence_ids'])
+                            columns=label_vocabulary,
+                            index=results['sequence_ids'])
 
     probabilities_df = pd.DataFrame(results['probabilities'],
-                        columns=label_vocabulary,
-                        index=results['sequence_ids'])
+                                    columns=label_vocabulary,
+                                    index=results['sequence_ids'])
 
-    label_df.to_parquet(os.path.join(output_dir,f'labels_{run_name}.parquet'))
-    probabilities_df.to_parquet(os.path.join(output_dir,f'probabilities_{run_name}.parquet'))
+    label_df.to_parquet(os.path.join(output_dir, f'labels_{run_name}.parquet'))
+    probabilities_df.to_parquet(os.path.join(
+        output_dir, f'probabilities_{run_name}.parquet'))

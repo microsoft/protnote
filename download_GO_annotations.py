@@ -50,7 +50,8 @@ def download_and_process_obo(url: str, output_file: str):
 
 if __name__ == "__main__":
     """
-    Example usage: python download_GO_annotations.py http://release.geneontology.org/2019-07-01/ontology/go.obo data/annotations/go_annotations_2019_07_01.pkl
+    2019 Option: python download_GO_annotations.py http://release.geneontology.org/2019-07-01/ontology/go.obo data/annotations/go_annotations_2019_07_01.pkl
+    2023 Option: python download_GO_annotations.py http://release.geneontology.org/2023-07-27/ontology/go.obo data/annotations/go_annotations_2023_07_27.pkl
     """
     # TODO: Make more general so accepts any obo URL
     # TODO: output path should be enforced for standardization. e.g. final pkl should always be in data/annotations/.

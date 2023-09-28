@@ -1,8 +1,5 @@
-import os
 import torch
 import logging
-import sys
-import select
 
 
 def count_parameters_by_layer(model):
@@ -54,59 +51,6 @@ def count_parameters_by_layer(model):
     logging.info(line)
 
 
-def get_or_generate_label_embeddings(
-    paths,
-    device,
-    label_annotations,
-    label_tokenizer,
-    label_encoder,
-    logger,
-    label_batch_size_limit
-):
-    """
-    Load or generate label embeddings based on the provided paths and parameters.
-
-    Returns:
-        label_embedding_matrix: The ordered matrix of label embeddings.
-    """
-    if os.path.exists(paths["LABEL_EMBEDDING_PATH"]):
-        label_embedding_matrix = torch.load(
-            paths["LABEL_EMBEDDING_PATH"], map_location=device)
-        logger.info(
-            f"Loaded label embeddings from {paths['LABEL_EMBEDDING_PATH']}")
-    else:
-        # Tokenize the labels
-        logger.info("Tokenzing all labels...")
-        tokenized_labels = tokenize_labels(label_annotations, label_tokenizer)
-
-        logger.info("Getting embeddings for all tokenized labels...")
-        with torch.no_grad():
-            label_embedding_matrix = get_label_embeddings(
-                tokenized_labels, label_encoder, batch_size_limit=label_batch_size_limit
-            ).cpu()
-
-        logger.info("Done tokenizing all labels and getting embeddings.")
-
-        # Prompt the user for the file path to save the label embeddings
-        print("Enter the full file path to save the label embeddings, or hit enter to continue without saving: ")
-
-        # Wait for user input for up to 60 seconds
-        rlist, _, _ = select.select([sys.stdin], [], [], 60)
-
-        # Check if user input was received
-        if rlist:
-            file_path = sys.stdin.readline().strip()
-            if file_path:
-                torch.save(label_embedding_matrix, file_path)
-                print(f"Saved label embeddings to {file_path}")
-            else:
-                print("Label embeddings not saved.")
-        else:
-            print("No input received. Continuing without saving label embeddings.")
-
-    return label_embedding_matrix
-
-
 def tokenize_labels(text, tokenizer, max_length=1024):
     """
     Tokenize a list of text strings.
@@ -155,3 +99,10 @@ def get_label_embeddings(tokenized_labels, model, batch_size_limit=300):
 
     # Concatenate all the label embeddings
     return torch.cat(all_label_embeddings, dim=0)
+
+
+def generate_label_embeddings_from_text(label_annotations, label_tokenizer, label_encoder, label_batch_size_limit):
+    """Tokenize the labels and generate label embeddings."""
+    tokenized_labels = tokenize_labels(label_annotations, label_tokenizer)
+    with torch.no_grad():
+        return get_label_embeddings(tokenized_labels, label_encoder, batch_size_limit=label_batch_size_limit).cpu()

@@ -2,14 +2,14 @@ import logging
 from src.utils.data import (
     load_model_weights,
     seed_everything,
-    read_pickle,
 )
+from src.utils.main_utils import get_or_generate_vocabularies,  get_or_generate_label_embeddings, get_or_generate_sequence_embeddings
 from src.data.datasets import ProteinDataset, calculate_pos_weight, create_multiple_loaders
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
 from src.models.protein_encoders import ProteInfer
 from src.utils.evaluation import EvalMetrics, save_evaluation_results
-from src.utils.models import count_parameters_by_layer, get_or_generate_label_embeddings
+from src.utils.models import count_parameters_by_layer
 from src.utils.configs import get_setup
 from torch.utils.data import DataLoader
 import torch
@@ -40,6 +40,13 @@ parser.add_argument(
     type=str,
     default=None,
     help="Specify the desired val path name to validate the model during training using names from config file. If not provided, model will not be trained. If provided, must also provide --train-path.",
+)
+
+parser.add_argument(
+    "--full-path-name",
+    type=str,
+    default='FULL_DATA_PATH',
+    help="Specify the desired full path name to define the vocabularies. Defaults to the full path name in the config file.",
 )
 
 parser.add_argument(
@@ -133,10 +140,15 @@ logger.info(json.dumps(params, indent=4))
 label_tokenizer = AutoTokenizer.from_pretrained(
     params['LABEL_ENCODER_CHECKPOINT'])
 
+# Load or generate the vocabularies
+vocabularies = get_or_generate_vocabularies(
+    paths[args.full_path_name], paths["VOCABULARIES_DIR"], logger)
+
 # Create datasets
 datasets = ProteinDataset.create_multiple_datasets(
     paths_list,
     label_tokenizer=label_tokenizer,
+    vocabularies=vocabularies,
     subset_fractions={
         "train": params["TRAIN_SUBSET_FRACTION"],
         "validation": params["VALIDATION_SUBSET_FRACTION"],
@@ -148,7 +160,7 @@ seed_everything(params["SEED"], device)
 
 # Initialize new run
 logger.info(
-    f"################## {timestamp} RUNNING train.py ##################")
+    f"################## {timestamp} RUNNING main.py ##################")
 
 # Initialize W&B, if using
 if args.use_wandb:
@@ -158,6 +170,8 @@ if args.use_wandb:
         config={**params, **vars(args)},
         entity="microsoft-research-incubation"
     )
+    # Log the wandb link
+    logger.info(f"W&B link: {wandb.run.get_url()}")
 
 # Define label sample sizes for train, validation, and test loaders
 label_sample_sizes = {
@@ -179,18 +193,18 @@ loaders = create_multiple_loaders(
 # Maybe we load label2int from the JSON vocabulary upfront and pass that to the dataset?
 label2int = datasets[list(datasets.keys())[0]][0].label2int
 int2label = datasets[list(datasets.keys())[0]][0].int2label
-label_vocabulary = datasets[list(datasets.keys())[0]][0].label_vocabulary
 label_annotation_map = datasets[list(datasets.keys())[
     0]][0].label_annotation_map
 
 # Load label encoder
-label_encoder = AutoModel.from_pretrained("microsoft/biogpt")
+label_encoder = AutoModel.from_pretrained(params['LABEL_ENCODER_CHECKPOINT'])
 
 # Generate all label embeddings upfront, if not training the label encoder
 label_embedding_matrix = None
 if not params["TRAIN_LABEL_ENCODER"]:
     # Create a list of text labels
-    sorted_labels = sorted(label_vocabulary, key=lambda x: label2int[x])
+    sorted_labels = sorted(
+        vocabularies["GO_label_vocab"], key=lambda x: label2int[x])
     label_annotations = [label_annotation_map[label_id]
                          for label_id in sorted_labels]
     label_encoder = label_encoder.to(device)
@@ -210,7 +224,7 @@ if not params["TRAIN_LABEL_ENCODER"]:
 # Initialize ProteInfer
 sequence_encoder = ProteInfer.from_pretrained(
     weights_path=paths["PROTEINFER_WEIGHTS_PATH"],
-    num_labels=params["NUM_LABELS"],
+    num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"],
     input_channels=config["embed_sequences_params"]["INPUT_CHANNELS"],
     output_channels=config["embed_sequences_params"]["OUTPUT_CHANNELS"],
     kernel_size=config["embed_sequences_params"]["KERNEL_SIZE"],
@@ -223,15 +237,14 @@ sequence_encoder = ProteInfer.from_pretrained(
 # Generate all sequence embeddings upfront, if not training the sequence encoder
 sequence_embedding_dict = None
 if not params["TRAIN_SEQUENCE_ENCODER"]:
-    # TODO: Add option to compute sequence embeddings on the fly (could create a new dataset by combining all datasets)
-    # If not training the sequence encoder and given a pre-computed sequence embedding file, load the sequence embeddings from disk
-    sequence_embedding_dict = read_pickle(
-        paths["SEQUENCE_EMBEDDING_PATH"])
-    # Convert values from arrays to tensors
-    sequence_embedding_dict = {k: torch.tensor(
-        v) for k, v in sequence_embedding_dict.items()}
-    logger.info(
-        f"Loaded sequence embeddings from {paths['SEQUENCE_EMBEDDING_PATH']}")
+    sequence_embedding_dict = get_or_generate_sequence_embeddings(
+        paths,
+        device,
+        sequence_encoder,
+        datasets,
+        params,
+        logger,
+    )
 
 # Loop through all the datasets and set the label and sequence embedding matrices
 for dataset in datasets.values():
@@ -278,6 +291,7 @@ Trainer = ProTCLTrainer(
     model=model,
     device=device,
     config={"params": params, "paths": paths},
+    vocabularies=vocabularies,
     logger=logger,
     timestamp=timestamp,
     run_name=args.name,
@@ -305,6 +319,11 @@ else:
 all_test_results = []
 all_test_metrics = []
 
+if not params["DECISION_TH"] and not args.validation_path_name:
+    raise ValueError(
+        "DECISION_TH is not provided and no validation set is provided to calculate it.")
+
+best_val_th = params["DECISION_TH"]
 # Setup for validation
 if args.validation_path_name:
     val_loader = DataLoader(
@@ -323,12 +342,10 @@ if args.validation_path_name:
             data_loader=val_loader,
             optimization_metric_name="f1_micro",
         )
-    else:
-        best_val_th = params["DECISION_TH"]
 
     logger.info("====Testing on validation set====")
     eval_metrics = EvalMetrics(
-        num_labels=params["NUM_LABELS"], threshold=best_val_th, device=device
+        num_labels=len(vocabularies["GO_label_vocab"]), threshold=best_val_th, device=device
     ).get_metric_collection(type="all")
     validation_metrics, _ = Trainer.evaluate(
         data_loader=val_loader, eval_metrics=eval_metrics
@@ -344,8 +361,9 @@ if args.test_paths_names:
     logger.info("Starting testing...")
     for idx, test_loader in enumerate(loaders["test"]):
         logger.info(f"====Testing on test set #{idx}====")
+        # If best_val_th is not defined, alert an error to either provide a decision threshold or a validation datapath
         eval_metrics = EvalMetrics(
-            num_labels=params["NUM_LABELS"], threshold=best_val_th, device=device
+            num_labels=len(vocabularies["GO_label_vocab"]), threshold=best_val_th, device=device
         ).get_metric_collection(type="all")
         metrics, test_results = Trainer.evaluate(
             data_loader=test_loader, eval_metrics=eval_metrics

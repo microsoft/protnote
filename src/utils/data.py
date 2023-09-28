@@ -8,7 +8,6 @@ import yaml
 import random
 import numpy as np
 import wget
-from transformers.tokenization_utils_base import BatchEncoding
 
 
 def read_fasta(data_path: str, sep=" "):
@@ -57,26 +56,6 @@ def read_pickle(file_path: str):
     return item
 
 
-def chunks(data, n):
-    """Yield successive n-sized chunks from data."""
-    if isinstance(data, dict) or isinstance(data, BatchEncoding):
-        num_items = len(next(iter(data.values())))
-        for i in range(0, num_items, n):
-            yield {key: value[i:i + n] for key, value in data.items()}
-    elif isinstance(data, list) or isinstance(data, tuple):
-        for i in range(0, len(data), n):
-            yield data[i:i + n]
-    else:
-        raise ValueError(
-            f"Data type {type(data)} not supported for chunking.")
-
-
-def load_gz_json(path):
-    with open(path, "rb") as f:
-        with gzip.GzipFile(fileobj=f, mode="rb") as gzip_file:
-            return json.load(gzip_file)
-
-
 def download_and_unzip(url, output_file):
     """
     Download a file from a given link and unzip it.
@@ -113,3 +92,9 @@ def seed_everything(seed: int, device: str):
     torch.manual_seed(seed)
     if device == "cuda":
         torch.cuda.manual_seed_all(seed)
+
+
+def load_gz_json(path):
+    with open(path, "rb") as f:
+        with gzip.GzipFile(fileobj=f, mode="rb") as gzip_file:
+            return json.load(gzip_file)

@@ -7,15 +7,15 @@ from src.utils.models import get_label_embeddings
 class ProTCL(nn.Module):
     def __init__(
         self,
-        protein_embedding_dim,
-        label_embedding_dim,
-        latent_dim,
-        label_encoder,
-        sequence_encoder,
-        train_label_encoder,
-        train_sequence_encoder,
-        output_dim,
-        output_num_layers
+        protein_embedding_dim=1100,
+        label_embedding_dim=1024,
+        latent_dim=1024,
+        label_encoder=None,
+        sequence_encoder=None,
+        train_label_encoder=False,
+        train_sequence_encoder=False,
+        output_dim=1024,
+        output_num_layers=2
     ):
         super().__init__()
 
@@ -63,6 +63,7 @@ class ProTCL(nn.Module):
     ):
         """
         Forward pass of the model.
+        Returns a representation of the similarity between each sequence and each label.
         args:
             sequence_onehots (optional): Tensor of one-hot encoded protein sequences.
             sequence_embeddings (optional): Tensor of pre-trained sequence embeddings.
@@ -118,7 +119,7 @@ class ProTCL(nn.Module):
         joint_embeddings, num_sequences, num_labels = self._get_joint_embeddings(
             P_e, L_e)
 
-        # Feed through MLP
+        # Feed through MLP to get logits (which represent similarities)
         logits = self.output_layer(joint_embeddings)
 
         # Reshape for loss function
@@ -128,7 +129,7 @@ class ProTCL(nn.Module):
 
     def clear_label_embeddings_cache(self):
         """
-        Clears the cached label embeddings, forcing the model to recompute them on the next forward pass or validation step.
+        Clears the cached label embeddings, forcing the model to recompute them on the next forward pass.
         """
         self.cached_label_embeddings = None
 
