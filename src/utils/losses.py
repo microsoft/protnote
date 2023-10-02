@@ -51,8 +51,15 @@ import torch.nn.functional as F
 #     # Return the weighted average of the positive and negative losses
 #     return ((loss_pos / (num_pos + epsilon)) + (loss_neg / (num_neg + epsilon))).mean()
 
+class RGDBCE(torch.nn.Module):
+    def __init__(self,temp):
+        self.temp = temp
 
-class WeightedBCE(torch.nn.Module):
+    def forward(self,input,target):
+        loss = torch.nn.functional.binary_cross_entropy_with_logits(input, target,reduce='none')
+        return torch.exp(torch.clamp(loss.detach(),max=self.temp)/(self.temp+1))
+
+class BatchWeightedBCE(torch.nn.Module):
     def __init__(self, epsilon=1e-10):
         super().__init__()
 
@@ -73,9 +80,30 @@ class WeightedBCE(torch.nn.Module):
         
         # Compute weighted binary cross-entropy loss
         return torch.nn.functional.binary_cross_entropy_with_logits(input, target, weight=weight_tensor)
-    
+
+class BatchLabelWeightedBCE(torch.nn.Module):
+    def __init__(self, epsilon=1e-10):
+        super().__init__()
+
+        self.epsilon = epsilon
+
+    def forward(self, input, target):
+        total_labels = target.sum() + self.epsilon #epsilon in case all labels are 0 due to high imbalance
+        label_frequencies = target.sum(axis=0)/total_labels
+
+        label_frequencies = torch.where(
+            label_frequencies == 0, 
+            torch.ones_like(label_frequencies), 
+            1 / label_frequencies
+        )
+
+        weights = label_frequencies / label_frequencies.sum()
+
+        # Compute weighted binary cross-entropy loss
+        return torch.nn.functional.binary_cross_entropy_with_logits(input, target, weight=weights.unsqueeze(0))
+
 class FocalLoss(torch.nn.Module):
-    def __init__(self, gamma=2, alpha=0.25, reduction='sum', epsilon=1e-10):
+    def __init__(self, gamma=2, alpha=0.25, reduction='mean', epsilon=1e-10):
         super().__init__()
 
         self.gamma = gamma

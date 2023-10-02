@@ -1,7 +1,8 @@
 import logging
 from src.utils.data import load_gz_json
 from src.utils.evaluation import EvalMetrics
-from src.utils.losses import WeightedBCE, FocalLoss
+from src.utils.losses import BatchWeightedBCE, FocalLoss
+from torchmetrics import MetricCollection, Metric
 from src.utils.proteinfer import normalize_confidences
 import numpy as np
 import torch
@@ -10,7 +11,6 @@ import os
 import json
 from collections import defaultdict
 import torch.cuda.nvtx as nvtx
-
 
 class ProTCLTrainer:
     def __init__(
@@ -23,7 +23,7 @@ class ProTCLTrainer:
         timestamp: str,
         run_name: str,
         use_wandb: bool = False,
-        pos_weight: torch.Tensor = None,
+        bce_pos_weight: torch.Tensor = None,
 
     ):
         """_summary_
@@ -49,7 +49,6 @@ class ProTCLTrainer:
         self.logger = logger
         self.timestamp = timestamp
         self.use_wandb = use_wandb
-        self.num_labels = len(vocabularies["GO_label_vocab"])
         self.num_epochs = config["params"]["NUM_EPOCHS"]
         self.train_sequence_encoder = config["params"]["TRAIN_SEQUENCE_ENCODER"]
         self.train_label_encoder = config["params"]["TRAIN_LABEL_ENCODER"]
@@ -64,8 +63,10 @@ class ProTCLTrainer:
         )
         self.output_model_dir = config["paths"]["OUTPUT_MODEL_DIR"]
         self._set_optimizer(config["params"]["LEARNING_RATE"])
-        self.loss_fn = torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight)
+        self.bce_pos_weight = bce_pos_weight
+        self.loss_fn = self._get_loss_fn(config)
         self.model_path = self._get_saved_model_path()
+        self.best_val_metric = 0.0
 
     def _get_saved_model_path(self):
             # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
@@ -82,7 +83,18 @@ class ProTCLTrainer:
 
     # TODO: Eventually use factory method to get loss_fn based on config
     def _get_loss_fn(self, config):
-        pass
+        if config["params"]["LOSS_FN"] == "BCE":
+            assert self.bce_pos_weight is not None, "bce_pos_weight must be provided for BCE loss"
+            return torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self.bce_pos_weight)
+        elif config["params"]["LOSS_FN"] == "BatchWeightedBCE":
+            return BatchWeightedBCE()
+        elif config["params"]["LOSS_FN"] == "FocalLoss":
+            assert (config["params"]["FOCAL_LOSS_GAMMA"] is not None)\
+                   &(config["params"]["FOCAL_LOSS_ALPHA"] is not None), "gamma and gamma must be provided for FocalLoss"
+            return FocalLoss(gamma=config["params"]["FOCAL_LOSS_GAMMA"], alpha=config["params"]["FOCAL_LOSS_ALPHA"])
+        else:
+            raise ValueError(f"Unknown loss function {config['params']['LOSS_FN']}")
+
 
     def to_device(self, *args):
         return [item.to(self.device) if item is not None else None for item in args]
@@ -121,10 +133,11 @@ class ProTCLTrainer:
         """
 
         # Unpack the validation or testing batch
-        sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = (
+        sequence_onehots, sequence_embeddings, sequence_lengths, sequence_ids, label_multihots, tokenized_labels, label_embeddings = (
             batch["sequence_onehots"],
             batch["sequence_embeddings"],
             batch["sequence_lengths"],
+            batch["sequence_ids"],
             batch["label_multihots"],
             batch["tokenized_labels"],
             batch["label_embeddings"]
@@ -147,25 +160,30 @@ class ProTCLTrainer:
         # Compute validation loss for the batch
         loss = self.loss_fn(logits, label_multihots.float())
 
-        return loss.item(), logits, label_multihots
+        return loss.item(), logits, label_multihots, sequence_ids
 
-    def validate(self, val_loader: torch.utils.data.DataLoader, best_val_loss: float):
+    def validate(self, 
+                 val_loader: torch.utils.data.DataLoader,
+                 val_optimization_metric: Metric,
+                 val_optimization_metric_name: str
+                 ):
 
         self.logger.info("Running validation...")
-
-        val_metrics, _ = self.evaluate(data_loader=val_loader)
+    
+        val_metrics, _ = self.evaluate(data_loader=val_loader,
+                                       eval_metrics=MetricCollection({val_optimization_metric_name: val_optimization_metric}))
 
         self.logger.info(val_metrics)
 
         if self.use_wandb:
-            wandb.log({"validation_loss": val_metrics["avg_loss"]})
+            wandb.log({f'validation_{k}':v for k,v in val_metrics.items()})
 
         # Save the model if it has the best validation loss so far
-        if val_metrics["avg_loss"] < best_val_loss:
+        if val_metrics[val_optimization_metric_name] > self.best_val_metric:
             self.logger.info(
-                f"New best validation loss: {val_metrics['avg_loss']}. Saving model..."
+                f"New best {val_optimization_metric_name}: {val_metrics[val_optimization_metric_name]}. Saving model..."
             )
-            best_val_loss = val_metrics["avg_loss"]
+            self.best_val_metric = val_metrics[val_optimization_metric_name]
 
             torch.save(self.model.state_dict(), self.model_path)
             self.logger.info(f"Saved model to {self.model_path}.")
@@ -173,7 +191,7 @@ class ProTCLTrainer:
             if self.use_wandb:
                 wandb.save(f"{self.timestamp}_best_ProTCL.pt")
 
-        return val_metrics, best_val_loss
+        return val_metrics
 
     def find_optimal_threshold(
         self, data_loader: torch.utils.data.DataLoader, optimization_metric_name: str
@@ -200,7 +218,7 @@ class ProTCLTrainer:
             all_probabilities = []
             all_label_multihots = []
             for batch in data_loader:
-                _, logits, label_multihots = self.evaluation_step(
+                _, logits, label_multihots,_ = self.evaluation_step(
                     batch=batch)
 
                 # Apply sigmoid to get the probabilities for multi-label classification
@@ -225,12 +243,10 @@ class ProTCLTrainer:
             all_label_multihots = torch.cat(all_label_multihots)
 
         for th in np.arange(0.1, 1, 0.01):
-            eval_metrics = EvalMetrics(
-                num_labels=self.num_labels, threshold=th, device=self.device
-            ).get_metric_collection(type="all")
-
-            optimization_metric = getattr(
-                eval_metrics, optimization_metric_name)
+            optimization_metric = EvalMetrics(device=self.device)\
+                .get_metric_by_name(name = optimization_metric_name,
+                                    threshold=th,
+                                    num_labels=label_multihots.shape[-1])
 
             optimization_metric(all_probabilities, all_label_multihots)
             score = optimization_metric.compute().item()
@@ -249,7 +265,8 @@ class ProTCLTrainer:
     def evaluate(
         self,
         data_loader: torch.utils.data.DataLoader,
-        eval_metrics: EvalMetrics = None
+        eval_metrics: MetricCollection = None,
+        save_results: bool = False
     ) -> tuple[dict, dict]:
         """Evaluate the model on the given data loader.
         :param data_loader: pytorch data loader
@@ -264,7 +281,7 @@ class ProTCLTrainer:
         test_results = defaultdict(list)
         with torch.no_grad():
             for batch in data_loader:
-                loss, logits, labels = self.evaluation_step(
+                loss, logits, labels, sequence_ids = self.evaluation_step(
                     batch=batch)
                 if eval_metrics is not None:
                     # Apply sigmoid to get the probabilities for multi-label classification
@@ -284,20 +301,25 @@ class ProTCLTrainer:
                     # Update eval metrics
                     eval_metrics(probabilities, labels)
 
-                    # TODO: I stopped returning sequence ids. Do we still need this?
-                    # test_results["sequence_ids"].append(
-                    #     # could use .repeat_interleave(num_labels) to make long format
-                    #     sequence_ids
-                    # )
-                    test_results["probabilities"].append(probabilities)
-                    test_results["labels"].append(labels)
+                    #No need to save results everytime. Only need it for final evaluation.
+                    if save_results:
+                        test_results["sequence_ids"].append(sequence_ids)
+                        test_results["probabilities"].append(probabilities)
+                        test_results["labels"].append(labels)
 
                 # Accumulate loss
                 total_loss += loss
-            for key in test_results.keys():
-                test_results[key] = (
-                    torch.cat(test_results[key]).detach().cpu().numpy()
-                )
+            
+            if save_results:
+                for key in test_results.keys():
+                    if key == "sequence_ids":
+                        test_results[key] = (
+                            np.array([[j] for i in test_results["sequence_ids"] for j in i])
+                        )
+                    else:
+                        test_results[key] = (
+                            torch.cat(test_results[key]).detach().cpu().numpy()
+                        )
 
             # Compute average validation loss
             avg_loss = total_loss / len(data_loader)
@@ -320,7 +342,9 @@ class ProTCLTrainer:
     def train(
         self,
         train_loader: torch.utils.data.DataLoader,
-        val_loader: torch.utils.data.DataLoader
+        val_loader: torch.utils.data.DataLoader,
+        val_optimization_metric: Metric,
+        val_optimization_metric_name: str
     ):
         """Train model
         :param train_loader: _description_
@@ -335,9 +359,6 @@ class ProTCLTrainer:
         # Watch the model
         if self.use_wandb:
             wandb.watch(self.model)
-
-        # Initialize the best validation loss to a high value
-        best_val_loss = float("inf")
 
         # Compute total number of training steps
         num_training_steps = len(train_loader) * self.num_epochs
@@ -434,11 +455,13 @@ class ProTCLTrainer:
                             self.model.clear_label_embeddings_cache()
 
                         # Run validation
-                        val_metrics, best_val_loss = self.validate(val_loader=val_loader,
-                                                                   best_val_loss=best_val_loss)
+                        val_metrics = self.validate(val_loader=val_loader,
+                                                    val_optimization_metric=val_optimization_metric,
+                                                    val_optimization_metric_name=val_optimization_metric_name
+                                                    )
 
                         self.logger.info(
-                            f"Epoch {epoch+1}/{self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}, Validation Loss: {val_metrics['avg_loss']}"
+                            f"Epoch {epoch+1}/{self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}"
                         )
 
                         self.logger.info(

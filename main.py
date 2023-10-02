@@ -20,6 +20,7 @@ import json
 from transformers import AutoTokenizer, AutoModel
 from src.data.collators import collate_variable_sequence_length
 
+
 """
  Sample usage: python main.py --train-path-name TRAIN_DATA_PATH --validation-path-name VAL_DATA_PATH --test-paths-names TEST_DATA_PATH TEST_DATA_PATH 
  here we pass the same test set twice as an example.
@@ -270,18 +271,19 @@ model = ProTCL(
     train_sequence_encoder=params["TRAIN_SEQUENCE_ENCODER"],
 ).to(device)
 
-# Calculate pos_weight based on the training set
-if (params["POS_WEIGHT"] is None) & (args.train_path_name is not None):
-    logger.info("Calculating pos_weight...")
-    pos_weight = calculate_pos_weight(datasets["train"][0].data,
-                                      datasets["train"][0].get_label_vocabulary_size()
-                                      ).to(device)
-    logger.info(f"Calculated pos_weight= {pos_weight.item()}")
-elif (params["POS_WEIGHT"] is not None):
-    pos_weight = torch.tensor(params["POS_WEIGHT"]).to(device)
+# Calculate bce_pos_weight based on the training set
+if (params["BCE_POS_WEIGHT"] is None) & (args.train_path_name is not None):
+    logger.info("Calculating bce_pos_weight...")
+    bce_pos_weight = calculate_pos_weight(datasets["train"][0].data,
+                                          datasets["train"][0].get_label_vocabulary_size(
+    )
+    ).to(device)
+    logger.info(f"Calculated bce_pos_weight= {bce_pos_weight.item()}")
+elif (params["BCE_POS_WEIGHT"] is not None):
+    bce_pos_weight = torch.tensor(params["BCE_POS_WEIGHT"]).to(device)
 else:
     raise ValueError(
-        "POS_WEIGHT is not provided and no training set is provided to calculate it.")
+        "BCE_POS_WEIGHT is not provided and no training set is provided to calculate it.")
 
 # Initialize trainer class to handle model training, validation, and testing
 Trainer = ProTCLTrainer(
@@ -293,7 +295,7 @@ Trainer = ProTCLTrainer(
     timestamp=timestamp,
     run_name=args.name,
     use_wandb=args.use_wandb,
-    pos_weight=pos_weight
+    bce_pos_weight=bce_pos_weight
 )
 
 # Log the number of parameters by layer
@@ -304,11 +306,17 @@ if args.load_model:
     load_model_weights(model, os.path.join(ROOT_PATH, args.load_model))
     logger.info(f"Loading model weights from {args.load_model}...")
 
+# Initialize EvalMetrics
+eval_metrics = EvalMetrics(device=device)
+
 ####### TRAINING AND VALIDATION LOOPS #######
 if args.train_path_name is not None:
     # Train function
     Trainer.train(train_loader=loaders["train"][0],
-                  val_loader=loaders["validation"][0])
+                  val_loader=loaders["validation"][0],
+                  val_optimization_metric=eval_metrics.get_metric_by_name(name=params["OPTIMIZATION_METRIC_NAME"],
+                                                                          num_labels=label_sample_sizes["validation"]),
+                  val_optimization_metric_name=params["OPTIMIZATION_METRIC_NAME"])
 else:
     logger.info("Skipping training...")
 
@@ -329,7 +337,7 @@ if args.validation_path_name:
         shuffle=False,
         collate_fn=collate_variable_sequence_length,
         num_workers=params["NUM_WORKERS"],
-        pin_memory=True,
+        pin_memory=True
     )
 
     # If no decision threshold is provided, find the optimal threshold on the validation set
@@ -337,23 +345,28 @@ if args.validation_path_name:
         logger.info("Decision threshold not provided.")
         best_val_th, _ = Trainer.find_optimal_threshold(
             data_loader=val_loader,
-            optimization_metric_name="f1_micro",
+            optimization_metric_name=params["DECISION_TH_METRIC_NAME"]
         )
 
     logger.info("====Testing on validation set====")
-    eval_metrics = EvalMetrics(
-        num_labels=len(vocabularies["GO_label_vocab"]), threshold=best_val_th, device=device
-    ).get_metric_collection(type="all")
+    # Final valiadtion using all labels
+
     validation_metrics, validation_results = Trainer.evaluate(
-        data_loader=val_loader, eval_metrics=eval_metrics
+        data_loader=val_loader,
+        eval_metrics=eval_metrics.get_metric_collection(type="all",
+                                                        threshold=best_val_th,
+                                                        num_labels=len(
+                                                            datasets["validation"][0].label_vocabulary)
+                                                        ),
+        save_results=True
     )
 
-    # save_evaluation_results(results=validation_results,
-    #                         label_vocabulary=label_vocabulary,
-    #                         run_name=args.name,
-    #                         output_dir=os.path.join(
-    #                             ROOT_PATH, paths["RESULTS_DIR"])
-    #                         )
+    save_evaluation_results(results=validation_results,
+                            label_vocabulary=datasets["validation"][0].label_vocabulary,
+                            run_name=args.name,
+                            output_dir=os.path.join(
+                                ROOT_PATH, paths["RESULTS_DIR"])
+                            )
 
     logger.info(json.dumps(validation_metrics, indent=4))
     logger.info("Final validation complete.")
@@ -364,11 +377,13 @@ if args.test_paths_names:
     for idx, test_loader in enumerate(loaders["test"]):
         logger.info(f"====Testing on test set #{idx}====")
         # If best_val_th is not defined, alert an error to either provide a decision threshold or a validation datapath
-        eval_metrics = EvalMetrics(
-            num_labels=len(vocabularies["GO_label_vocab"]), threshold=best_val_th, device=device
-        ).get_metric_collection(type="all")
+
         test_metrics, test_results = Trainer.evaluate(
-            data_loader=test_loader, eval_metrics=eval_metrics
+            data_loader=test_loader,
+            eval_metrics=eval_metrics.get_metric_collection(type="all",
+                                                            threshold=best_val_th,
+                                                            num_labels=len(datasets["test"][0].label_vocabulary)),
+            save_results=True
         )
 
         all_test_results.append(test_results)
