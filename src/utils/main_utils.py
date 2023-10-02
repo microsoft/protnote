@@ -94,16 +94,20 @@ def get_or_generate_sequence_embeddings(paths, device, sequence_encoder, dataset
 
 def get_or_generate_vocabularies(full_data_path, vocabularies_dir, logger):
     """Load or generate vocabularies based on the provided paths."""
-    vocab_types = ['amino_acid_vocab', 'GO_label_vocab', 'sequence_id_vocab']
+    all_vocab_types = ['amino_acid_vocab',
+                       'GO_label_vocab', 'sequence_id_vocab']
+    missing_vocab_types = []
     vocabularies = {}
-    for vocab_type in vocab_types:
+    for vocab_type in all_vocab_types:
         full_path = os.path.join(vocabularies_dir, f"{vocab_type}.json")
         if os.path.exists(full_path):
             vocabularies[vocab_type] = read_json(full_path)
             logger.info(f"Loaded {vocab_type} vocabulary from {full_path}")
         else:
-            vocabularies.update(generate_vocabularies(
-                full_data_path, [vocab_type], logger, vocabularies_dir))
+            missing_vocab_types.append(vocab_type)
+    if missing_vocab_types:
+        vocabularies.update(generate_vocabularies(
+            full_data_path, missing_vocab_types, logger, vocabularies_dir))
     return vocabularies
 
 
@@ -115,14 +119,20 @@ def generate_vocabularies(data_path, vocab_types, logger, output_dir=None):
         sequence_ids.add(labels[0])
         go_labels.update(labels[1:])
         amino_acids.update(list(sequence))
-    vocab_dict = {
-        "GO_label_vocab": sorted(list(go_labels)) if "GO_label_vocab" in vocab_types else None,
-        "amino_acid_vocab": sorted(list(amino_acids)) if "amino_acid_vocab" in vocab_types else None,
-        "sequence_id_vocab": sorted(list(sequence_ids)) if "sequence_id_vocab" in vocab_types else None
-    }
+
+    vocab_dict = {}
+    if "GO_label_vocab" in vocab_types:
+        vocab_dict["GO_label_vocab"] = sorted(list(go_labels))
+    if "amino_acid_vocab" in vocab_types:
+        vocab_dict["amino_acid_vocab"] = sorted(list(amino_acids))
+    if "sequence_id_vocab" in vocab_types:
+        vocab_dict["sequence_id_vocab"] = sorted(list(sequence_ids))
+
     if output_dir:
         for key, value in vocab_dict.items():
             if value:
+                # Create directory if it doesn't exist
+                os.makedirs(output_dir, exist_ok=True)
                 with open(os.path.join(output_dir, f"{key}.json"), "w") as f:
                     json.dump(value, f)
                     logger.info(

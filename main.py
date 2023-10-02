@@ -45,7 +45,7 @@ parser.add_argument(
 parser.add_argument(
     "--full-path-name",
     type=str,
-    default='FULL_DATA_PATH',
+    default=None,
     help="Specify the desired full path name to define the vocabularies. Defaults to the full path name in the config file.",
 )
 
@@ -84,13 +84,6 @@ parser.add_argument(
 parser.add_argument(
     "--override", nargs="*", help="Override config parameters in key-value pairs."
 )
-parser.add_argument(
-    "--log-to-console",
-    action="store_true",
-    default=False,
-    help="Log outputs to console instead of the default logfile.",
-)
-
 
 # TODO: Add an option to serialize and save config with a name corresponding to the model save path
 
@@ -98,9 +91,15 @@ parser.add_argument(
 args = parser.parse_args()
 
 # TODO: This could be more elegant with parser.add_subparsers()
+# Ensure the full data path is provided
+if args.full_path_name is None:
+    parser.error(
+        "You must provide the full path name to define the vocabularies using --full-path-name."
+    )
+
 # Raise error if only one of train or val path is provided
 
-if (args.train_path_name is not None)&(args.validation_path_name is None):
+if (args.train_path_name is not None) & (args.validation_path_name is None):
     parser.error(
         "If providing --train-path-name you must provide --val-path-name."
     )
@@ -121,15 +120,26 @@ if (
     parser.error(
         "You must provide --load-model if no --train-path-names is provided")
 
+
 (config, params, paths, paths_list, timestamp, logger, device, ROOT_PATH) = get_setup(
     config_path=args.config,
     run_name=args.name,
     overrides=args.override,
-    log_to_console=args.log_to_console,
     train_path_name=args.train_path_name,
     val_path_name=args.validation_path_name,
     test_paths_names=args.test_paths_names,
 )
+
+# Initialize W&B, if using
+if args.use_wandb:
+    wandb.init(
+        project="protein-functions",
+        name=f"{args.name}_{timestamp}",
+        config={**params, **vars(args)},
+        entity="microsoft-research-incubation"
+    )
+    # Log the wandb link
+    logger.info(f"W&B link: {wandb.run.get_url()}")
 
 # Log the params
 logger.info(json.dumps(params, indent=4))
@@ -159,17 +169,6 @@ seed_everything(params["SEED"], device)
 # Initialize new run
 logger.info(
     f"################## {timestamp} RUNNING main.py ##################")
-
-# Initialize W&B, if using
-if args.use_wandb:
-    wandb.init(
-        project="protein-functions",
-        name=f"{args.name}_{timestamp}",
-        config={**params, **vars(args)},
-        entity="microsoft-research-incubation"
-    )
-    # Log the wandb link
-    logger.info(f"W&B link: {wandb.run.get_url()}")
 
 # Define label sample sizes for train, validation, and test loaders
 label_sample_sizes = {
@@ -346,7 +345,7 @@ if args.validation_path_name:
         num_labels=len(vocabularies["GO_label_vocab"]), threshold=best_val_th, device=device
     ).get_metric_collection(type="all")
     validation_metrics, validation_results = Trainer.evaluate(
-        data_loader=val_loader, eval_metrics=eval_metrics        
+        data_loader=val_loader, eval_metrics=eval_metrics
     )
 
     # save_evaluation_results(results=validation_results,

@@ -34,7 +34,6 @@ def get_setup(
     config_path: str,
     run_name: str,
     overrides: list,
-    log_to_console: bool,
     train_path_name: str = None,
     val_path_name: str = None,
     test_paths_names: list = None,
@@ -96,28 +95,32 @@ def get_setup(
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S %Z").strip()
 
     # Initialize logging
-    # TODO: Find a way to give W&B access to the log file
     log_dir = os.path.join(ROOT_PATH, "logs")
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     full_log_path = os.path.join(log_dir, f"{timestamp}_train_{run_name}.log")
 
-    log_args = {
-        "format": "%(asctime)s %(levelname)-4s %(message)s",
-        "level": logging.INFO,
-        "datefmt": "%Y-%m-%d %H:%M:%S %Z"
-    }
-
-    if log_to_console:
-        log_args["stream"] = sys.stdout
-    else:
-        log_args["filename"] = full_log_path
-        log_args["filemode"] = "w"
-
-    logging.basicConfig(**log_args)
+    # Set up the logger
     logger = logging.getLogger()
-    print(
-        f"Logging to {'console' if log_to_console else full_log_path}...")
+    logger.setLevel(logging.INFO)
+
+    # Create a formatter
+    formatter = logging.Formatter(
+        fmt="%(asctime)s %(levelname)-4s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S %Z"
+    )
+
+    # Create a file handler and add it to the logger
+    file_handler = logging.FileHandler(full_log_path, mode="w")
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    # Create a stream handler (for stdout) and add it to the logger
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+
+    print(f"Logging to {full_log_path} and console...")
 
     # Use GPU if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
