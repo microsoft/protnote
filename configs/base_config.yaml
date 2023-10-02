@@ -8,10 +8,18 @@ params:
   LATENT_EMBEDDING_DIM: 1024
   OUTPUT_DIM: 1024
   OUTPUT_NUM_LAYERS: 2
-  NUM_EPOCHS: 5
-  GRADIENT_ACCUMULATION_STEPS: 1 # 1 is essentially no gradient accumulation
-  POS_WEIGHT: 50 # 671.7130737304688
+  NUM_EPOCHS: 50
+  GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
+  OPTIMIZATION_METRIC_NAME: map_micro #only micro metrics are supported if sampling labels in validation
+  DECISION_TH_METRIC_NAME: f1_micro
   
+  #Losses. Only the parameters for selected loss will be used
+  LOSS_FN: FocalLoss #Currently supported: BCE, FocalLoss, BatchWeightedBCE
+  FOCAL_LOSS_GAMMA: 2.0
+  FOCAL_LOSS_ALPHA: 0.25
+  BCE_POS_WEIGHT: 50 # 671.7130737304688
+
+
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False
   TRAIN_LABEL_ENCODER: False
@@ -38,8 +46,8 @@ params:
   VALIDATIONS_PER_EPOCH: 3
   NUM_WORKERS: 3
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
-  LABEL_BATCH_SIZE_LIMIT: 300 # Maximum number of labels that can be passed to the label encoder at once (to avoid OOM errors)
-  SEQUENCE_BATCH_SIZE_LIMIT: 300 # Maximum number of sequences that can be passed to the sequence encoder at once (to avoid OOM errors)
+  LABEL_BATCH_SIZE_LIMIT: 128 # Maximum number of labels that can be passed to the label encoder at once (to avoid OOM errors)
+  SEQUENCE_BATCH_SIZE_LIMIT: 128 # Maximum number of sequences that can be passed to the sequence encoder at once (to avoid OOM errors)
 
 #Constants for protein encoder model (e.g. ProteInfer). Not really params since 
 # we are not going to change these.

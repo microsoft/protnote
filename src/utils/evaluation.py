@@ -10,8 +10,8 @@ from torchmetrics.classification import (
     AveragePrecision,
 )
 from torchmetrics import MetricCollection, Metric
-from typing import Literal, Tuple
-
+from typing import Literal
+import re
 
 class SamplewisePrecision(Metric):
     def __init__(self, threshold: float):
@@ -101,81 +101,136 @@ class SamplewiseF1Score(Metric):
         return f1
 
 
-class EvalMetrics:
-    def __init__(self, num_labels: int, threshold: float, device: str):
-        self.threshold = threshold
-        self.device = device
-        self.num_labels = num_labels
 
-    def get_label_centered_metrics(self):
+class EvalMetrics:
+    def __init__(self, device: str):
+        """_summary_
+
+        :param device: _description_
+        :type device: str
+        """        
+        self.device = device
+
+    def _get_label_centered_metrics(self,threshold: float,num_labels:int)->dict:
+        #TODO: Change micro metrics to task='binary' or use Binary version of the metrics
+        # num labels is unnecessary for micro metrics
+        """_summary_
+
+        :param threshold: _description_
+        :type threshold: float
+        :return: _description_
+        :rtype: dict
+        """        
         label_centered_metrics = {}
         for average in ["micro", "macro", "weighted"]:
-            label_centered_metrics[f"precision_{average}"] = Precision(
-                num_labels=self.num_labels,
-                threshold=self.threshold,
-                task="multilabel",
-                average=average,
-            ).to(self.device)
+            if (threshold is not None)&(num_labels is not None):
+                label_centered_metrics[f"precision_{average}"] = Precision(
+                    num_labels=num_labels,
+                    threshold=threshold,
+                    task="multilabel",
+                    average=average,
+                ).to(self.device)
 
-            label_centered_metrics[f"recall_{average}"] = Recall(
-                num_labels=self.num_labels,
-                threshold=self.threshold,
-                task="multilabel",
-                average=average,
-            ).to(self.device)
+                label_centered_metrics[f"recall_{average}"] = Recall(
+                    num_labels=num_labels,
+                    threshold=threshold,
+                    task="multilabel",
+                    average=average,
+                ).to(self.device)
 
-            label_centered_metrics[f"f1_{average}"] = F1Score(
-                num_labels=self.num_labels,
-                threshold=self.threshold,
-                task="multilabel",
-                average=average,
-            ).to(self.device)
+                label_centered_metrics[f"f1_{average}"] = F1Score(
+                    num_labels=num_labels,
+                    threshold=threshold,
+                    task="multilabel",
+                    average=average,
+                ).to(self.device)
 
-        label_centered_metrics["map_micro"] = AveragePrecision(
-            num_labels=self.num_labels, task="multilabel", thresholds=100,average='micro'
-        ).to(self.device)
+            if num_labels is not None:
+                label_centered_metrics[f"map_{average}"] = AveragePrecision(
+                    num_labels=num_labels, task="multilabel", thresholds=100,average=average
+                ).to(self.device)
 
         return label_centered_metrics
 
-    def get_sample_centered_metrics(self):
+    def _get_sample_centered_metrics(self,threshold)->dict:
+        """_summary_
+
+        :param threshold: _description_
+        :type threshold: _type_
+        :return: _description_
+        :rtype: dict
+        """        
         sample_centered_metrics = {}
-        sample_centered_metrics["precision_samplewise"] = SamplewisePrecision(
-            threshold=self.threshold
-        ).to(self.device)
-        sample_centered_metrics["f1_samplewise"] = SamplewiseF1Score(
-            threshold=self.threshold
-        ).to(self.device)
-        sample_centered_metrics["recall_samplewise"] = SamplewiseRecall(
-            threshold=self.threshold
-        ).to(self.device)
-        sample_centered_metrics["coverage_samplewise"] = SamplewiseCoverage(
-            threshold=self.threshold, device=self.device
-        ).to(self.device)
+        if threshold is not None:
+            sample_centered_metrics["precision_samplewise"] = SamplewisePrecision(
+                threshold=threshold
+            ).to(self.device)
+            sample_centered_metrics["f1_samplewise"] = SamplewiseF1Score(
+                threshold=threshold
+            ).to(self.device)
+            sample_centered_metrics["recall_samplewise"] = SamplewiseRecall(
+                threshold=threshold
+            ).to(self.device)
+            sample_centered_metrics["coverage_samplewise"] = SamplewiseCoverage(
+                threshold=threshold, device=self.device
+            ).to(self.device)
         return sample_centered_metrics
 
     def get_metric_collection(
-        self, type: Literal["labeled_centered", "sample_centered", "all"]
-    ):
+        self, type: Literal["labeled_centered", "sample_centered", "all"], threshold: float, num_labels:int
+    )->MetricCollection:
+        """_summary_
+
+        :param type: _description_
+        :type type: Literal[&quot;labeled_centered&quot;, &quot;sample_centered&quot;, &quot;all&quot;]
+        :param threshold: _description_
+        :type threshold: float
+        :raises ValueError: _description_
+        :return: _description_
+        :rtype: MetricCollection
+        """        
         if type == "labeled_centered":
-            metrics = self.get_label_centered_metrics()
+            metrics = self._get_label_centered_metrics(threshold=threshold,num_labels=num_labels)
         elif type == "sample_centered":
-            metrics = self.get_sample_centered_metrics()
+            metrics = self._get_sample_centered_metrics(threshold=threshold)
         elif type == "all":
             metrics = {
-                **self.get_label_centered_metrics(),
-                **self.get_sample_centered_metrics(),
+                **self._get_label_centered_metrics(threshold=threshold,num_labels=num_labels),
+                **self._get_sample_centered_metrics(threshold=threshold),
             }
         else:
             raise ValueError(f"Unknown type {type}")
         return MetricCollection(metrics)
     
     def get_metric_collection_with_regex(
-            self,pattern:str
-    ):  
-        import re
-        metrics = self.get_metric_collection(type="all")
+            self,pattern:str,threshold:float,num_labels:int
+    )->MetricCollection:
+        """_summary_
+
+        :param pattern: _description_
+        :type pattern: str
+        :param threshold: _description_
+        :type threshold: float
+        :return: _description_
+        :rtype: MetricCollection
+        """        
+        metrics = self.get_metric_collection(type="all",threshold=threshold,num_labels=num_labels)
         metrics = {k: v for k, v in metrics.items() if re.match(pattern, k)}
         return MetricCollection(metrics)
+
+    def get_metric_by_name(self, name: str, num_labels:int, threshold: float= None)->Metric:
+        """_summary_
+
+        :param name: _description_
+        :type name: str
+        :param threshold: _description_, defaults to None
+        :type threshold: float, optional
+        :return: a single metric
+        :rtype: Metric
+        """        
+        metrics = self.get_metric_collection(type="all",num_labels=num_labels,threshold=threshold)
+        assert name in metrics, f"Unknown metric {name}. Available metrics are {metrics.keys()}"
+        return metrics[name]
 
 
 

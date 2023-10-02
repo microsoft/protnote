@@ -92,6 +92,8 @@ def seed_everything(seed: int, device: str):
     torch.manual_seed(seed)
     if device == "cuda":
         torch.cuda.manual_seed_all(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
 
 
 def load_gz_json(path):
