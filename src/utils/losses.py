@@ -102,7 +102,41 @@ class BatchLabelWeightedBCE(torch.nn.Module):
         # Compute weighted binary cross-entropy loss
         return torch.nn.functional.binary_cross_entropy_with_logits(input, target, weight=weights.unsqueeze(0))
 
+
 class FocalLoss(torch.nn.Module):
+    def __init__(self, gamma=2, alpha=0.25, reduction='mean', epsilon=1e-10):
+        super().__init__()
+
+        self.gamma = gamma
+        self.alpha = alpha
+        self.epsilon = epsilon
+        self.reduction = reduction
+
+    def forward(self, input, target):
+        # Compute the focal loss
+        p = torch.sigmoid(input)
+        ce_loss = F.binary_cross_entropy_with_logits(input, target, reduction="none")
+        p_t = p * target + (1 - p) * (1 - target)
+        loss = ce_loss * ((1 - p_t) ** self.gamma)
+
+        if self.alpha >= 0:
+            alpha_t = self.alpha * target + (1 - self.alpha) * (1 - target)
+            loss = alpha_t * loss
+
+        # Check reduction option and return loss accordingly
+        if self.reduction == "none":
+            pass
+        elif self.reduction == "mean":
+            loss = loss.mean()
+        elif self.reduction == "sum":
+            loss = loss.sum()
+        else:
+            raise ValueError(
+                f"Invalid Value for arg 'reduction': '{self.reduction} \n Supported reduction modes: 'none', 'mean', 'sum'"
+            )
+        return loss
+
+class FocalLossStable(torch.nn.Module):
     def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
         super().__init__()
         self.alpha = alpha

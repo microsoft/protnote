@@ -1,0 +1,27 @@
+name: protein_functions_310
+channels:
+  - biobuilds
+  - pytorch
+  - huggingface
+  - nvidia
+  - anaconda
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10.13
+  - pytorch
+  - torchvision
+  - pytorch-cuda=11.8
+  - torchaudio
+  - pandas
+  - joblib
+  - transformers
+  - torchmetrics
+  - biopython
+  - wget
+  - python-wget
+  - obonet
+  - torchdata
+  - wandb
+  - sacremoses
+prefix: /anaconda/envs/protein_functions_310

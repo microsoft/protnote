@@ -1,0 +1,26 @@
+# For field details: https://amulet-docs.azurewebsites.net/config_file.html
+description: Templated experiment
+
+target:
+  service: amlk8s
+  name: itplabrr1cl1
+  vc: mprr2
+
+environment:
+  image: azureml/openmpi4.1.0-cuda11.8-cudnn8-ubuntu22.04:latest # ex: microsoft_pytorch:v1.2.0_gpu_cuda9.0_py36_release_gpuenv_hvd0.16.2
+  conda_yaml_file: $CONFIG_DIR/environment.yml
+
+code:
+  local_dir: $CONFIG_DIR/ 
+
+data:
+  local_dir: $CONFIG_DIR/data
+  remote_dir: data/
+
+# SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
+jobs:
+- name: samir_test2
+  sku: G1
+  priority: high
+  command:
+  - python main.py --train-path-name TRAIN_DATA_PATH --validation-path-name VAL_DATA_PATH --test-paths-names TEST_DATA_PATH --full-path-name FULL_DATA_PATH --use-wandb

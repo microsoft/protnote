@@ -1,7 +1,7 @@
 import logging
 from src.utils.data import load_gz_json
 from src.utils.evaluation import EvalMetrics
-from src.utils.losses import BatchWeightedBCE, FocalLoss
+from src.utils.losses import BatchWeightedBCE, FocalLoss, RGDBCE
 from torchmetrics import MetricCollection, Metric
 from src.utils.proteinfer import normalize_confidences
 import numpy as np

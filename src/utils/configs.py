@@ -40,6 +40,7 @@ def get_setup(
 ):
     # Get the root path from the environment variable; default to current directory if ROOT_PATH is not set
     ROOT_PATH = os.environ.get("ROOT_PATH", ".")
+    AMLT_LOGS_DIR = os.environ.get("AMLT_LOGS_DIR",".")
 
     # Load the configuration file
     config = read_yaml(os.path.join(ROOT_PATH, config_path))

@@ -1,4 +1,3 @@
-import logging
 from src.utils.data import (
     load_model_weights,
     seed_everything,
