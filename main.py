@@ -46,7 +46,7 @@ parser.add_argument(
 parser.add_argument(
     "--full-path-name",
     type=str,
-    default='FULL_DATA_PATH',
+    default=None,
     help="Specify the desired full path name to define the vocabularies. Defaults to the full path name in the config file.",
 )
 
@@ -85,13 +85,6 @@ parser.add_argument(
 parser.add_argument(
     "--override", nargs="*", help="Override config parameters in key-value pairs."
 )
-parser.add_argument(
-    "--log-to-console",
-    action="store_true",
-    default=False,
-    help="Log outputs to console instead of the default logfile.",
-)
-
 
 # TODO: Add an option to serialize and save config with a name corresponding to the model save path
 
@@ -99,9 +92,15 @@ parser.add_argument(
 args = parser.parse_args()
 
 # TODO: This could be more elegant with parser.add_subparsers()
+# Ensure the full data path is provided
+if args.full_path_name is None:
+    parser.error(
+        "You must provide the full path name to define the vocabularies using --full-path-name."
+    )
+
 # Raise error if only one of train or val path is provided
 
-if (args.train_path_name is not None)&(args.validation_path_name is None):
+if (args.train_path_name is not None) & (args.validation_path_name is None):
     parser.error(
         "If providing --train-path-name you must provide --val-path-name."
     )
@@ -122,15 +121,26 @@ if (
     parser.error(
         "You must provide --load-model if no --train-path-names is provided")
 
+
 (config, params, paths, paths_list, timestamp, logger, device, ROOT_PATH) = get_setup(
     config_path=args.config,
     run_name=args.name,
     overrides=args.override,
-    log_to_console=args.log_to_console,
     train_path_name=args.train_path_name,
     val_path_name=args.validation_path_name,
     test_paths_names=args.test_paths_names,
 )
+
+# Initialize W&B, if using
+if args.use_wandb:
+    wandb.init(
+        project="protein-functions",
+        name=f"{args.name}_{timestamp}",
+        config={**params, **vars(args)},
+        entity="microsoft-research-incubation"
+    )
+    # Log the wandb link
+    logger.info(f"W&B link: {wandb.run.get_url()}")
 
 # Log the params
 logger.info(json.dumps(params, indent=4))
@@ -160,17 +170,6 @@ seed_everything(params["SEED"], device)
 # Initialize new run
 logger.info(
     f"################## {timestamp} RUNNING main.py ##################")
-
-# Initialize W&B, if using
-if args.use_wandb:
-    wandb.init(
-        project="protein-functions",
-        name=f"{args.name}_{timestamp}",
-        config={**params, **vars(args)},
-        entity="microsoft-research-incubation"
-    )
-    # Log the wandb link
-    logger.info(f"W&B link: {wandb.run.get_url()}")
 
 # Define label sample sizes for train, validation, and test loaders
 label_sample_sizes = {
@@ -277,8 +276,9 @@ model = ProTCL(
 if (params["BCE_POS_WEIGHT"] is None) & (args.train_path_name is not None):
     logger.info("Calculating bce_pos_weight...")
     bce_pos_weight = calculate_pos_weight(datasets["train"][0].data,
-                                      datasets["train"][0].get_label_vocabulary_size()
-                                      ).to(device)
+                                          datasets["train"][0].get_label_vocabulary_size(
+    )
+    ).to(device)
     logger.info(f"Calculated bce_pos_weight= {bce_pos_weight.item()}")
 elif (params["BCE_POS_WEIGHT"] is not None):
     bce_pos_weight = torch.tensor(params["BCE_POS_WEIGHT"]).to(device)
@@ -307,7 +307,7 @@ if args.load_model:
     load_model_weights(model, os.path.join(ROOT_PATH, args.load_model))
     logger.info(f"Loading model weights from {args.load_model}...")
 
-#Initialize EvalMetrics
+# Initialize EvalMetrics
 eval_metrics = EvalMetrics(device=device)
 
 ####### TRAINING AND VALIDATION LOOPS #######
@@ -315,7 +315,7 @@ if args.train_path_name is not None:
     # Train function
     Trainer.train(train_loader=loaders["train"][0],
                   val_loader=loaders["validation"][0],
-                  val_optimization_metric=eval_metrics.get_metric_by_name(name = params["OPTIMIZATION_METRIC_NAME"],
+                  val_optimization_metric=eval_metrics.get_metric_by_name(name=params["OPTIMIZATION_METRIC_NAME"],
                                                                           num_labels=label_sample_sizes["validation"]),
                   val_optimization_metric_name=params["OPTIMIZATION_METRIC_NAME"])
 else:
@@ -350,13 +350,14 @@ if args.validation_path_name:
         )
 
     logger.info("====Testing on validation set====")
-    #Final valiadtion using all labels
+    # Final valiadtion using all labels
 
     validation_metrics, validation_results = Trainer.evaluate(
-        data_loader=val_loader, 
+        data_loader=val_loader,
         eval_metrics=eval_metrics.get_metric_collection(type="all",
                                                         threshold=best_val_th,
-                                                        num_labels=len(datasets["validation"][0].label_vocabulary)
+                                                        num_labels=len(
+                                                            datasets["validation"][0].label_vocabulary)
                                                         ),
         save_results=True
     )
@@ -377,7 +378,7 @@ if args.test_paths_names:
     for idx, test_loader in enumerate(loaders["test"]):
         logger.info(f"====Testing on test set #{idx}====")
         # If best_val_th is not defined, alert an error to either provide a decision threshold or a validation datapath
-        
+
         test_metrics, test_results = Trainer.evaluate(
             data_loader=test_loader,
             eval_metrics=eval_metrics.get_metric_collection(type="all",
