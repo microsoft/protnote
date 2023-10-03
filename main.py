@@ -9,7 +9,7 @@ from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
 from src.models.protein_encoders import ProteInfer
 from src.utils.evaluation import EvalMetrics, save_evaluation_results
-from src.utils.models import count_parameters_by_layer
+from src.utils.models import count_parameters_by_layer, sigmoid_bias_from_prob
 from src.utils.configs import get_setup
 from torch.utils.data import DataLoader
 import torch
@@ -266,6 +266,7 @@ model = ProTCL(
     # Output Layer
     output_dim=params["OUTPUT_DIM"],
     output_num_layers=params["OUTPUT_NUM_LAYERS"],
+    output_neuron_bias= None,# sigmoid_bias_from_prob(0.01) if params["LOSS_FN"] == "FocalLoss" else None,
 
     # Training options
     train_label_encoder=params["TRAIN_LABEL_ENCODER"],

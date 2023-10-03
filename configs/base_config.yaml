@@ -17,7 +17,7 @@ params:
   LOSS_FN: FocalLoss #Currently supported: BCE, FocalLoss, BatchWeightedBCE
   FOCAL_LOSS_GAMMA: 2.0
   FOCAL_LOSS_ALPHA: 0.25
-  BCE_POS_WEIGHT: 50 # 671.7130737304688
+  BCE_POS_WEIGHT: 25 # 671.7130737304688
 
 
   # Sequence and label encoders

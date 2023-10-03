@@ -1,6 +1,6 @@
 import torch
 import logging
-
+import numpy as np
 
 def count_parameters_by_layer(model):
     """
@@ -106,3 +106,6 @@ def generate_label_embeddings_from_text(label_annotations, label_tokenizer, labe
     tokenized_labels = tokenize_labels(label_annotations, label_tokenizer)
     with torch.no_grad():
         return get_label_embeddings(tokenized_labels, label_encoder, batch_size_limit=label_batch_size_limit).cpu()
+
+def sigmoid_bias_from_prob(prior_prob):
+    return -np.log((1 - prior_prob) / prior_prob)

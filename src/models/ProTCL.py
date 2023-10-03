@@ -15,7 +15,8 @@ class ProTCL(nn.Module):
         train_label_encoder=False,
         train_sequence_encoder=False,
         output_dim=1024,
-        output_num_layers=2
+        output_num_layers=2,
+        output_neuron_bias = None
     ):
         super().__init__()
 
@@ -34,7 +35,12 @@ class ProTCL(nn.Module):
 
         # TODO: This could change. Currently keeping latent dim.
         self.output_layer = get_mlp(
-            latent_dim*2, output_dim, output_num_layers)
+            latent_dim*2,
+            output_dim,
+            output_num_layers,
+            output_neuron_bias = output_neuron_bias
+            )
+        
     
     def _get_joint_embeddings(self, P_e, L_e, num_chunks=10):
         num_sequences = P_e.shape[0]
@@ -150,8 +156,7 @@ class ProTCL(nn.Module):
         """
         self.cached_label_embeddings = None
 
-
-def get_mlp(input_dim, output_dim, num_layers):
+def get_mlp(input_dim, output_dim, num_layers, output_neuron_bias=None):
     """
     Creates a variable length MLP with ReLU activations.
     """
@@ -161,5 +166,8 @@ def get_mlp(input_dim, output_dim, num_layers):
     for _ in range(num_layers-1):
         layers.append(nn.Linear(output_dim, output_dim))
         layers.append(nn.ReLU())
-    layers.append(nn.Linear(output_dim, 1))
+    output_neuron = nn.Linear(output_dim, 1)
+    if output_neuron_bias is not None:
+        output_neuron.bias.data.fill_(output_neuron_bias)  # Set the bias of the final linear layer
+    layers.append(output_neuron)
     return nn.Sequential(*layers)

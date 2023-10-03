@@ -57,7 +57,7 @@ class RGDBCE(torch.nn.Module):
 
     def forward(self,input,target):
         loss = torch.nn.functional.binary_cross_entropy_with_logits(input, target,reduce='none')
-        return torch.exp(torch.clamp(loss.detach(),max=self.temp)/(self.temp+1))
+        return torch.exp(torch.clamp(loss.detach(),max=self.temp)/(self.temp+1)).mean()
 
 class BatchWeightedBCE(torch.nn.Module):
     def __init__(self, epsilon=1e-10):
@@ -103,38 +103,24 @@ class BatchLabelWeightedBCE(torch.nn.Module):
         return torch.nn.functional.binary_cross_entropy_with_logits(input, target, weight=weights.unsqueeze(0))
 
 class FocalLoss(torch.nn.Module):
-    def __init__(self, gamma=2, alpha=0.25, reduction='mean', epsilon=1e-10):
+    def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
         super().__init__()
-
-        self.gamma = gamma
         self.alpha = alpha
-        self.epsilon = epsilon
+        self.gamma = gamma
         self.reduction = reduction
 
-
     def forward(self, input, target):
-        # Compute the focal loss
-        p = torch.sigmoid(input)
-        ce_loss = F.binary_cross_entropy_with_logits(input, target, reduction="none")
-        p_t = p * target + (1 - p) * (1 - target)
-        loss = ce_loss * ((1 - p_t) ** self.gamma)
+        BCE_loss = torch.nn.BCEWithLogitsLoss(reduction='none')(input, target)
+        pt = torch.exp(-BCE_loss)
+        loss = ((1-pt)**self.gamma) * BCE_loss
 
         if self.alpha >= 0:
             alpha_t = self.alpha * target + (1 - self.alpha) * (1 - target)
             loss = alpha_t * loss
 
-        # Check reduction option and return loss accordingly
-        if self.reduction == "none":
-            pass
-        elif self.reduction == "mean":
-            loss = loss.mean()
-        elif self.reduction == "sum":
-            loss = loss.sum()
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
         else:
-            raise ValueError(
-                f"Invalid Value for arg 'reduction': '{self.reduction} \n Supported reduction modes: 'none', 'mean', 'sum'"
-            )
-        return loss
-            
-
-
+            return loss

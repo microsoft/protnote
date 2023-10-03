@@ -92,6 +92,8 @@ class ProTCLTrainer:
             assert (config["params"]["FOCAL_LOSS_GAMMA"] is not None)\
                    &(config["params"]["FOCAL_LOSS_ALPHA"] is not None), "gamma and gamma must be provided for FocalLoss"
             return FocalLoss(gamma=config["params"]["FOCAL_LOSS_GAMMA"], alpha=config["params"]["FOCAL_LOSS_ALPHA"])
+        elif config["params"]["LOSS_FN"]=="RGDBCE":
+            return RGDBCE()
         else:
             raise ValueError(f"Unknown loss function {config['params']['LOSS_FN']}")
 
@@ -413,7 +415,11 @@ class ProTCLTrainer:
                     # log average probabilities to W&B
                     if self.use_wandb:
                         with torch.no_grad():
-                            wandb.log({"avg_probabilities": torch.mean(torch.sigmoid(logits))})
+                            avg_probabilities = torch.mean(torch.sigmoid(logits))
+                            avg_grounth_truth =  torch.mean(label_multihots.float())
+                            wandb.log({"avg_probabilities":avg_probabilities ,
+                                        "avg_grounth_truth":avg_grounth_truth,
+                                        "avg_probabilities_ground_truth_ratio":avg_probabilities/avg_grounth_truth})
 
 
                     # Compute loss
