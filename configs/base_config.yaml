@@ -8,7 +8,7 @@ params:
   LATENT_EMBEDDING_DIM: 1024
   OUTPUT_DIM: 1024
   OUTPUT_NUM_LAYERS: 2
-  NUM_EPOCHS: 50
+  NUM_EPOCHS: 2
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
   OPTIMIZATION_METRIC_NAME: map_micro #only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
@@ -37,14 +37,14 @@ params:
   VALIDATION_LABEL_SAMPLE_SIZE: 2000 # Set to null if you want to use all labels
 
   # Subset fractions (for rapid prototyping; set to 1 for final model)
-  TRAIN_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
-  VALIDATION_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
-  TEST_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
+  TRAIN_SUBSET_FRACTION: 0.01 # Set to 1.0 if you want to use all data
+  VALIDATION_SUBSET_FRACTION: 0.1 # Set to 1.0 if you want to use all data
+  TEST_SUBSET_FRACTION: 0.1 # Set to 1.0 if you want to use all data
 
   # Constants
   SEED: 42
   VALIDATIONS_PER_EPOCH: 3
-  NUM_WORKERS: 3
+  NUM_WORKERS: 1
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
   LABEL_BATCH_SIZE_LIMIT: 128 # Maximum number of labels that can be passed to the label encoder at once (to avoid OOM errors)
   SEQUENCE_BATCH_SIZE_LIMIT: 128 # Maximum number of sequences that can be passed to the sequence encoder at once (to avoid OOM errors)
@@ -61,29 +61,36 @@ embed_sequences_params:
   PROTEINFER_NUM_LABELS: 32102
 
 # Paths to data, vocabularies, embeddings, and models
-relative_paths:
-  # ProteInfer data paths
-  TRAIN_DATA_PATH: data/swissprot/proteinfer_splits/random/train_GO.fasta
-  VAL_DATA_PATH: data/swissprot/proteinfer_splits/random/dev_GO.fasta
-  TEST_DATA_PATH: data/swissprot/proteinfer_splits/random/test_GO.fasta
-  FULL_DATA_PATH: data/swissprot/proteinfer_splits/random/full_GO.fasta # used to generate vocabularies
+paths:
+  # Paths referenced relative to DATA_PATH (will have DATA_PATH prepended)
+  data_paths: 
+    # ProteInfer data paths
+    TRAIN_DATA_PATH: swissprot/proteinfer_splits/random/train_GO.fasta
+    VAL_DATA_PATH: swissprot/proteinfer_splits/random/dev_GO.fasta
+    TEST_DATA_PATH: swissprot/proteinfer_splits/random/test_GO.fasta
+    FULL_DATA_PATH: swissprot/proteinfer_splits/random/full_GO.fasta # used to generate vocabularies
 
-  # Zero shot data paths
-  ZERO_SHOT_DATA_PATH: data/zero_shot/SwissProt_2023_unseen_sequences_and_labels.fasta
+    # Zero shot data paths
+    ZERO_SHOT_DATA_PATH: zero_shot/SwissProt_2023_unseen_sequences_and_labels.fasta
 
-  # Vocabulary paths
-  VOCABULARIES_DIR: data/vocabularies/proteinfer
-  GO_ANNOTATIONS_PATH: data/annotations/go_annotations_2019_07_01.pkl
+    # Vocabulary paths
+    VOCABULARIES_DIR: vocabularies/proteinfer
+    GO_ANNOTATIONS_PATH: annotations/go_annotations_2019_07_01.pkl
 
-  # Embeddings paths (if using frozen pre-trained models)
-  LABEL_EMBEDDING_PATH: data/embeddings/proteinfer/frozen_BioGPT_label_embeddings.pkl
-  SEQUENCE_EMBEDDING_PATH: data/embeddings/proteinfer/frozen_proteinfer_sequence_embeddings.pkl
- 
-  # Where to save the model
-  OUTPUT_MODEL_DIR: models/ProTCL
+    # Embeddings paths (if using frozen pre-trained models)
+    LABEL_EMBEDDING_PATH: embeddings/proteinfer/frozen_BioGPT_label_embeddings.pkl
+    SEQUENCE_EMBEDDING_PATH: embeddings/proteinfer/frozen_proteinfer_sequence_embeddings.pkl
 
-  # Where to save results
-  RESULTS_DIR: results/
+    PARENTHOOD_LIB_PATH: vocabularies/parenthood.json.gz
+    PROTEINFER_WEIGHTS_PATH: models/proteinfer/GO_model_weights.pkl
+    
+  # Paths referenced relative to OUTPUT_PATH (will have OUTPUT_PATH prepended)
+  output_paths:
+    # Where to save the model
+    OUTPUT_MODEL_DIR: checkpoints/
 
-  PARENTHOOD_LIB_PATH: data/vocabularies/parenthood.json.gz
-  PROTEINFER_WEIGHTS_PATH: 'models/proteinfer/GO_model_weights.pkl'
+    # Where to save results
+    RESULTS_DIR: results/
+
+    # Where to log
+    LOG_DIR: logs/

@@ -95,7 +95,7 @@ target/
 /wandb/
 
 # results
-/results/
+/outputs/
 
 # amulet
 /amlt/

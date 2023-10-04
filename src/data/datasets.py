@@ -11,6 +11,7 @@ from collections import defaultdict
 from joblib import Parallel, delayed, cpu_count
 from functools import partial
 from collections import Counter
+from torch.utils.data.distributed import DistributedSampler
 
 
 class ProteinDataset(Dataset):
@@ -193,6 +194,7 @@ def calculate_pos_weight(data: list, num_labels: int):
     pos_weight = torch.tensor((num_negative_labels / num_positive_labels))
     return pos_weight
 
+
 def calculate_label_weights(data: list):
     def count_labels(chunk):
         label_freq = Counter()
@@ -201,8 +203,8 @@ def calculate_label_weights(data: list):
             label_freq.update(labels)
         return label_freq
 
-    chunk_size = max(len(data) // cpu_count(),1)  # Adjust chunk size if necessary.
-
+    # Adjust chunk size if necessary.
+    chunk_size = max(len(data) // cpu_count(), 1)
 
     results = Parallel(n_jobs=-1)(
         delayed(count_labels)(data[i:i+chunk_size]) for i in range(0, len(data), chunk_size)
@@ -211,8 +213,8 @@ def calculate_label_weights(data: list):
     label_freq = Counter()
     for result in results:
         label_freq.update(result)
-    
-    #Inverse frequency
+
+    # Inverse frequency
     total = sum(label_freq.values())
     label_inv_freq = {k: total/v for k, v in label_freq.items()}
     return label_inv_freq
@@ -262,10 +264,11 @@ def create_multiple_loaders(
     label_sample_sizes: dict = None,
     num_workers: int = 2,
     pin_memory: bool = True,
+    world_size: int = 1,
+    rank: int = 0,
 ) -> List[DataLoader]:
     loaders = defaultdict(list)
     for dataset_type, dataset_list in datasets.items():
-        should_shuffle = dataset_type == "train"
         batch_size_for_type = params[f"{dataset_type.upper()}_BATCH_SIZE"]
 
         # Get the number of labels to sample for the current dataset type, if provided
@@ -277,11 +280,14 @@ def create_multiple_loaders(
             loader = DataLoader(
                 dataset,
                 batch_size=batch_size_for_type,
-                shuffle=should_shuffle,
+                shuffle=False,
                 collate_fn=partial(
                     collate_variable_sequence_length, label_sample_size=label_sample_size),
                 num_workers=num_workers,
                 pin_memory=pin_memory,
+                sampler=DistributedSampler(
+                    dataset, num_replicas=world_size, rank=rank
+                ),
             )
             loaders[dataset_type].append(loader)
 

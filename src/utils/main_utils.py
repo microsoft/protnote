@@ -9,6 +9,36 @@ from torch.utils.data import ConcatDataset, DataLoader
 from src.utils.models import generate_label_embeddings_from_text
 
 
+def validate_arguments(args, parser):
+    # Ensure the full data path is provided
+    if args.full_path_name is None:
+        parser.error(
+            "You must provide the full path name to define the vocabularies using --full-path-name."
+        )
+
+    # Raise error if only one of train or val path is provided
+    if (args.train_path_name is not None) & (args.validation_path_name is None):
+        parser.error(
+            "If providing --train-path-name you must provide --val-path-name."
+        )
+
+    # Raise error if none of the paths are provided
+    if args.test_paths_names is None and \
+            (args.train_path_name is None or args.validation_path_name is None):
+        parser.error("You must provide one of the following options:\n"
+                     "--test-path-names\n"
+                     "--train-path-name and --validation-path-name together\n"
+                     "All three options\nPlease provide the required option(s) and try again.")
+
+    # Raise error if no train path is provided and no model is loaded
+    if (
+        (args.train_path_name is None)
+        and (args.load_model is None)
+    ):
+        parser.error(
+            "You must provide --load-model if no --train-path-names is provided")
+
+
 def prompt_user_for_path(message, default_path=None):
     """Prompt the user for a file path and return it."""
     user_input = input(f"{message} (Default: {default_path}): ").strip()

@@ -1,5 +1,5 @@
 # For field details: https://amulet-docs.azurewebsites.net/config_file.html
-description: Templated experiment
+description: ProTCL Experiment
 
 target:
   service: amlk8s
@@ -19,8 +19,18 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-- name: samir_test2
+- name: nate_test
   sku: G1
   priority: high
   command:
-  - python main.py --train-path-name TRAIN_DATA_PATH --validation-path-name VAL_DATA_PATH --test-paths-names TEST_DATA_PATH --full-path-name FULL_DATA_PATH --use-wandb
+  - python main.py 
+    --train-path-name TRAIN_DATA_PATH 
+    --validation-path-name VAL_DATA_PATH 
+    --test-paths-names TEST_DATA_PATH 
+    --full-path-name FULL_DATA_PATH 
+    --name amulet_test
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_API_KEY: "$WANDB_API_KEY"

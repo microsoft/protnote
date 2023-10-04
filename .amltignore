@@ -1,9 +1,8 @@
 # Ignore all files and folders
 /*
 
-# But do not ignore the src folder and its contents
+# But do not ignore the src folder and its contents, the config folder, and main.py
 !/src/
 !*.py
 !/configs/
-!/logs/
-!/models/
+!/main.py

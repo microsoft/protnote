@@ -37,22 +37,42 @@ def get_setup(
     train_path_name: str = None,
     val_path_name: str = None,
     test_paths_names: list = None,
+    amlt: bool = False,
+    is_master: bool = True,
 ):
     # Get the root path from the environment variable; default to current directory if ROOT_PATH is not set
-    ROOT_PATH = os.environ.get("ROOT_PATH", ".")
-    AMLT_LOGS_DIR = os.environ.get("AMLT_LOGS_DIR",".")
+    if amlt:
+        ROOT_PATH = os.getcwd()  # Set ROOT_PATH to working directory
+        DATA_PATH = os.environ["AMLT_DATA_DIR"]
+        OUTPUT_PATH = os.environ["AMLT_OUTPUT_DIR"]
+    else:
+        ROOT_PATH = os.environ.get("ROOT_PATH", ".")
+        DATA_PATH = os.path.join(ROOT_PATH, "data")
+        OUTPUT_PATH = os.path.join(ROOT_PATH, "outputs")
+        if not os.path.exists(OUTPUT_PATH):
+            os.makedirs(OUTPUT_PATH)
 
-    # Load the configuration file
+    # Load the configuration file and override the parameters if provided
     config = read_yaml(os.path.join(ROOT_PATH, config_path))
-
     if overrides:
         override_config(config, overrides)
 
-    # Extract the parameters and paths from the (possibly overidden) config file
+    # Extract the model parameters from the (possibly overidden) config file
     params = config["params"]
+
+    # Extract the fixed ProteInfer params from the config file
+    embed_sequences_params = config["embed_sequences_params"]
+
+    # Prepend the correct path roots
+    # Define root paths for each section
+    section_paths = {
+        "data_paths": DATA_PATH,
+        "output_paths": OUTPUT_PATH,
+    }
     paths = {
-        key: os.path.join(ROOT_PATH, value)
-        for key, value in config["relative_paths"].items()
+        key: os.path.join(section_paths[section], value)
+        for section, section_values in config["paths"].items()
+        for key, value in section_values.items()
     }
 
     # Load datasets from config file paths; the same vocabulary is used for all datasets
@@ -88,7 +108,7 @@ def get_setup(
         else []
     )
 
-    paths_list = train_paths_list + val_paths_list + test_paths_list
+    dataset_paths_list = train_paths_list + val_paths_list + test_paths_list
 
     # Set the timezone for the entire Python environment
     os.environ["TZ"] = "US/Pacific"
@@ -96,34 +116,44 @@ def get_setup(
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S %Z").strip()
 
     # Initialize logging
-    log_dir = os.path.join(ROOT_PATH, "logs")
+    log_dir = paths["LOG_DIR"]
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-    full_log_path = os.path.join(log_dir, f"{timestamp}_train_{run_name}.log")
+    full_log_path = os.path.join(log_dir, f"{timestamp}_{run_name}.log")
 
-    # Set up the logger
+    # Initialize the logger for all processes
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 
-    # Create a formatter
-    formatter = logging.Formatter(
-        fmt="%(asctime)s %(levelname)-4s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S %Z"
-    )
+    # Only log to file and console if this is the main process
+    if is_master:
+        # Create a formatter
+        formatter = logging.Formatter(
+            fmt="%(asctime)s %(levelname)-4s %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S %Z"
+        )
 
-    # Create a file handler and add it to the logger
-    file_handler = logging.FileHandler(full_log_path, mode="w")
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+        # Create a file handler and add it to the logger
+        file_handler = logging.FileHandler(full_log_path, mode="w")
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
 
-    # Create a stream handler (for stdout) and add it to the logger
-    stream_handler = logging.StreamHandler(sys.stdout)
-    stream_handler.setFormatter(formatter)
-    logger.addHandler(stream_handler)
+        # Create a stream handler (for stdout) and add it to the logger
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setFormatter(formatter)
+        logger.addHandler(stream_handler)
 
-    print(f"Logging to {full_log_path} and console...")
+        print(f"Logging to {full_log_path} and console...")
 
-    # Use GPU if available
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logging.info(f"Using device: {device}")
-    return config, params, paths, paths_list, timestamp, logger, device, ROOT_PATH
+    # Return a dictionary
+    return {
+        "params": params,
+        "embed_sequences_params": embed_sequences_params,
+        "paths": paths,
+        "dataset_paths_list": dataset_paths_list,
+        "timestamp": timestamp,
+        "logger": logger,
+        "ROOT_PATH": ROOT_PATH,
+        "DATA_PATH": DATA_PATH,
+        "OUTPUT_PATH": OUTPUT_PATH,
+    }

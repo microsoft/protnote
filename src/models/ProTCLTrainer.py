@@ -10,7 +10,7 @@ import wandb
 import os
 import json
 from collections import defaultdict
-import torch.cuda.nvtx as nvtx
+
 
 class ProTCLTrainer:
     def __init__(
@@ -24,7 +24,7 @@ class ProTCLTrainer:
         run_name: str,
         use_wandb: bool = False,
         bce_pos_weight: torch.Tensor = None,
-
+        is_master: bool = True,
     ):
         """_summary_
         :param model: pytorch model
@@ -41,9 +41,12 @@ class ProTCLTrainer:
         :type use_wandb: bool, optional
         :param run_name: name of the run
         :type run_name: str
+        :param gpu: gpu id, defaults to 0 (which triggers wandb, checkpoint saving, etc.)
+        :type gpu: int, optional
         """
 
         self.model = model
+        self.is_master = is_master
         self.device = device
         self.run_name = run_name
         self.logger = logger
@@ -69,7 +72,7 @@ class ProTCLTrainer:
         self.best_val_metric = 0.0
 
     def _get_saved_model_path(self):
-            # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
+        # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
         if not os.path.exists(self.output_model_dir):
             os.makedirs(self.output_model_dir)
 
@@ -90,13 +93,13 @@ class ProTCLTrainer:
             return BatchWeightedBCE()
         elif config["params"]["LOSS_FN"] == "FocalLoss":
             assert (config["params"]["FOCAL_LOSS_GAMMA"] is not None)\
-                   &(config["params"]["FOCAL_LOSS_ALPHA"] is not None), "gamma and gamma must be provided for FocalLoss"
+                & (config["params"]["FOCAL_LOSS_ALPHA"] is not None), "gamma and gamma must be provided for FocalLoss"
             return FocalLoss(gamma=config["params"]["FOCAL_LOSS_GAMMA"], alpha=config["params"]["FOCAL_LOSS_ALPHA"])
-        elif config["params"]["LOSS_FN"]=="RGDBCE":
+        elif config["params"]["LOSS_FN"] == "RGDBCE":
             return RGDBCE()
         else:
-            raise ValueError(f"Unknown loss function {config['params']['LOSS_FN']}")
-
+            raise ValueError(
+                f"Unknown loss function {config['params']['LOSS_FN']}")
 
     def to_device(self, *args):
         return [item.to(self.device) if item is not None else None for item in args]
@@ -149,7 +152,7 @@ class ProTCLTrainer:
         sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = self.to_device(
             sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings)
 
-       # Forward pass
+        # Forward pass
         inputs = {
             "sequence_onehots": sequence_onehots,
             "sequence_embeddings": sequence_embeddings,
@@ -164,29 +167,29 @@ class ProTCLTrainer:
 
         return loss.item(), logits, label_multihots, sequence_ids
 
-    def validate(self, 
+    def validate(self,
                  val_loader: torch.utils.data.DataLoader,
                  val_optimization_metric: Metric,
                  val_optimization_metric_name: str
                  ):
 
         self.logger.info("Running validation...")
-    
+
         val_metrics, _ = self.evaluate(data_loader=val_loader,
                                        eval_metrics=MetricCollection({val_optimization_metric_name: val_optimization_metric}))
 
         self.logger.info(val_metrics)
 
-        if self.use_wandb:
-            wandb.log({f'validation_{k}':v for k,v in val_metrics.items()})
+        if self.use_wandb and self.is_master:
+            wandb.log({f'validation_{k}': v for k, v in val_metrics.items()})
 
-        # Save the model if it has the best validation loss so far
-        if val_metrics[val_optimization_metric_name] > self.best_val_metric:
+        # Save the model if it has the best validation loss so far (only on master node)
+        if self.is_master and val_metrics[val_optimization_metric_name] > self.best_val_metric:
             self.logger.info(
                 f"New best {val_optimization_metric_name}: {val_metrics[val_optimization_metric_name]}. Saving model..."
             )
             self.best_val_metric = val_metrics[val_optimization_metric_name]
-
+            # TODO: Break out model saving into separate method (save_checkpoint)
             torch.save(self.model.state_dict(), self.model_path)
             self.logger.info(f"Saved model to {self.model_path}.")
 
@@ -220,7 +223,7 @@ class ProTCLTrainer:
             all_probabilities = []
             all_label_multihots = []
             for batch in data_loader:
-                _, logits, label_multihots,_ = self.evaluation_step(
+                _, logits, label_multihots, _ = self.evaluation_step(
                     batch=batch)
 
                 # Apply sigmoid to get the probabilities for multi-label classification
@@ -246,7 +249,7 @@ class ProTCLTrainer:
 
         for th in np.arange(0.1, 1, 0.01):
             optimization_metric = EvalMetrics(device=self.device)\
-                .get_metric_by_name(name = optimization_metric_name,
+                .get_metric_by_name(name=optimization_metric_name,
                                     threshold=th,
                                     num_labels=label_multihots.shape[-1])
 
@@ -303,7 +306,7 @@ class ProTCLTrainer:
                     # Update eval metrics
                     eval_metrics(probabilities, labels)
 
-                    #No need to save results everytime. Only need it for final evaluation.
+                    # No need to save results everytime. Only need it for final evaluation.
                     if save_results:
                         test_results["sequence_ids"].append(sequence_ids)
                         test_results["probabilities"].append(probabilities)
@@ -311,12 +314,13 @@ class ProTCLTrainer:
 
                 # Accumulate loss
                 total_loss += loss
-            
+
             if save_results:
                 for key in test_results.keys():
                     if key == "sequence_ids":
                         test_results[key] = (
-                            np.array([[j] for i in test_results["sequence_ids"] for j in i])
+                            np.array(
+                                [[j] for i in test_results["sequence_ids"] for j in i])
                         )
                     else:
                         test_results[key] = (
@@ -330,14 +334,14 @@ class ProTCLTrainer:
             for k, v in final_metrics.items():
                 if isinstance(v, torch.Tensor):
                     final_metrics[k] = v.item()
-                
-                #Cast numpy floats to float32. Needed to store as parquet
+
+                # Cast numpy floats to float32. Needed to store as parquet
                 # because pyarrow doesn't support float16 from mixed precision
                 if np.issubdtype(type(v), np.floating):
                     final_metrics[k] = v.astype("float32")
 
             final_metrics.update({"avg_loss": avg_loss})
-            
+
         self.model.train()
         return final_metrics, test_results
 
@@ -356,8 +360,8 @@ class ProTCLTrainer:
         """
         # Log that training is starting
         self.logger.info("Starting training...")
-
         self.model.train()
+
         # Watch the model
         if self.use_wandb:
             wandb.watch(self.model)
@@ -370,112 +374,86 @@ class ProTCLTrainer:
 
         for epoch in range(self.num_epochs):
             ####### TRAINING LOOP #######
-            with torch.autograd.profiler.emit_nvtx():
-                nvtx.range_push("Data loading")  # Profiling: Data loading
-                for batch in train_loader:
-                    # Increment batch index
-                    batch_count += 1
-                    nvtx.range_pop()  # Profiling: End data loading
+            for batch in train_loader:
+                # Increment batch index
+                batch_count += 1
 
-                    # Unpack the training batch
-                    sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = (
-                        batch["sequence_onehots"],
-                        batch["sequence_embeddings"],
-                        batch["sequence_lengths"],
-                        batch["label_multihots"],
-                        batch["tokenized_labels"],
-                        batch["label_embeddings"]
+                # Unpack the training batch
+                sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = (
+                    batch["sequence_onehots"],
+                    batch["sequence_embeddings"],
+                    batch["sequence_lengths"],
+                    batch["label_multihots"],
+                    batch["tokenized_labels"],
+                    batch["label_embeddings"]
+                )
+
+                # Move all unpacked batch elements to GPU, if available
+                sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = self.to_device(
+                    sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings)
+
+                # Forward pass
+                inputs = {
+                    "sequence_onehots": sequence_onehots,
+                    "sequence_embeddings": sequence_embeddings,
+                    "sequence_lengths": sequence_lengths,
+                    "tokenized_labels": tokenized_labels,
+                    "label_embeddings": label_embeddings
+                }
+                logits = self.model(**inputs)
+
+                # log average probabilities to W&B
+                if self.use_wandb:
+                    with torch.no_grad():
+                        avg_probabilities = torch.mean(
+                            torch.sigmoid(logits))
+                        avg_grounth_truth = torch.mean(
+                            label_multihots.float())
+                        wandb.log({"avg_probabilities": avg_probabilities,
+                                   "avg_grounth_truth": avg_grounth_truth,
+                                   "avg_probabilities_ground_truth_ratio": avg_probabilities/avg_grounth_truth})
+
+                # Compute loss
+                loss = self.loss_fn(logits, label_multihots.float()) / \
+                    self.gradient_accumulation_steps
+
+                # Log metrics to W&B
+                if self.use_wandb:
+                    wandb.log({"train_loss": loss.item()})
+
+                # Backward pass
+                loss.backward()
+
+                # Gradient accumulation every GRADIENT_ACCUMULATION_STEPS
+                if (batch_count % self.gradient_accumulation_steps == 0):
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
+
+                # Log training progress percentage every 2%
+                if num_training_steps > 50 and batch_count % int(num_training_steps/50) == 0:
+                    self.logger.info(
+                        f"Training progress: {round(100*batch_count/num_training_steps,2)}%")
+
+                # Run validation and log progress every n batches
+                if batch_count != 0 and batch_count % (len(train_loader) // self.validations_per_epoch) == 0:
+                    ####### VALIDATION LOOP #######
+                    # Force model to recompute all label embeddings
+                    if self.train_label_encoder:
+                        self.model.clear_label_embeddings_cache()
+
+                    # Run validation
+                    val_metrics = self.validate(val_loader=val_loader,
+                                                val_optimization_metric=val_optimization_metric,
+                                                val_optimization_metric_name=val_optimization_metric_name
+                                                )
+
+                    self.logger.info(
+                        f"Epoch {epoch+1}/{self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}"
                     )
 
-                    if batch_count == 100:
-                        torch.cuda.cudart().cudaProfilerStart()  # Profiling: Start profiling
-                    # Profiling: Batch
-                    nvtx.range_push("Batch" + str(batch_count))
+                    self.logger.info(
+                        f"Validation metrics:\n{json.dumps(val_metrics, indent=4)}")
 
-                    # Profiling: Copy to device
-                    nvtx.range_push("Copy to device")
-                    # Move all unpacked batch elements to GPU, if available
-                    sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = self.to_device(
-                        sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings)
-
-                    nvtx.range_pop()  # Profiling: End copy to device
-
-                    nvtx.range_push("Forward pass")  # Profiling: Forward pass
-                    # Forward pass
-                    inputs = {
-                        "sequence_onehots": sequence_onehots,
-                        "sequence_embeddings": sequence_embeddings,
-                        "sequence_lengths": sequence_lengths,
-                        "tokenized_labels": tokenized_labels,
-                        "label_embeddings": label_embeddings
-                    }
-                    logits = self.model(**inputs)
-
-
-                    # log average probabilities to W&B
-                    if self.use_wandb:
-                        with torch.no_grad():
-                            avg_probabilities = torch.mean(torch.sigmoid(logits))
-                            avg_grounth_truth =  torch.mean(label_multihots.float())
-                            wandb.log({"avg_probabilities":avg_probabilities ,
-                                        "avg_grounth_truth":avg_grounth_truth,
-                                        "avg_probabilities_ground_truth_ratio":avg_probabilities/avg_grounth_truth})
-
-
-                    # Compute loss
-                    loss = self.loss_fn(logits, label_multihots.float()) / \
-                        self.gradient_accumulation_steps
-
-                    # Log metrics to W&B
-                    if self.use_wandb:
-                        wandb.log({"train_loss": loss.item()})
-                    nvtx.range_pop()  # Profiling: End forward pass
-
-                    # Profiling: Backward pass
-                    nvtx.range_push("Backward pass")
-                    # Backward pass
-                    loss.backward()
-
-                    # Gradient accumulation every GRADIENT_ACCUMULATION_STEPS
-                    if (batch_count % self.gradient_accumulation_steps == 0):
-                        self.optimizer.step()
-                        self.optimizer.zero_grad()
-
-                    nvtx.range_pop()  # Profiling: End backward pass
-
-                    nvtx.range_pop()  # Profiling: End batch
-
-                    # Log training progress percentage every 2%
-                    if num_training_steps > 50 and batch_count % int(num_training_steps/50) == 0:
-                        self.logger.info(
-                            f"Training progress: {round(100*batch_count/num_training_steps,2)}%")
-
-                    if batch_count == 150:
-                        torch.cuda.cudart().cudaProfilerStop()  # Profiling: Stop profiling
-
-                    # Run validation and log progress every n batches
-                    if batch_count != 0 and batch_count % (len(train_loader) // self.validations_per_epoch) == 0:
-                        ####### VALIDATION LOOP #######
-                        # Force model to recompute all label embeddings
-                        if self.train_label_encoder:
-                            self.model.clear_label_embeddings_cache()
-
-                        # Run validation
-                        val_metrics = self.validate(val_loader=val_loader,
-                                                    val_optimization_metric=val_optimization_metric,
-                                                    val_optimization_metric_name=val_optimization_metric_name
-                                                    )
-
-                        self.logger.info(
-                            f"Epoch {epoch+1}/{self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}"
-                        )
-
-                        self.logger.info(
-                            f"Validation metrics:\n{json.dumps(val_metrics, indent=4)}")
-
-                    nvtx.range_push("Data loading")  # Profiling: Data loading
-                nvtx.range_pop()  # Profiling: End data loading
-
-        #Set weights to best model
+        # Set weights to best model
+        self.logger.info("Restoring model to best validation map_micro...")
         self.model.load_state_dict(torch.load(self.model_path))
-        self.logger.info("Restoring model to best validation loss...")
