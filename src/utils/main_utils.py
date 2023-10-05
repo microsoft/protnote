@@ -7,6 +7,7 @@ from src.utils.data import read_json, read_fasta, read_pickle, save_to_pickle
 from src.data.collators import collate_variable_sequence_length
 from torch.utils.data import ConcatDataset, DataLoader
 from src.utils.models import generate_label_embeddings_from_text
+import pandas as pd
 
 
 def validate_arguments(args, parser):
@@ -59,7 +60,8 @@ def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
         num_workers=params["NUM_WORKERS"],
         pin_memory=True,
     )
-    sequence_embedding_dict = {}
+    # Initialize an empty list to store data
+    data_list = []
     for batch in tqdm(combined_loader):
         sequence_onehots, sequence_ids, sequence_lengths = (
             batch["sequence_onehots"].to(device),
@@ -70,8 +72,11 @@ def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
             embeddings = sequence_encoder.get_embeddings(
                 sequence_onehots, sequence_lengths)
             for i, original_id in enumerate(sequence_ids):
-                sequence_embedding_dict[original_id] = embeddings[i].cpu()
-    return sequence_embedding_dict
+                data_list.append((original_id, embeddings[i].cpu().numpy()))
+
+    # Convert the list to a DataFrame
+    df = pd.DataFrame(data_list, columns=["ID", "Embedding"]).set_index("ID")
+    return df
 
 
 def get_or_generate_label_embeddings(paths, device, label_annotations, label_tokenizer, label_encoder, logger, label_batch_size_limit):
@@ -100,14 +105,12 @@ def get_or_generate_label_embeddings(paths, device, label_annotations, label_tok
 def get_or_generate_sequence_embeddings(paths, device, sequence_encoder, datasets, params, logger):
     """Load or generate sequence embeddings based on the provided paths and parameters."""
     if "SEQUENCE_EMBEDDING_PATH" in paths and os.path.exists(paths["SEQUENCE_EMBEDDING_PATH"]):
-        sequence_embedding_dict = read_pickle(paths["SEQUENCE_EMBEDDING_PATH"])
-        sequence_embedding_dict = {k: torch.tensor(
-            v) if isinstance(v, np.ndarray) else v for k, v in sequence_embedding_dict.items()}
+        sequence_embedding_df = read_pickle(paths["SEQUENCE_EMBEDDING_PATH"])
         logger.info(
             f"Loaded sequence embeddings from {paths['SEQUENCE_EMBEDDING_PATH']}")
     else:
         logger.info("Generating sequence embeddings...")
-        sequence_embedding_dict = generate_sequence_embeddings(
+        sequence_embedding_df = generate_sequence_embeddings(
             device, sequence_encoder, datasets, params)
         save_path = prompt_user_for_path(
             "Enter the full file path to save the sequence embeddings, or hit enter to continue without saving",
@@ -115,11 +118,11 @@ def get_or_generate_sequence_embeddings(paths, device, sequence_encoder, dataset
         )
         if save_path:
             with open(save_path, 'wb') as f:
-                save_to_pickle(sequence_embedding_dict, save_path)
+                save_to_pickle(sequence_embedding_df, save_path)
             logger.info(f"Saved sequence embeddings to {save_path}")
         else:
             logger.info("Sequence embeddings not saved.")
-    return sequence_embedding_dict
+    return sequence_embedding_df
 
 
 def get_or_generate_vocabularies(full_data_path, vocabularies_dir, logger):

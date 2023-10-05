@@ -8,6 +8,11 @@ import yaml
 import random
 import numpy as np
 import wget
+import hashlib
+
+
+def hash_alphanumeric_sequence_id(s: str):
+    return int(hashlib.md5(s.encode()).hexdigest(), 16)
 
 
 def read_fasta(data_path: str, sep=" "):
@@ -93,7 +98,6 @@ def seed_everything(seed: int, device: str):
     if device == "cuda":
         torch.cuda.manual_seed_all(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
-
 
 
 def load_gz_json(path):

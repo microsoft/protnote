@@ -2,6 +2,7 @@ import psutil
 from src.utils.data import (
     load_model_weights,
     seed_everything,
+    read_pickle
 )
 from src.utils.main_utils import get_or_generate_vocabularies,  get_or_generate_label_embeddings, get_or_generate_sequence_embeddings, validate_arguments
 from src.data.datasets import ProteinDataset, calculate_pos_weight, create_multiple_loaders
@@ -21,50 +22,12 @@ import wandb
 import os
 import argparse
 import json
+import pandas as pd
 from transformers import AutoTokenizer, AutoModel
 from src.data.collators import collate_variable_sequence_length
 
 ### SETUP ###
 torch.cuda.empty_cache()
-
-
-def print_memory_stats():
-    # Print number of threads and cores
-    print(f"Number of threads: {psutil.cpu_count()}")
-    print(f"Number of physical cores: {psutil.cpu_count(logical=False)}")
-
-    # Get the virtual memory statistics
-    memory_info = psutil.virtual_memory()
-
-    # Print total, available, and used RAM
-    print(f"Total RAM: {memory_info.total / (1024**3):.2f} GB")
-    print(f"Available RAM: {memory_info.available / (1024**3):.2f} GB")
-    print(f"Used RAM: {memory_info.used / (1024**3):.2f} GB")
-
-    # Print swap memory details
-    swap_info = psutil.swap_memory()
-    print(f"Total Swap: {swap_info.total / (1024**3):.2f} GB")
-    print(f"Used Swap: {swap_info.used / (1024**3):.2f} GB")
-    print(f"Free Swap: {swap_info.free / (1024**3):.2f} GB")
-
-    # Print details about the current process
-    process = psutil.Process(os.getpid())
-    print(f"Current process ID: {process.pid}")
-    print(
-        f"Memory usage of current process: {process.memory_info().rss / (1024**3):.2f} GB")
-    print(f"Number of open files by the process: {len(process.open_files())}")
-
-    # Print shared memory details
-    shm_info = os.statvfs('/dev/shm')
-    total_shm = shm_info.f_blocks * shm_info.f_frsize
-    free_shm = shm_info.f_bfree * shm_info.f_frsize
-    used_shm = total_shm - free_shm
-    print(f"Total shared memory (/dev/shm): {total_shm / (1024**3):.2f} GB")
-    print(f"Used shared memory (/dev/shm): {used_shm / (1024**3):.2f} GB")
-    print(f"Free shared memory (/dev/shm): {free_shm / (1024**3):.2f} GB")
-
-    # Print number of child processes
-    print(f"Number of child processes: {len(process.children())}")
 
 
 def main():
@@ -119,7 +82,8 @@ def main():
     # Distributed computing
     args.world_size = args.gpus * args.nodes
     if args.amlt:
-        args.nr = int(os.environ['RANK'])
+        os.environ['MASTER_ADDR'] = os.environ['MASTER_IP']
+        args.nr = int(os.environ['NODE_RANK'])
     else:
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '8889'
@@ -136,8 +100,10 @@ def train_validate_test(gpu, args):
         world_size=args.world_size,
         rank=rank
     )
-    print(
-        f"### Initializing GPU {gpu+1}/{args.gpus} on node {args.nr}; or, gpu {rank+1}/{args.world_size} for all nodes.")
+    print(f"{'=' * 50}\n"
+      f"Initializing GPU {gpu/args.gpus} on node {args.nr};\n"
+      f"    or, gpu {rank+1}/{args.world_size} for all nodes.\n"
+      f"{'=' * 50}")
 
     # Check if master process
     is_master = rank == 0
@@ -182,7 +148,7 @@ def train_validate_test(gpu, args):
 
     # Load or generate the vocabularies
     vocabularies = get_or_generate_vocabularies(
-        paths[args.full_path_name], paths["VOCABULARIES_DIR"], logger)
+        paths["FULL_DATA_PATH"], paths["VOCABULARIES_DIR"], logger)
 
     # Create datasets
     datasets = ProteinDataset.create_multiple_datasets(
@@ -266,9 +232,9 @@ def train_validate_test(gpu, args):
     )
 
     # Generate all sequence embeddings upfront, if not training the sequence encoder
-    sequence_embedding_dict = None
+    sequence_embedding_df = None
     if not params["TRAIN_SEQUENCE_ENCODER"]:
-        sequence_embedding_dict = get_or_generate_sequence_embeddings(
+        sequence_embedding_df = get_or_generate_sequence_embeddings(
             paths,
             device,
             sequence_encoder,
@@ -283,7 +249,7 @@ def train_validate_test(gpu, args):
             if not params["TRAIN_LABEL_ENCODER"]:
                 subset.set_label_embedding_matrix(label_embedding_matrix.cpu())
             if not params["TRAIN_SEQUENCE_ENCODER"]:
-                subset.set_sequence_embedding_dict(sequence_embedding_dict)
+                subset.set_sequence_embedding_df(sequence_embedding_df)
 
     model = ProTCL(
         # Parameters
@@ -446,8 +412,15 @@ def train_validate_test(gpu, args):
 
 
 """
- Sample usage: python main.py --train-path-name TRAIN_DATA_PATH --validation-path-name VAL_DATA_PATH --test-paths-names TEST_DATA_PATH TEST_DATA_PATH 
- here we pass the same test set twice as an example.
+ Sample usage (single GPU): 
+ python main.py 
+    --nodes 1 
+    --gpus 1 
+    --nr 0 
+    --train-path-name TRAIN_DATA_PATH 
+    --validation-path-name VAL_DATA_PATH 
+    --full-path-name FULL_DATA_PATH 
+    --test-paths-names TEST_DATA_PATH
 """
 if __name__ == "__main__":
     main()

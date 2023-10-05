@@ -53,7 +53,7 @@ class ProteinDataset(Dataset):
 
         # Initialize class variables
         self.data = read_fasta(paths["data_path"])
-        self.label_embedding_matrix = self.sequence_embedding_dict = None
+        self.label_embedding_matrix = self.sequence_embedding_df = None
 
         # Subset the data if subset_fraction is provided (to improve training speed)
         if subset_fraction < 1.0:
@@ -76,8 +76,8 @@ class ProteinDataset(Dataset):
                 label_list, label_tokenizer)
 
     # Helper functions for setting embedding dictionaries
-    def set_sequence_embedding_dict(self, embedding_dict: torch.Tensor):
-        self.sequence_embedding_dict = embedding_dict
+    def set_sequence_embedding_df(self, embedding_df: pd.DataFrame):
+        self.sequence_embedding_df = embedding_df
 
     def set_label_embedding_matrix(self, embedding_matrix: torch.Tensor):
         self.label_embedding_matrix = embedding_matrix
@@ -133,8 +133,10 @@ class ProteinDataset(Dataset):
 
         # Get the sequence embedding, if provided
         sequence_embedding = None
-        if self.sequence_embedding_dict is not None:
-            sequence_embedding = self.sequence_embedding_dict[sequence_id_alphanumeric]
+        # TODO: Remove this check
+        if self.sequence_embedding_df is not None:
+            sequence_embedding = torch.tensor(
+                self.sequence_embedding_df.loc[sequence_id_alphanumeric].values)
 
         # Get the tokenized labels, if provided
         tokenized_labels = self.tokenized_labels if self.tokenized_labels is not None else None

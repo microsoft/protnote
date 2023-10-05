@@ -8,7 +8,7 @@ params:
   LATENT_EMBEDDING_DIM: 1024
   OUTPUT_DIM: 1024
   OUTPUT_NUM_LAYERS: 2
-  NUM_EPOCHS: 2
+  NUM_EPOCHS: 25
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
   OPTIMIZATION_METRIC_NAME: map_micro #only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
@@ -18,7 +18,6 @@ params:
   FOCAL_LOSS_GAMMA: 2.0
   FOCAL_LOSS_ALPHA: 0.25
   BCE_POS_WEIGHT: 25 # 671.7130737304688
-
 
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False
@@ -30,14 +29,14 @@ params:
   # Batch sizes
   TRAIN_BATCH_SIZE: 128
   VALIDATION_BATCH_SIZE: 128
-  TEST_BATCH_SIZE: 32
+  TEST_BATCH_SIZE: 24
 
   # Sampling
   TRAIN_LABEL_SAMPLE_SIZE: 2000 # Set to null if you want to use all labels
   VALIDATION_LABEL_SAMPLE_SIZE: 2000 # Set to null if you want to use all labels
 
   # Subset fractions (for rapid prototyping; set to 1 for final model)
-  TRAIN_SUBSET_FRACTION: 0.01 # Set to 1.0 if you want to use all data
+  TRAIN_SUBSET_FRACTION: 0.005 # Set to 1.0 if you want to use all data
   VALIDATION_SUBSET_FRACTION: 0.1 # Set to 1.0 if you want to use all data
   TEST_SUBSET_FRACTION: 0.1 # Set to 1.0 if you want to use all data
 
@@ -48,6 +47,8 @@ params:
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
   LABEL_BATCH_SIZE_LIMIT: 128 # Maximum number of labels that can be passed to the label encoder at once (to avoid OOM errors)
   SEQUENCE_BATCH_SIZE_LIMIT: 128 # Maximum number of sequences that can be passed to the sequence encoder at once (to avoid OOM errors)
+  # NOT IMPLEMENTED
+  JOINT_EMBEDDINGS_NUM_CHUNKS: 15 # Number of chunks to split the joint embeddings into (to avoid OOM errors)
 
 #Constants for protein encoder model (e.g. ProteInfer). Not really params since 
 # we are not going to change these.
@@ -78,8 +79,8 @@ paths:
     GO_ANNOTATIONS_PATH: annotations/go_annotations_2019_07_01.pkl
 
     # Embeddings paths (if using frozen pre-trained models)
-    LABEL_EMBEDDING_PATH: embeddings/proteinfer/frozen_BioGPT_label_embeddings.pkl
-    SEQUENCE_EMBEDDING_PATH: embeddings/proteinfer/frozen_proteinfer_sequence_embeddings.pkl
+    LABEL_EMBEDDING_PATH: embeddings/frozen_BioGPT_label_embeddings.pkl
+    SEQUENCE_EMBEDDING_PATH: embeddings/frozen_proteinfer_sequence_embeddings.pkl
 
     PARENTHOOD_LIB_PATH: vocabularies/parenthood.json.gz
     PROTEINFER_WEIGHTS_PATH: models/proteinfer/GO_model_weights.pkl

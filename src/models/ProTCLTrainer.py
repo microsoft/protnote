@@ -102,7 +102,7 @@ class ProTCLTrainer:
                 f"Unknown loss function {config['params']['LOSS_FN']}")
 
     def to_device(self, *args):
-        return [item.to(self.device) if item is not None else None for item in args]
+        return [item.to(self.device) if isinstance(item, torch.Tensor) else item for item in args]
 
     def _set_optimizer(self, lr):
         trainable_params = []
@@ -373,6 +373,8 @@ class ProTCLTrainer:
         batch_count = 0
 
         for epoch in range(self.num_epochs):
+            self.logger.info(
+                f"Starting epoch {epoch+1}/{self.num_epochs}...")
             ####### TRAINING LOOP #######
             for batch in train_loader:
                 # Increment batch index
@@ -430,7 +432,7 @@ class ProTCLTrainer:
                     self.optimizer.zero_grad()
 
                 # Log training progress percentage every 2%
-                if num_training_steps > 50 and batch_count % int(num_training_steps/50) == 0:
+                if num_training_steps > 100 and batch_count % int(num_training_steps/100) == 0:
                     self.logger.info(
                         f"Training progress: {round(100*batch_count/num_training_steps,2)}%")
 

@@ -2,6 +2,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 from src.utils.models import get_label_embeddings
+import os
 
 
 class ProTCL(nn.Module):
@@ -16,7 +17,7 @@ class ProTCL(nn.Module):
         train_sequence_encoder=False,
         output_dim=1024,
         output_num_layers=2,
-        output_neuron_bias = None
+        output_neuron_bias=None
     ):
         super().__init__()
 
@@ -38,43 +39,44 @@ class ProTCL(nn.Module):
             latent_dim*2,
             output_dim,
             output_num_layers,
-            output_neuron_bias = output_neuron_bias
-            )
-        
-    
-    def _get_joint_embeddings(self, P_e, L_e, num_chunks=10):
+            output_neuron_bias=output_neuron_bias
+        )
+
+    def _get_joint_embeddings(self, P_e, L_e, num_chunks=os.environ.get("NUM_CHUNKS", 15)):
         num_sequences = P_e.shape[0]
         num_labels = L_e.shape[0]
         sequence_embedding_dim = P_e.shape[1]
         label_embedding_dim = L_e.shape[1]
 
-        # Calculate chunk size to distribute sequences into equal chunks, 
+        # Calculate chunk size to distribute sequences into equal chunks,
         # with the last chunk possibly being smaller.
         chunk_size = (num_sequences + num_chunks - 1) // num_chunks
-        
+
         joint_embeddings_list = []
-        
+
         for i in range(0, num_sequences, chunk_size):
             # Get chunk of protein embeddings. The last chunk may be smaller than chunk_size.
             P_e_chunk = P_e[i:i + chunk_size]
-            current_chunk_size = P_e_chunk.shape[0] 
-            
-            # Expand the current chunk of protein and label embeddings 
+            current_chunk_size = P_e_chunk.shape[0]
+
+            # Expand the current chunk of protein and label embeddings
             # to all combinations of sequences and labels within the chunk.
-            P_e_expanded = P_e_chunk.unsqueeze(1).expand(-1, num_labels, -1).reshape(-1, sequence_embedding_dim)
-            
-            # Note: It's important to use current_chunk_size here to ensure that we do not 
+            P_e_expanded = P_e_chunk.unsqueeze(
+                1).expand(-1, num_labels, -1).reshape(-1, sequence_embedding_dim)
+
+            # Note: It's important to use current_chunk_size here to ensure that we do not
             # expand more than necessary in case of the last smaller chunk.
-            L_e_expanded = L_e.unsqueeze(0).expand(current_chunk_size, -1, -1).reshape(-1, label_embedding_dim)
-            
+            L_e_expanded = L_e.unsqueeze(0).expand(
+                current_chunk_size, -1, -1).reshape(-1, label_embedding_dim)
+
             # Concatenate protein and label embeddings and append to the list.
-            joint_embeddings_list.append(torch.cat([P_e_expanded, L_e_expanded], dim=1))
-        
+            joint_embeddings_list.append(
+                torch.cat([P_e_expanded, L_e_expanded], dim=1))
+
         # Concatenate all the processed chunks to get the final joint embeddings tensor.
         joint_embeddings = torch.cat(joint_embeddings_list, dim=0)
-        
-        return joint_embeddings, num_sequences, num_labels
 
+        return joint_embeddings, num_sequences, num_labels
 
     def forward(
         self,
@@ -156,6 +158,7 @@ class ProTCL(nn.Module):
         """
         self.cached_label_embeddings = None
 
+
 def get_mlp(input_dim, output_dim, num_layers, output_neuron_bias=None):
     """
     Creates a variable length MLP with ReLU activations.
@@ -168,6 +171,7 @@ def get_mlp(input_dim, output_dim, num_layers, output_neuron_bias=None):
         layers.append(nn.ReLU())
     output_neuron = nn.Linear(output_dim, 1)
     if output_neuron_bias is not None:
-        output_neuron.bias.data.fill_(output_neuron_bias)  # Set the bias of the final linear layer
+        # Set the bias of the final linear layer
+        output_neuron.bias.data.fill_(output_neuron_bias)
     layers.append(output_neuron)
     return nn.Sequential(*layers)

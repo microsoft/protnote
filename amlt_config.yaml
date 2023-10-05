@@ -1,5 +1,5 @@
 # For field details: https://amulet-docs.azurewebsites.net/config_file.html
-description: ProTCL Experiment
+description: Protein Functions Experiment
 
 target:
   service: amlk8s
@@ -15,22 +15,24 @@ code:
 
 data:
   local_dir: $CONFIG_DIR/data
-  remote_dir: data/
+  remote_dir: data
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
 - name: nate_test
-  sku: G1
+  sku: G8
   priority: high
   command:
   - python main.py 
+    --nodes 1
+    --gpus 8
     --train-path-name TRAIN_DATA_PATH 
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
     --full-path-name FULL_DATA_PATH 
-    --name amulet_test
+    --name amulet_test_8_gpu
     --amlt
-    --use-wandb
+    # --use-wandb
   submit_args:
     env:
       WANDB_API_KEY: "$WANDB_API_KEY"
