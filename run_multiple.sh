@@ -3,89 +3,33 @@
 # After updating, make script executable with: chmod +x run_multiple.sh
 # Run script with: ./run_multiple.sh
 
-# Optimize positive weight
+# Optimize gradient clipping norm
 python main.py \
-    --name 'pos_weight_0_4' \
+    --name "FL{CLIP: 10, EPOCH: 10, ALPHA: 0.25}" \
+    --full-path-name FULL_DATA_PATH \
     --train-path-name TRAIN_DATA_PATH \
     --validation-path-name VAL_DATA_PATH \
-    --test-paths-names TEST_DATA_PATH \
-    --override POSITIVE_WEIGHT 0.4 \
+    --override FOCAL_LOSS_ALPHA 0.9 \
     --use-wandb 
 
+# Sleep for 10 seconds to allow everything to cleanly exit
+sleep 10
 
 python main.py \
-    --name 'pos_weight_0_45' \
+    --name 'FL{CLIP: 10, EPOCH: 10, ALPHA: 0.9}' \
+    --full-path-name FULL_DATA_PATH \
     --train-path-name TRAIN_DATA_PATH \
     --validation-path-name VAL_DATA_PATH \
-    --test-paths-names TEST_DATA_PATH \
-    --override POSITIVE_WEIGHT 0.45 \
+    --override FOCAL_LOSS_ALPHA 0.9 \
     --use-wandb 
+    # --test-paths-names TEST_DATA_PATH \
 
-
-python main.py \
-    --name 'pos_weight_0_5' \
-    --train-path-name TRAIN_DATA_PATH \
-    --validation-path-name VAL_DATA_PATH \
-    --test-paths-names TEST_DATA_PATH \
-    --override POSITIVE_WEIGHT 0.5 \
-    --use-wandb 
-
-
-python main.py \
-    --name 'pos_weight_0_55' \
-    --train-path-name TRAIN_DATA_PATH \
-    --validation-path-name VAL_DATA_PATH \
-    --test-paths-names TEST_DATA_PATH \
-    --override POSITIVE_WEIGHT 0.55 \
-    --use-wandb 
-
-python main.py \
-    --name 'pos_weight_0_6' \
-    --train-path-name TRAIN_DATA_PATH \
-    --validation-path-name VAL_DATA_PATH \
-    --test-paths-names TEST_DATA_PATH \
-    --override POSITIVE_WEIGHT 0.6 \
-    --use-wandb 
-
-
-# Try different batch sizes
-python main.py \
-    --name 'batch_size_16' \
-    --train-path-name TRAIN_DATA_PATH \
-    --validation-path-name VAL_DATA_PATH \
-    --test-paths-names TEST_DATA_PATH \
-    --override BATCH_SIZE 16 \
-    --use-wandb
-
-python main.py \
-    --name 'batch_size_32' \
-    --train-path-name TRAIN_DATA_PATH \
-    --validation-path-name VAL_DATA_PATH \
-    --test-paths-names TEST_DATA_PATH \
-    --override BATCH_SIZE 32 \
-    --use-wandb
-
-python main.py \
-    --name 'batch_size_64' \
-    --train-path-name TRAIN_DATA_PATH \
-    --validation-path-name VAL_DATA_PATH \
-    --test-paths-names TEST_DATA_PATH \
-    --override BATCH_SIZE 64 \
-    --use-wandb
-
-python main.py \
-    --name 'batch_size_128' \
-    --train-path-name TRAIN_DATA_PATH \
-    --validation-path-name VAL_DATA_PATH \
-    --test-paths-names TEST_DATA_PATH \
-    --override BATCH_SIZE 128 \
-    --use-wandb
-
-# Run for many epochs
-python main.py \
-    --name 'epochs_10' \
-    --train-path-name TRAIN_DATA_PATH \
-    --validation-path-name VAL_DATA_PATH \
-    --test-paths-names TEST_DATA_PATH \
-    --override EPOCHS 10 \
-    --use-wandb
+# Example for reference:
+# python main.py \
+#     --name 'gradient_clipping{CLIP_VALUE:10}' \
+#     --full-path-name "FULL_DATA_PATH" \
+#     --train-path-name TRAIN_DATA_PATH \
+#     --validation-path-name VAL_DATA_PATH \
+#     --test-paths-names TEST_DATA_PATH \
+#     --override CLIP_VALUE 10 NUM_EPOCHS 50 \
+#     --use-wandb 

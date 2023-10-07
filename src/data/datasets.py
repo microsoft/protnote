@@ -19,7 +19,14 @@ class ProteinDataset(Dataset):
     Dataset class for protein sequences with GO annotations.
     """
 
-    def __init__(self, paths: dict, vocabularies: dict, label_tokenizer=None, subset_fraction: float = 1.0):
+    def __init__(
+        self,
+        paths: dict,
+        vocabularies: dict,
+        label_tokenizer=None,
+        subset_fraction: float = 1.0,
+        deduplicate: bool = False
+    ):
         """
         paths (dict): Dictionary containing paths to the data and vocabularies.
             data_path (str): Path to the FASTA file containing the protein sequences and corresponding GO annotations
@@ -40,9 +47,8 @@ class ProteinDataset(Dataset):
             "test",
         ], "dataset_type must be one of 'train', 'val', or 'test'"
 
-        # Set default values for paths not provided
+        # Set the dataset type and data path
         self.dataset_type = paths["dataset_type"]
-
         self.data_path = paths["data_path"]
 
         # Set and process the vocabularies
@@ -61,6 +67,11 @@ class ProteinDataset(Dataset):
                 f"Subsetting {subset_fraction*100}% of the {self.dataset_type} set..."
             )
             self.data = self.data[:int(subset_fraction * len(self.data))]
+
+        # Deduplicate the data if deduplicate is True
+        if deduplicate:
+            # Deduplicate sequences
+            self._remove_duplicates()
 
         # Load the map from alphanumeric label id to text label
         self.label_annotation_map = {key: value['label'] for key, value in read_pickle(
@@ -81,6 +92,26 @@ class ProteinDataset(Dataset):
 
     def set_label_embedding_matrix(self, embedding_matrix: torch.Tensor):
         self.label_embedding_matrix = embedding_matrix
+
+    def _remove_duplicates(self):
+        """
+        Remove duplicate sequences from self.data, keeping only the first instance of each sequence
+        Use pandas to improve performance
+        """
+
+        # Convert self.data to a DataFrame
+        df = pd.DataFrame(self.data, columns=["sequence", "labels"])
+
+        # Drop duplicate rows based on the 'sequence' column, keeping the first instance
+        df = df.drop_duplicates(subset="sequence", keep="first")
+
+        # Log the number of duplicate sequences removed
+        num_duplicates = len(self.data) - len(df)
+        logging.info(
+            f"Removing {num_duplicates} duplicate sequences from {self.data_path}...")
+
+        # Convert the DataFrame back to the list of tuples format
+        self.data = list(df.itertuples(index=False, name=None))
 
     # Helper functions for processing and loading vocabularies
     def _process_vocab(self):
@@ -158,7 +189,12 @@ class ProteinDataset(Dataset):
 
     @classmethod
     def create_multiple_datasets(
-        cls, paths_list: List[Dict[str, str]], vocabularies: dict, subset_fractions: dict = None, label_tokenizer=None,
+        cls,
+        paths_list: List[Dict[str, str]],
+        vocabularies: dict,
+        subset_fractions: dict = None,
+        label_tokenizer=None,
+        deduplicate: bool = False,
     ) -> List[Dataset]:
         """
         paths_list (List[Dict[str, str]]): List of dictionaries, each containing paths to the data and vocabularies.
@@ -168,8 +204,14 @@ class ProteinDataset(Dataset):
         subset_fractions = subset_fractions or {}
         for paths in paths_list:
             datasets[paths["dataset_type"]].append(
-                cls(paths, vocabularies, label_tokenizer=label_tokenizer, subset_fraction=subset_fractions.get(
-                    paths["dataset_type"], 1.0))
+                cls(
+                    paths,
+                    vocabularies,
+                    label_tokenizer=label_tokenizer,
+                    subset_fraction=subset_fractions.get(
+                        paths["dataset_type"], 1.0),
+                    deduplicate=deduplicate
+                )
             )
         return datasets
 
@@ -287,8 +329,12 @@ def create_multiple_loaders(
                     collate_variable_sequence_length, label_sample_size=label_sample_size),
                 num_workers=num_workers,
                 pin_memory=pin_memory,
+                drop_last=True,
                 sampler=DistributedSampler(
-                    dataset, num_replicas=world_size, rank=rank
+                    dataset,
+                    num_replicas=world_size,
+                    rank=rank,
+                    shuffle=True
                 ),
             )
             loaders[dataset_type].append(loader)

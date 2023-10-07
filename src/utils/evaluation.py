@@ -1,6 +1,7 @@
 import torch
 import pandas as pd
 import os
+from src.utils.data import convert_float16_to_float32
 from torchmetrics.classification import (
     Precision,
     Recall,
@@ -12,6 +13,7 @@ from torchmetrics.classification import (
 from torchmetrics import MetricCollection, Metric
 from typing import Literal
 import re
+
 
 class SamplewisePrecision(Metric):
     def __init__(self, threshold: float):
@@ -101,18 +103,17 @@ class SamplewiseF1Score(Metric):
         return f1
 
 
-
 class EvalMetrics:
     def __init__(self, device: str):
         """_summary_
 
         :param device: _description_
         :type device: str
-        """        
+        """
         self.device = device
 
-    def _get_label_centered_metrics(self,threshold: float,num_labels:int)->dict:
-        #TODO: Change micro metrics to task='binary' or use Binary version of the metrics
+    def _get_label_centered_metrics(self, threshold: float, num_labels: int) -> dict:
+        # TODO: Change micro metrics to task='binary' or use Binary version of the metrics
         # num labels is unnecessary for micro metrics
         """_summary_
 
@@ -120,10 +121,10 @@ class EvalMetrics:
         :type threshold: float
         :return: _description_
         :rtype: dict
-        """        
+        """
         label_centered_metrics = {}
         for average in ["micro", "macro", "weighted"]:
-            if (threshold is not None)&(num_labels is not None):
+            if (threshold is not None) & (num_labels is not None):
                 label_centered_metrics[f"precision_{average}"] = Precision(
                     num_labels=num_labels,
                     threshold=threshold,
@@ -147,19 +148,19 @@ class EvalMetrics:
 
             if num_labels is not None:
                 label_centered_metrics[f"map_{average}"] = AveragePrecision(
-                    num_labels=num_labels, task="multilabel", thresholds=100,average=average
+                    num_labels=num_labels, task="multilabel", thresholds=100, average=average
                 ).to(self.device)
 
         return label_centered_metrics
 
-    def _get_sample_centered_metrics(self,threshold)->dict:
+    def _get_sample_centered_metrics(self, threshold) -> dict:
         """_summary_
 
         :param threshold: _description_
         :type threshold: _type_
         :return: _description_
         :rtype: dict
-        """        
+        """
         sample_centered_metrics = {}
         if threshold is not None:
             sample_centered_metrics["precision_samplewise"] = SamplewisePrecision(
@@ -177,8 +178,8 @@ class EvalMetrics:
         return sample_centered_metrics
 
     def get_metric_collection(
-        self, type: Literal["labeled_centered", "sample_centered", "all"], threshold: float, num_labels:int
-    )->MetricCollection:
+        self, type: Literal["labeled_centered", "sample_centered", "all"], threshold: float, num_labels: int
+    ) -> MetricCollection:
         """_summary_
 
         :param type: _description_
@@ -188,23 +189,24 @@ class EvalMetrics:
         :raises ValueError: _description_
         :return: _description_
         :rtype: MetricCollection
-        """        
+        """
         if type == "labeled_centered":
-            metrics = self._get_label_centered_metrics(threshold=threshold,num_labels=num_labels)
+            metrics = self._get_label_centered_metrics(
+                threshold=threshold, num_labels=num_labels)
         elif type == "sample_centered":
             metrics = self._get_sample_centered_metrics(threshold=threshold)
         elif type == "all":
             metrics = {
-                **self._get_label_centered_metrics(threshold=threshold,num_labels=num_labels),
+                **self._get_label_centered_metrics(threshold=threshold, num_labels=num_labels),
                 **self._get_sample_centered_metrics(threshold=threshold),
             }
         else:
             raise ValueError(f"Unknown type {type}")
         return MetricCollection(metrics)
-    
+
     def get_metric_collection_with_regex(
-            self,pattern:str,threshold:float,num_labels:int
-    )->MetricCollection:
+            self, pattern: str, threshold: float, num_labels: int
+    ) -> MetricCollection:
         """_summary_
 
         :param pattern: _description_
@@ -213,12 +215,13 @@ class EvalMetrics:
         :type threshold: float
         :return: _description_
         :rtype: MetricCollection
-        """        
-        metrics = self.get_metric_collection(type="all",threshold=threshold,num_labels=num_labels)
+        """
+        metrics = self.get_metric_collection(
+            type="all", threshold=threshold, num_labels=num_labels)
         metrics = {k: v for k, v in metrics.items() if re.match(pattern, k)}
         return MetricCollection(metrics)
 
-    def get_metric_by_name(self, name: str, num_labels:int, threshold: float= None)->Metric:
+    def get_metric_by_name(self, name: str, num_labels: int, threshold: float = None) -> Metric:
         """_summary_
 
         :param name: _description_
@@ -227,15 +230,15 @@ class EvalMetrics:
         :type threshold: float, optional
         :return: a single metric
         :rtype: Metric
-        """        
-        metrics = self.get_metric_collection(type="all",num_labels=num_labels,threshold=threshold)
+        """
+        metrics = self.get_metric_collection(
+            type="all", num_labels=num_labels, threshold=threshold)
         assert name in metrics, f"Unknown metric {name}. Available metrics are {metrics.keys()}"
         return metrics[name]
 
 
-
-
 def save_evaluation_results(results, label_vocabulary, run_name, output_dir):
+    # Do not need to check if is_master, since this function is only called by the master node
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -247,6 +250,12 @@ def save_evaluation_results(results, label_vocabulary, run_name, output_dir):
                                     columns=label_vocabulary,
                                     index=results['sequence_ids'])
 
+    # Convert all float16 columns to float32
+    label_df = convert_float16_to_float32(label_df)
+    probabilities_df = convert_float16_to_float32(probabilities_df)
+
+    # Save the DataFrame to Parquet
     label_df.to_parquet(os.path.join(output_dir, f'labels_{run_name}.parquet'))
+
     probabilities_df.to_parquet(os.path.join(
         output_dir, f'probabilities_{run_name}.parquet'))

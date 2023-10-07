@@ -42,39 +42,19 @@ class ProTCL(nn.Module):
             output_neuron_bias=output_neuron_bias
         )
 
-    def _get_joint_embeddings(self, P_e, L_e, num_chunks=os.environ.get("NUM_CHUNKS", 15)):
+    def _get_joint_embeddings(self, P_e, L_e):
         num_sequences = P_e.shape[0]
         num_labels = L_e.shape[0]
         sequence_embedding_dim = P_e.shape[1]
         label_embedding_dim = L_e.shape[1]
 
-        # Calculate chunk size to distribute sequences into equal chunks,
-        # with the last chunk possibly being smaller.
-        chunk_size = (num_sequences + num_chunks - 1) // num_chunks
-
-        joint_embeddings_list = []
-
-        for i in range(0, num_sequences, chunk_size):
-            # Get chunk of protein embeddings. The last chunk may be smaller than chunk_size.
-            P_e_chunk = P_e[i:i + chunk_size]
-            current_chunk_size = P_e_chunk.shape[0]
-
-            # Expand the current chunk of protein and label embeddings
-            # to all combinations of sequences and labels within the chunk.
-            P_e_expanded = P_e_chunk.unsqueeze(
-                1).expand(-1, num_labels, -1).reshape(-1, sequence_embedding_dim)
-
-            # Note: It's important to use current_chunk_size here to ensure that we do not
-            # expand more than necessary in case of the last smaller chunk.
-            L_e_expanded = L_e.unsqueeze(0).expand(
-                current_chunk_size, -1, -1).reshape(-1, label_embedding_dim)
-
-            # Concatenate protein and label embeddings and append to the list.
-            joint_embeddings_list.append(
-                torch.cat([P_e_expanded, L_e_expanded], dim=1))
-
-        # Concatenate all the processed chunks to get the final joint embeddings tensor.
-        joint_embeddings = torch.cat(joint_embeddings_list, dim=0)
+        # Use broadcasting so we don't have to expand the tensor dimensions
+        joint_embeddings = torch.cat([
+            P_e[:, None, :].expand(
+                num_sequences, num_labels, sequence_embedding_dim),
+            L_e[None, :, :].expand(
+                num_sequences, num_labels, label_embedding_dim)
+        ], dim=2).reshape(-1, sequence_embedding_dim + label_embedding_dim)
 
         return joint_embeddings, num_sequences, num_labels
 

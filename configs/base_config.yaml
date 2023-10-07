@@ -8,14 +8,15 @@ params:
   LATENT_EMBEDDING_DIM: 1024
   OUTPUT_DIM: 1024
   OUTPUT_NUM_LAYERS: 2
-  NUM_EPOCHS: 25
+  NUM_EPOCHS: 10
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
+  CLIP_VALUE: 10 # Gradient clipping
   OPTIMIZATION_METRIC_NAME: map_micro #only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
   
   #Losses. Only the parameters for selected loss will be used
-  LOSS_FN: FocalLoss #Currently supported: BCE, FocalLoss, BatchWeightedBCE
-  FOCAL_LOSS_GAMMA: 2.0
+  LOSS_FN: FocalLoss # Currently supported: BCE, FocalLoss, BatchWeightedBCE
+  FOCAL_LOSS_GAMMA: 2
   FOCAL_LOSS_ALPHA: 0.25
   BCE_POS_WEIGHT: 25 # 671.7130737304688
 
@@ -27,30 +28,31 @@ params:
   LABEL_ENCODER_CHECKPOINT: microsoft/biogpt
 
   # Batch sizes
-  TRAIN_BATCH_SIZE: 128
-  VALIDATION_BATCH_SIZE: 128
-  TEST_BATCH_SIZE: 24
+  TRAIN_BATCH_SIZE: 256 # Use 128 for V100, 256 for A100
+  VALIDATION_BATCH_SIZE: 256 # Use 128 for V100, 256 for A100
+  TEST_BATCH_SIZE: 16 # Use 8 for V100, 16 for A100
 
   # Sampling
-  TRAIN_LABEL_SAMPLE_SIZE: 2000 # Set to null if you want to use all labels
-  VALIDATION_LABEL_SAMPLE_SIZE: 2000 # Set to null if you want to use all labels
+  TRAIN_LABEL_SAMPLE_SIZE: 10000 # Use 4000 for V100, 10000 for A100
+  VALIDATION_LABEL_SAMPLE_SIZE: 10000 # Use 4000 for V100, 10000 for A100
 
   # Subset fractions (for rapid prototyping; set to 1 for final model)
-  TRAIN_SUBSET_FRACTION: 0.005 # Set to 1.0 if you want to use all data
-  VALIDATION_SUBSET_FRACTION: 0.1 # Set to 1.0 if you want to use all data
-  TEST_SUBSET_FRACTION: 0.1 # Set to 1.0 if you want to use all data
+  TRAIN_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
+  VALIDATION_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
+  TEST_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
+
+  # Data processing
+  DEDUPLICATE: True
 
   # Constants
   SEED: 42
-  VALIDATIONS_PER_EPOCH: 3
-  NUM_WORKERS: 1
+  VALIDATIONS_PER_EPOCH: 1
+  NUM_WORKERS: 4
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
   LABEL_BATCH_SIZE_LIMIT: 128 # Maximum number of labels that can be passed to the label encoder at once (to avoid OOM errors)
   SEQUENCE_BATCH_SIZE_LIMIT: 128 # Maximum number of sequences that can be passed to the sequence encoder at once (to avoid OOM errors)
-  # NOT IMPLEMENTED
-  JOINT_EMBEDDINGS_NUM_CHUNKS: 15 # Number of chunks to split the joint embeddings into (to avoid OOM errors)
 
-#Constants for protein encoder model (e.g. ProteInfer). Not really params since 
+# Constants for protein encoder model (e.g. ProteInfer). Not really params since 
 # we are not going to change these.
 embed_sequences_params:
   INPUT_CHANNELS: 20

@@ -139,6 +139,8 @@ def get_or_generate_vocabularies(full_data_path, vocabularies_dir, logger):
         else:
             missing_vocab_types.append(vocab_type)
     if missing_vocab_types:
+        logger.info(
+            f"Generating {', '.join(missing_vocab_types)} vocabularies...")
         vocabularies.update(generate_vocabularies(
             full_data_path, missing_vocab_types, logger, vocabularies_dir))
     return vocabularies

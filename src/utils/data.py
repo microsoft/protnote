@@ -9,6 +9,39 @@ import random
 import numpy as np
 import wget
 import hashlib
+from collections import OrderedDict
+
+
+def log_gpu_memory_usage(logger, device_id):
+    device = torch.device(f"cuda:{device_id}")
+    allocated = torch.cuda.memory_allocated(
+        device) / (1024 ** 2)  # Convert bytes to MB
+    reserved = torch.cuda.memory_reserved(
+        device) / (1024 ** 2)  # Convert bytes to MB
+    total_memory = torch.cuda.get_device_properties(
+        device).total_memory / (1024 ** 2)  # Convert bytes to MB
+
+    allocated_percent = (allocated / total_memory) * 100
+    reserved_percent = (reserved / total_memory) * 100
+    combined = allocated + reserved
+    combined_percent = (combined / total_memory) * 100
+    logger.info("-" * 50)
+    logger.info(
+        f"Device {device_id} [Name: {torch.cuda.get_device_name(device)}]")
+    logger.info(
+        f"  Allocated Memory: {allocated:.2f} MB ({allocated_percent:.2f}%)")
+    logger.info(
+        f"  Reserved Memory: {reserved:.2f} MB ({reserved_percent:.2f}%)")
+    logger.info(
+        f"  Combined (Allocated + Reserved) Memory: {combined:.2f} MB ({combined_percent:.2f}%)")
+    logger.info(f"  Total Device Memory: {total_memory:.2f} MB")
+    logger.info("-" * 50)
+
+
+def convert_float16_to_float32(df):
+    float16_cols = df.select_dtypes(include='float16').columns
+    df[float16_cols] = df[float16_cols].astype('float32')
+    return df
 
 
 def hash_alphanumeric_sequence_id(s: str):
@@ -83,12 +116,33 @@ def download_and_unzip(url, output_file):
         f"File {output_file + '.gz'} has been downloaded and unzipped to {output_file}.")
 
 
-def load_model_weights(model, path):
+def load_state_dict(model, checkpoint_path):
     """
-    Loads PyTorch model weights from a .pt file.
+    Load the model's state dict from the checkpoint.
+
+    This function handles both DDP-wrapped and non-DDP checkpoints.
+
+    :param model: The model into which the checkpoint's state dict should be loaded.
+    :param checkpoint_path: Path to the checkpoint file.
+    :return: The model with loaded state dict.
     """
-    assert path and os.path.exists(path), f"Model weights not found at {path}."
-    model.load_state_dict(torch.load(path))
+
+    # Load checkpoint's state dict
+    state_dict = torch.load(checkpoint_path)
+
+    # Check if the state_dict is NOT from a DDP-wrapped model
+    if not list(state_dict.keys())[0].startswith('module.'):
+        # Create a new OrderedDict with the "module." prefix
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            name = 'module.' + k  # add 'module.' prefix
+            new_state_dict[name] = v
+        state_dict = new_state_dict
+
+    # Load the state_dict into the model
+    model.load_state_dict(state_dict)
+
+    return model
 
 
 def seed_everything(seed: int, device: str):

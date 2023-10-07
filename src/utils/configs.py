@@ -49,7 +49,7 @@ def get_setup(
         ROOT_PATH = os.environ.get("ROOT_PATH", ".")
         DATA_PATH = os.path.join(ROOT_PATH, "data")
         OUTPUT_PATH = os.path.join(ROOT_PATH, "outputs")
-        if not os.path.exists(OUTPUT_PATH):
+        if not os.path.exists(OUTPUT_PATH) and is_master:
             os.makedirs(OUTPUT_PATH)
 
     # Load the configuration file and override the parameters if provided
@@ -117,16 +117,23 @@ def get_setup(
 
     # Initialize logging
     log_dir = paths["LOG_DIR"]
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    if not os.path.exists(log_dir) and is_master:
+        try:
+            os.makedirs(log_dir)
+        except FileExistsError:
+            print(
+                f"Log directory {log_dir} already exists. is_master={is_master}")
+            pass
     full_log_path = os.path.join(log_dir, f"{timestamp}_{run_name}.log")
 
     # Initialize the logger for all processes
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
 
     # Only log to file and console if this is the main process
     if is_master:
+        # Set the logging level (default for other processes is WARNING)
+        logger.setLevel(logging.INFO)
+
         # Create a formatter
         formatter = logging.Formatter(
             fmt="%(asctime)s %(levelname)-4s %(message)s",
@@ -144,6 +151,9 @@ def get_setup(
         logger.addHandler(stream_handler)
 
         print(f"Logging to {full_log_path} and console...")
+    else:
+        # Set the logger level to an unreachable level, effectively disabling it
+        logger.setLevel(logging.CRITICAL + 1)
 
     # Return a dictionary
     return {

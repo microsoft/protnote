@@ -1,5 +1,5 @@
 import logging
-from src.utils.data import load_gz_json
+from src.utils.data import load_gz_json, log_gpu_memory_usage
 from src.utils.evaluation import EvalMetrics
 from src.utils.losses import BatchWeightedBCE, FocalLoss, RGDBCE
 from torchmetrics import MetricCollection, Metric
@@ -10,6 +10,8 @@ import wandb
 import os
 import json
 from collections import defaultdict
+from torch.cuda.amp import autocast, GradScaler
+from torch.nn.utils import clip_grad_norm_
 
 
 class ProTCLTrainer:
@@ -60,6 +62,7 @@ class ProTCLTrainer:
         self.normalize_probabilities = config["params"]["NORMALIZE_PROBABILITIES"]
         self.validations_per_epoch = config["params"]["VALIDATIONS_PER_EPOCH"]
         self.gradient_accumulation_steps = config["params"]["GRADIENT_ACCUMULATION_STEPS"]
+        self.clip_value = config["params"]["CLIP_VALUE"]
         self.vocabularies = vocabularies
         self.label_normalizer = load_gz_json(
             config["paths"]["PARENTHOOD_LIB_PATH"]
@@ -70,10 +73,11 @@ class ProTCLTrainer:
         self.loss_fn = self._get_loss_fn(config)
         self.model_path = self._get_saved_model_path()
         self.best_val_metric = 0.0
+        self.scaler = GradScaler()
 
     def _get_saved_model_path(self):
         # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
-        if not os.path.exists(self.output_model_dir):
+        if not os.path.exists(self.output_model_dir) and self.is_master:
             os.makedirs(self.output_model_dir)
 
         model_name = (
@@ -108,7 +112,7 @@ class ProTCLTrainer:
         trainable_params = []
         trainable_params_names = []
 
-        for name, param in self.model.named_parameters():
+        for name, param in self.model.module.named_parameters():
             if name.startswith('sequence_encoder') and (not self.train_sequence_encoder):
                 param.requires_grad = False
 
@@ -160,7 +164,8 @@ class ProTCLTrainer:
             "tokenized_labels": tokenized_labels,
             "label_embeddings": label_embeddings
         }
-        logits = self.model(**inputs)
+        with autocast():
+            logits = self.model(**inputs)
 
         # Compute validation loss for the batch
         loss = self.loss_fn(logits, label_multihots.float())
@@ -190,7 +195,7 @@ class ProTCLTrainer:
             )
             self.best_val_metric = val_metrics[val_optimization_metric_name]
             # TODO: Break out model saving into separate method (save_checkpoint)
-            torch.save(self.model.state_dict(), self.model_path)
+            torch.save(self.model.module.state_dict(), self.model_path)
             self.logger.info(f"Saved model to {self.model_path}.")
 
             if self.use_wandb:
@@ -258,7 +263,7 @@ class ProTCLTrainer:
             if score > best_score:
                 best_score = score
                 best_th = th
-            print("TH:", th, "F1:", score)
+            self.logger.info("TH: {:.3f}, F1: {:.3f}".format(th, score))
 
         best_score = best_score
         self.logger.info(
@@ -358,8 +363,6 @@ class ProTCLTrainer:
         :param val_loader: _description_
         :type val_loader: torch.utils.data.DataLoader
         """
-        # Log that training is starting
-        self.logger.info("Starting training...")
         self.model.train()
 
         # Watch the model
@@ -368,16 +371,27 @@ class ProTCLTrainer:
 
         # Compute total number of training steps
         num_training_steps = len(train_loader) * self.num_epochs
+        self.logger.info(f"{'='*100}")
         self.logger.info(
-            f"Total number of training steps: {num_training_steps}")
+            f"Starting training. Total number of training steps: {num_training_steps}")
+        self.logger.info(f"{'='*100}")
         batch_count = 0
 
         for epoch in range(self.num_epochs):
             self.logger.info(
                 f"Starting epoch {epoch+1}/{self.num_epochs}...")
+
+            if self.is_master:
+                log_gpu_memory_usage(self.logger, 0)
+
+            # Set distributed loader epoch to shuffle data
+            if hasattr(train_loader.sampler, "set_epoch"):
+                train_loader.sampler.set_epoch(epoch)
+
             ####### TRAINING LOOP #######
             for batch in train_loader:
-                # Increment batch index
+                # Increment batch index and set gradients to zero
+                self.optimizer.zero_grad()
                 batch_count += 1
 
                 # Unpack the training batch
@@ -402,7 +416,9 @@ class ProTCLTrainer:
                     "tokenized_labels": tokenized_labels,
                     "label_embeddings": label_embeddings
                 }
-                logits = self.model(**inputs)
+
+                with autocast():
+                    logits = self.model(**inputs)
 
                 # log average probabilities to W&B
                 if self.use_wandb:
@@ -423,13 +439,16 @@ class ProTCLTrainer:
                 if self.use_wandb:
                     wandb.log({"train_loss": loss.item()})
 
-                # Backward pass
-                loss.backward()
+                # Backward pass with mixed precision
+                self.scaler.scale(loss).backward()
 
                 # Gradient accumulation every GRADIENT_ACCUMULATION_STEPS
                 if (batch_count % self.gradient_accumulation_steps == 0):
-                    self.optimizer.step()
-                    self.optimizer.zero_grad()
+                    # Apply gradient clipping
+                    clip_grad_norm_(self.model.module.parameters(),
+                                    max_norm=self.clip_value)
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
 
                 # Log training progress percentage every 2%
                 if num_training_steps > 100 and batch_count % int(num_training_steps/100) == 0:
@@ -456,6 +475,15 @@ class ProTCLTrainer:
                     self.logger.info(
                         f"Validation metrics:\n{json.dumps(val_metrics, indent=4)}")
 
-        # Set weights to best model
-        self.logger.info("Restoring model to best validation map_micro...")
-        self.model.load_state_dict(torch.load(self.model_path))
+        if self.is_master:
+            self.logger.info("Restoring model to best validation map_micro...")
+            self.model.module.load_state_dict(torch.load(self.model_path))
+
+            # Broadcast model state to other processes
+            for param in self.model.module.parameters():
+                # src=0 means source is the master process
+                torch.distributed.broadcast(param.data, src=0)
+        else:
+            # For non-master processes, just receive the broadcasted data
+            for param in self.model.module.parameters():
+                torch.distributed.broadcast(param.data, src=0)

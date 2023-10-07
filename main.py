@@ -1,8 +1,7 @@
-import psutil
 from src.utils.data import (
-    load_model_weights,
+    load_state_dict,
     seed_everything,
-    read_pickle
+    log_gpu_memory_usage
 )
 from src.utils.main_utils import get_or_generate_vocabularies,  get_or_generate_label_embeddings, get_or_generate_sequence_embeddings, validate_arguments
 from src.data.datasets import ProteinDataset, calculate_pos_weight, create_multiple_loaders
@@ -101,9 +100,9 @@ def train_validate_test(gpu, args):
         rank=rank
     )
     print(f"{'=' * 50}\n"
-      f"Initializing GPU {gpu/args.gpus} on node {args.nr};\n"
-      f"    or, gpu {rank+1}/{args.world_size} for all nodes.\n"
-      f"{'=' * 50}")
+          f"Initializing GPU {gpu}/{args.gpus-1} on node {args.nr};\n"
+          f"    or, gpu {rank+1}/{args.world_size} for all nodes.\n"
+          f"{'=' * 50}")
 
     # Check if master process
     is_master = rank == 0
@@ -158,7 +157,8 @@ def train_validate_test(gpu, args):
         subset_fractions={
             "train": params["TRAIN_SUBSET_FRACTION"],
             "validation": params["VALIDATION_SUBSET_FRACTION"],
-            "test": params["TEST_SUBSET_FRACTION"]}
+            "test": params["TEST_SUBSET_FRACTION"]},
+        deduplicate=params["DEDUPLICATE"],
     )
 
     # Seed everything so we don't go crazy
@@ -279,9 +279,8 @@ def train_validate_test(gpu, args):
     if (params["BCE_POS_WEIGHT"] is None) & (args.train_path_name is not None):
         logger.info("Calculating bce_pos_weight...")
         bce_pos_weight = calculate_pos_weight(datasets["train"][0].data,
-                                              datasets["train"][0].get_label_vocabulary_size(
-        )
-        ).to(device)
+                                              len(vocabularies["GO_label_vocab"])
+                                              ).to(device)
         logger.info(f"Calculated bce_pos_weight= {bce_pos_weight.item()}")
     elif (params["BCE_POS_WEIGHT"] is not None):
         bce_pos_weight = torch.tensor(params["BCE_POS_WEIGHT"]).to(device)
@@ -309,7 +308,7 @@ def train_validate_test(gpu, args):
     # Load the model weights if --load-model argument is provided (using the DATA_PATH directory as the root)
     # TODO: Process model loading in the get_setup function
     if args.load_model:
-        load_model_weights(model, os.path.join(
+        load_state_dict(model, os.path.join(
             config["DATA_PATH"], args.load_model))
         logger.info(
             f"Loading model weights from {os.path.join(config['DATA_PATH'], args.load_model)}...")
@@ -340,7 +339,8 @@ def train_validate_test(gpu, args):
     best_val_th = params["DECISION_TH"]
     # Setup for validation
     if args.validation_path_name:
-        val_loader = DataLoader(
+        # Reinitialize the validation loader with all the data, in case we were using a subset to expedite training
+        full_val_loader = DataLoader(
             datasets["validation"][0],
             batch_size=params["TEST_BATCH_SIZE"],
             shuffle=False,
@@ -348,33 +348,44 @@ def train_validate_test(gpu, args):
             num_workers=params["NUM_WORKERS"],
             pin_memory=True,
             sampler=DistributedSampler(
-                datasets["validation"][0], num_replicas=args.world_size, rank=rank)
+                datasets["validation"][0],
+                num_replicas=args.world_size,
+                rank=rank,
+                shuffle=True
+            )
         )
 
         # If no decision threshold is provided, find the optimal threshold on the validation set
         if not params["DECISION_TH"]:
             logger.info("Decision threshold not provided.")
             best_val_th, _ = Trainer.find_optimal_threshold(
-                data_loader=val_loader,
+                data_loader=full_val_loader,
                 optimization_metric_name=params["DECISION_TH_METRIC_NAME"]
             )
 
-        logger.info("====Testing on validation set====")
-        # Final valiadtion using all labels
+        logger.info(
+            f"\n{'='*100}\nTesting on validation set\n{'='*100}")
 
+        # Print the batch size used
+        logger.info(f"Batch size: {params['TEST_BATCH_SIZE']}")
+        if is_master:
+            log_gpu_memory_usage(logger, 0)
+
+        # Final validation using all labels
+        torch.cuda.empty_cache()
         validation_metrics, validation_results = Trainer.evaluate(
-            data_loader=val_loader,
+            data_loader=full_val_loader,
             eval_metrics=eval_metrics.get_metric_collection(type="all",
                                                             threshold=best_val_th,
                                                             num_labels=len(
-                                                                datasets["validation"][0].label_vocabulary)
+                                                                vocabularies["GO_label_vocab"])
                                                             ),
             save_results=True
         )
 
         if is_master:
             save_evaluation_results(results=validation_results,
-                                    label_vocabulary=datasets["validation"][0].label_vocabulary,
+                                    label_vocabulary=vocabularies["GO_label_vocab"],
                                     run_name=args.name,
                                     output_dir=paths["RESULTS_DIR"],
                                     )
@@ -384,16 +395,18 @@ def train_validate_test(gpu, args):
 
     # Setup for testing
     if args.test_paths_names:
-        logger.info("Starting testing...")
         for idx, test_loader in enumerate(loaders["test"]):
-            logger.info(f"====Testing on test set #{idx}====")
-            # If best_val_th is not defined, alert an error to either provide a decision threshold or a validation datapath
+            logger.info(
+                f"\n{'='*100}\nTesting on test set {idx+1}/{len(loaders['test'])}\n{'='*100}")
+            if is_master:
+                log_gpu_memory_usage(logger, 0)
 
+            # TODO: If best_val_th is not defined, alert an error to either provide a decision threshold or a validation datapath
             test_metrics, test_results = Trainer.evaluate(
                 data_loader=test_loader,
                 eval_metrics=eval_metrics.get_metric_collection(type="all",
                                                                 threshold=best_val_th,
-                                                                num_labels=len(datasets["test"][0].label_vocabulary)),
+                                                                num_labels=len(vocabularies["GO_label_vocab"])),
                 save_results=True
             )
 
@@ -402,13 +415,21 @@ def train_validate_test(gpu, args):
             logger.info(json.dumps(test_metrics, indent=4))
             logger.info("Testing complete.")
 
-    # Close the W&B run
+    ####### CLEANUP #######
+    logger.info(
+        f"\n{'='*100}\nTraining, validating, and testing COMPLETE\n{'='*100}\n")
+    # W&B
     if is_master and args.use_wandb and all_test_metrics:
         wandb.log(all_test_metrics[-1])
         wandb.finish()
-
+    # Loggers
+    handlers = logger.handlers[:]
+    for handler in handlers:
+        logger.removeHandler(handler)
+        handler.close()
+    # Torch
+    torch.cuda.empty_cache()
     dist.destroy_process_group()
-    logger.info("################## train.py COMPLETE ##################")
 
 
 """
@@ -421,6 +442,7 @@ def train_validate_test(gpu, args):
     --validation-path-name VAL_DATA_PATH 
     --full-path-name FULL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH
+    --use-wandb
 """
 if __name__ == "__main__":
     main()
