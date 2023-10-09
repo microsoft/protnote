@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 from src.utils.data import read_fasta, read_json, get_vocab_mappings, read_pickle
-from src.utils.models import tokenize_labels
+from src.utils.models import tokenize_labels, get_label_embeddings
 from typing import Dict
 import pandas as pd
 import logging
@@ -12,6 +12,7 @@ from joblib import Parallel, delayed, cpu_count
 from functools import partial
 from collections import Counter
 from torch.utils.data.distributed import DistributedSampler
+from src.utils.main_utils import get_or_generate_label_embeddings
 
 
 class ProteinDataset(Dataset):
@@ -21,11 +22,16 @@ class ProteinDataset(Dataset):
 
     def __init__(
         self,
-        paths: dict,
+        data_paths: dict,
+        config: dict,
         vocabularies: dict,
         label_tokenizer=None,
+        label_encoder=None,
+        sequence_encoder=None,
+        logger=None,
         subset_fraction: float = 1.0,
-        deduplicate: bool = False
+        deduplicate: bool = False,
+        is_master: bool = True,
     ):
         """
         paths (dict): Dictionary containing paths to the data and vocabularies.
@@ -37,19 +43,19 @@ class ProteinDataset(Dataset):
         # Error handling: check for missing keys and invalid dataset types
         required_keys = ["data_path", "dataset_type"]
         for key in required_keys:
-            if key not in paths:
+            if key not in data_paths:
                 raise ValueError(
                     f"Missing required key in paths dictionary: {key}")
 
-        assert paths["dataset_type"] in [
+        assert data_paths["dataset_type"] in [
             "train",
             "validation",
             "test",
         ], "dataset_type must be one of 'train', 'val', or 'test'"
 
         # Set the dataset type and data path
-        self.dataset_type = paths["dataset_type"]
-        self.data_path = paths["data_path"]
+        self.dataset_type = data_paths["dataset_type"]
+        self.data_path = data_paths["data_path"]
 
         # Set and process the vocabularies
         self.amino_acid_vocabulary = vocabularies["amino_acid_vocab"]
@@ -58,7 +64,7 @@ class ProteinDataset(Dataset):
         self._process_vocab()
 
         # Initialize class variables
-        self.data = read_fasta(paths["data_path"])
+        self.data = read_fasta(data_paths["data_path"])
         self.label_embedding_matrix = self.sequence_embedding_df = None
 
         # Subset the data if subset_fraction is provided (to improve training speed)
@@ -70,28 +76,43 @@ class ProteinDataset(Dataset):
 
         # Deduplicate the data if deduplicate is True
         if deduplicate:
-            # Deduplicate sequences
             self._remove_duplicates()
 
         # Load the map from alphanumeric label id to text label
         self.label_annotation_map = {key: value['label'] for key, value in read_pickle(
-            paths["go_annotations_path"]).to_dict(orient='index').items()}
+            data_paths["go_annotations_path"]).to_dict(orient='index').items()}
+
+        # Create ordered list of labels
+        label_text_list = []
+        for label_id in self.label_vocabulary:
+            label_text_list.append(self.label_annotation_map[label_id])
+        self.label_text_list = label_text_list
 
         # Loop through the label IDs and tokenize the labels if a label tokenizer is provided
-        label_list = []
-        for label_id in self.label_vocabulary:
-            label_list.append(self.label_annotation_map[label_id])
         self.tokenized_labels = None
         if label_tokenizer is not None:
             self.tokenized_labels = tokenize_labels(
-                label_list, label_tokenizer)
+                label_text_list, label_tokenizer)
+
+        # If a label encoder is provided, encode the labels
+        if label_encoder is not None:
+            label_embedding_matrix = get_or_generate_label_embeddings(
+                label_annotations=self.label_text_list,
+                label_tokenizer=label_tokenizer,
+                label_encoder=label_encoder,
+                label_embedding_path=config["paths"]["LABEL_EMBEDDING_PATH"],
+                logger=logger,
+                batch_size_limit=config["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
+                is_master=is_master,
+            )
+            self.label_embedding_matrix = label_embedding_matrix
+
+        # If a sequence encoder is provided, generate sequence embeddings
+        # TODO: Implement this here
 
     # Helper functions for setting embedding dictionaries
     def set_sequence_embedding_df(self, embedding_df: pd.DataFrame):
         self.sequence_embedding_df = embedding_df
-
-    def set_label_embedding_matrix(self, embedding_matrix: torch.Tensor):
-        self.label_embedding_matrix = embedding_matrix
 
     def _remove_duplicates(self):
         """
@@ -191,9 +212,12 @@ class ProteinDataset(Dataset):
     def create_multiple_datasets(
         cls,
         paths_list: List[Dict[str, str]],
+        config: dict,
         vocabularies: dict,
         subset_fractions: dict = None,
         label_tokenizer=None,
+        label_encoder=None,
+        logger=None,
         deduplicate: bool = False,
     ) -> List[Dataset]:
         """
@@ -202,14 +226,17 @@ class ProteinDataset(Dataset):
         """
         datasets = defaultdict(list)
         subset_fractions = subset_fractions or {}
-        for paths in paths_list:
-            datasets[paths["dataset_type"]].append(
+        for data_paths in paths_list:
+            datasets[data_paths["dataset_type"]].append(
                 cls(
-                    paths,
+                    data_paths,
+                    config,
                     vocabularies,
                     label_tokenizer=label_tokenizer,
+                    label_encoder=label_encoder,
+                    logger=logger,
                     subset_fraction=subset_fractions.get(
-                        paths["dataset_type"], 1.0),
+                        data_paths["dataset_type"], 1.0),
                     deduplicate=deduplicate
                 )
             )

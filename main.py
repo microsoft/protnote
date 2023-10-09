@@ -1,5 +1,5 @@
 from src.utils.data import (
-    load_state_dict,
+    load_checkpoint,
     seed_everything,
     log_gpu_memory_usage
 )
@@ -9,7 +9,7 @@ from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
 from src.models.protein_encoders import ProteInfer
 from src.utils.evaluation import EvalMetrics, save_evaluation_results
-from src.utils.models import count_parameters_by_layer, sigmoid_bias_from_prob
+from src.utils.models import count_parameters_by_layer, sigmoid_bias_from_prob, get_label_embeddings
 from src.utils.configs import get_setup
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
@@ -145,14 +145,22 @@ def train_validate_test(gpu, args):
     label_tokenizer = AutoTokenizer.from_pretrained(
         params['LABEL_ENCODER_CHECKPOINT'])
 
+    # Initialize label encoder
+    label_encoder = AutoModel.from_pretrained(
+        params['LABEL_ENCODER_CHECKPOINT'])
+    label_encoder = label_encoder.to(device)
+
     # Load or generate the vocabularies
     vocabularies = get_or_generate_vocabularies(
         paths["FULL_DATA_PATH"], paths["VOCABULARIES_DIR"], logger)
 
     # Create datasets
     datasets = ProteinDataset.create_multiple_datasets(
-        config['dataset_paths_list'],
+        paths_list=config['dataset_paths_list'],
+        config=config,
+        logger=logger,
         label_tokenizer=label_tokenizer,
+        label_encoder=label_encoder,
         vocabularies=vocabularies,
         subset_fractions={
             "train": params["TRAIN_SUBSET_FRACTION"],
@@ -185,36 +193,7 @@ def train_validate_test(gpu, args):
         rank=rank,
     )
 
-    # Mappings. A bit hacky, but it works
-    # TODO: Is there a cleaner way of doing this? It feels awkward that we define "label2int" based on only train (even though it's the same)
-    # Maybe we load label2int from the JSON vocabulary upfront and pass that to the dataset?
-    label2int = datasets[list(datasets.keys())[0]][0].label2int
-    int2label = datasets[list(datasets.keys())[0]][0].int2label
-    label_annotation_map = datasets[list(datasets.keys())[
-        0]][0].label_annotation_map
-
-    # Load label encoder
-    label_encoder = AutoModel.from_pretrained(
-        params['LABEL_ENCODER_CHECKPOINT'])
-
-    # Generate all label embeddings upfront, if not training the label encoder
-    label_embedding_matrix = None
     if not params["TRAIN_LABEL_ENCODER"]:
-        # Create a list of text labels
-        sorted_labels = sorted(
-            vocabularies["GO_label_vocab"], key=lambda x: label2int[x])
-        label_annotations = [label_annotation_map[label_id]
-                             for label_id in sorted_labels]
-        label_encoder = label_encoder.to(device)
-        label_embedding_matrix = get_or_generate_label_embeddings(
-            paths,
-            device,
-            label_annotations,
-            label_tokenizer,
-            label_encoder,
-            logger,
-            label_batch_size_limit=params["LABEL_BATCH_SIZE_LIMIT"]
-        )
         # Move the label encoder to CPU
         label_encoder = label_encoder.cpu()
 
@@ -242,12 +221,11 @@ def train_validate_test(gpu, args):
             params,
             logger,
         )
+        sequence_encoder = sequence_encoder.to('cpu')
 
-    # Loop through all the datasets and set the label and sequence embedding matrices
+    # Loop through all the datasets and set the sequence embedding df
     for dataset in datasets.values():
         for subset in dataset:
-            if not params["TRAIN_LABEL_ENCODER"]:
-                subset.set_label_embedding_matrix(label_embedding_matrix.cpu())
             if not params["TRAIN_SEQUENCE_ENCODER"]:
                 subset.set_sequence_embedding_df(sequence_embedding_df)
 
@@ -270,6 +248,10 @@ def train_validate_test(gpu, args):
         # Training options
         train_label_encoder=params["TRAIN_LABEL_ENCODER"],
         train_sequence_encoder=params["TRAIN_SEQUENCE_ENCODER"],
+
+        # Batch size limits
+        label_batch_size_limit=params["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
+        sequence_batch_size_limit=params["SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD"],
     ).to(device)
 
     # Wrap the model in DDP for distributed computing
@@ -308,17 +290,16 @@ def train_validate_test(gpu, args):
     # Load the model weights if --load-model argument is provided (using the DATA_PATH directory as the root)
     # TODO: Process model loading in the get_setup function
     if args.load_model:
-        load_state_dict(model, os.path.join(
+        load_checkpoint(Trainer, os.path.join(
             config["DATA_PATH"], args.load_model))
         logger.info(
-            f"Loading model weights from {os.path.join(config['DATA_PATH'], args.load_model)}...")
+            f"Loading model checkpoing from {os.path.join(config['DATA_PATH'], args.load_model)}. If training, will continue from epoch {Trainer.epoch+1}.\n")
 
     # Initialize EvalMetrics
     eval_metrics = EvalMetrics(device=device)
 
     ####### TRAINING AND VALIDATION LOOPS #######
     if args.train_path_name is not None:
-
         # Train function
         Trainer.train(train_loader=loaders["train"][0],
                       val_loader=loaders["validation"][0],

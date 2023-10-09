@@ -19,7 +19,7 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-- name: nc-test-CLIP-10
+- name: AMLT-FL-70-1.75-0.9
   sku: G8
   priority: high
   command:
@@ -30,13 +30,14 @@ jobs:
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
     --full-path-name FULL_DATA_PATH 
-    --name $USER-test-CLIP-10
+    --name AMLT-FL-70-1.75-0.9
+    --override NUM_EPOCHS 70 FOCAL_LOSS_GAMMA 1.75 FOCAL_LOSS_ALPHA 0.9
     --amlt
     --use-wandb
   submit_args:
     env:
       WANDB_API_KEY: "$WANDB_API_KEY"
-- name: nc-amlt-test-CLIP-5
+- name: AMLT-FL-70-2-0.9
   sku: G8
   priority: high
   command:
@@ -47,8 +48,8 @@ jobs:
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
     --full-path-name FULL_DATA_PATH 
-    --override CLIP_VALUE 5
-    --name $USER-amlt-test-CLIP-5
+    --name AMLT-FL-70-1.75-0.9
+    --override NUM_EPOCHS 70 FOCAL_LOSS_GAMMA 2 FOCAL_LOSS_ALPHA 0.9
     --amlt
     --use-wandb
   submit_args:

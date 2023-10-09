@@ -40,12 +40,6 @@ def validate_arguments(args, parser):
             "You must provide --load-model if no --train-path-names is provided")
 
 
-def prompt_user_for_path(message, default_path=None):
-    """Prompt the user for a file path and return it."""
-    user_input = input(f"{message} (Default: {default_path}): ").strip()
-    return user_input if user_input else default_path
-
-
 def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
     """Generate sequence embeddings for the given datasets."""
     sequence_encoder = sequence_encoder.to(device)
@@ -54,7 +48,7 @@ def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
     combined_dataset = ConcatDataset(all_datasets)
     combined_loader = DataLoader(
         combined_dataset,
-        batch_size=params["SEQUENCE_BATCH_SIZE_LIMIT"],
+        batch_size=params["SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD"],
         shuffle=False,
         collate_fn=collate_variable_sequence_length,
         num_workers=params["NUM_WORKERS"],
@@ -79,26 +73,44 @@ def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
     return df
 
 
-def get_or_generate_label_embeddings(paths, device, label_annotations, label_tokenizer, label_encoder, logger, label_batch_size_limit):
+def get_or_generate_label_embeddings(
+    label_annotations,
+    label_tokenizer,
+    label_encoder,
+    label_embedding_path=None,
+    logger=None,
+    batch_size_limit=1000,
+    is_master=True,
+):
     """Load or generate label embeddings based on the provided paths and parameters."""
-    if "LABEL_EMBEDDING_PATH" in paths and os.path.exists(paths["LABEL_EMBEDDING_PATH"]):
-        label_embedding_matrix = torch.load(
-            paths["LABEL_EMBEDDING_PATH"], map_location=device)
-        logger.info(
-            f"Loaded label embeddings from {paths['LABEL_EMBEDDING_PATH']}")
+    if label_embedding_path and os.path.exists(label_embedding_path):
+        label_embedding_matrix = torch.load(label_embedding_path)
+        if logger is not None:
+            logger.info(
+                f"Loaded label embeddings from {label_embedding_path}")
     else:
-        logger.info("Generating label embeddings...")
-        label_embedding_matrix = generate_label_embeddings_from_text(
-            label_annotations, label_tokenizer, label_encoder, label_batch_size_limit)
-        save_path = prompt_user_for_path(
-            "Enter the full file path to save the label embeddings, or hit enter to continue without saving",
-            default_path=None
-        )
-        if save_path:
-            torch.save(label_embedding_matrix, save_path)
-            logger.info(f"Saved label embeddings to {save_path}")
-        else:
-            logger.info("Label embeddings not saved.")
+        if logger is not None:
+            logger.info("Generating and saving label embeddings from text...")
+
+        # If not master, throw an error
+        if not is_master:
+            raise ValueError(
+                "Cannot generate label embeddings on distributed process (avoid race conditions).")
+
+        label_encoder.eval()
+        with torch.no_grad():
+            label_embedding_matrix = generate_label_embeddings_from_text(
+                label_annotations,
+                label_tokenizer,
+                label_encoder,
+                batch_size_limit
+            ).cpu()
+        label_encoder.train()
+        if label_embedding_path is not None:
+            torch.save(label_embedding_matrix, label_embedding_path)
+            if logger is not None:
+                logger.info(
+                    f"Saved label embeddings to {label_embedding_path}")
     return label_embedding_matrix
 
 
@@ -112,16 +124,9 @@ def get_or_generate_sequence_embeddings(paths, device, sequence_encoder, dataset
         logger.info("Generating sequence embeddings...")
         sequence_embedding_df = generate_sequence_embeddings(
             device, sequence_encoder, datasets, params)
-        save_path = prompt_user_for_path(
-            "Enter the full file path to save the sequence embeddings, or hit enter to continue without saving",
-            default_path=None
-        )
-        if save_path:
-            with open(save_path, 'wb') as f:
-                save_to_pickle(sequence_embedding_df, save_path)
-            logger.info(f"Saved sequence embeddings to {save_path}")
-        else:
-            logger.info("Sequence embeddings not saved.")
+        # TODO: Save sequence embeddings here to the provided path
+        raise NotImplementedError(
+            "Saving sequence embeddings is not yet implemented.")
     return sequence_embedding_df
 
 
