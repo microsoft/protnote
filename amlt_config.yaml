@@ -37,4 +37,3 @@ jobs:
   submit_args:
     env:
       WANDB_API_KEY: "$WANDB_API_KEY"
-
