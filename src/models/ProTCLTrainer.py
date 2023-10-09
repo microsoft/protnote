@@ -88,7 +88,6 @@ class ProTCLTrainer:
         )
         return model_path
 
-    # TODO: Eventually use factory method to get loss_fn based on config
     def _get_loss_fn(self, config):
         if config["params"]["LOSS_FN"] == "BCE":
             assert self.bce_pos_weight is not None, "bce_pos_weight must be provided for BCE loss"
@@ -100,7 +99,7 @@ class ProTCLTrainer:
                 & (config["params"]["FOCAL_LOSS_ALPHA"] is not None), "gamma and gamma must be provided for FocalLoss"
             return FocalLoss(gamma=config["params"]["FOCAL_LOSS_GAMMA"], alpha=config["params"]["FOCAL_LOSS_ALPHA"])
         elif config["params"]["LOSS_FN"] == "RGDBCE":
-            return RGDBCE()
+            return RGDBCE(temp=config["params"]["RGDBCE_TEMP"])
         else:
             raise ValueError(
                 f"Unknown loss function {config['params']['LOSS_FN']}")

@@ -53,11 +53,12 @@ import torch.nn.functional as F
 
 class RGDBCE(torch.nn.Module):
     def __init__(self,temp):
+        super().__init__()
         self.temp = temp
 
     def forward(self,input,target):
         loss = torch.nn.functional.binary_cross_entropy_with_logits(input, target,reduce='none')
-        return torch.exp(torch.clamp(loss.detach(),max=self.temp)/(self.temp+1)).mean()
+        return (loss*torch.exp(torch.clamp(loss.detach(),max=self.temp)/(self.temp+1))).mean()
 
 class BatchWeightedBCE(torch.nn.Module):
     def __init__(self, epsilon=1e-10):
@@ -102,6 +103,29 @@ class BatchLabelWeightedBCE(torch.nn.Module):
         # Compute weighted binary cross-entropy loss
         return torch.nn.functional.binary_cross_entropy_with_logits(input, target, weight=weights.unsqueeze(0))
 
+class FocalLossV2(torch.nn.Module):
+    def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, input, target):
+        BCE_loss = torch.nn.BCEWithLogitsLoss(reduction='none')(input, target)
+        pt = torch.exp(-BCE_loss)
+        loss = ((1-pt)**self.gamma) * BCE_loss
+
+        if self.alpha >= 0:
+            alpha_t = self.alpha * target + (1 - self.alpha) * (1 - target)
+            loss = alpha_t * loss
+
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        else:
+            return loss
+        
 
 class FocalLoss(torch.nn.Module):
     def __init__(self, gamma=2, alpha=0.25, reduction='mean', epsilon=1e-10):
@@ -135,26 +159,3 @@ class FocalLoss(torch.nn.Module):
                 f"Invalid Value for arg 'reduction': '{self.reduction} \n Supported reduction modes: 'none', 'mean', 'sum'"
             )
         return loss
-
-class FocalLossStable(torch.nn.Module):
-    def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
-        super().__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.reduction = reduction
-
-    def forward(self, input, target):
-        BCE_loss = torch.nn.BCEWithLogitsLoss(reduction='none')(input, target)
-        pt = torch.exp(-BCE_loss)
-        loss = ((1-pt)**self.gamma) * BCE_loss
-
-        if self.alpha >= 0:
-            alpha_t = self.alpha * target + (1 - self.alpha) * (1 - target)
-            loss = alpha_t * loss
-
-        if self.reduction == 'mean':
-            return loss.mean()
-        elif self.reduction == 'sum':
-            return loss.sum()
-        else:
-            return loss

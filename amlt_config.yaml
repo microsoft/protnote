@@ -36,21 +36,3 @@ jobs:
   submit_args:
     env:
       WANDB_API_KEY: "$WANDB_API_KEY"
-- name: nc-amlt-test-CLIP-5
-  sku: G8
-  priority: high
-  command:
-  - python main.py 
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH 
-    --validation-path-name VAL_DATA_PATH 
-    --test-paths-names TEST_DATA_PATH 
-    --full-path-name FULL_DATA_PATH 
-    --override CLIP_VALUE 5
-    --name $USER-amlt-test-CLIP-5
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"

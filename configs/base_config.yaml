@@ -8,17 +8,19 @@ params:
   LATENT_EMBEDDING_DIM: 1024
   OUTPUT_DIM: 1024
   OUTPUT_NUM_LAYERS: 2
-  NUM_EPOCHS: 10
+  NUM_EPOCHS: 50
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
   CLIP_VALUE: 10 # Gradient clipping
+  OUTPUT_NEURON_PROBABILITY_BIAS: null
   OPTIMIZATION_METRIC_NAME: map_micro #only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
   
   #Losses. Only the parameters for selected loss will be used
-  LOSS_FN: FocalLoss # Currently supported: BCE, FocalLoss, BatchWeightedBCE
-  FOCAL_LOSS_GAMMA: 2
-  FOCAL_LOSS_ALPHA: 0.25
+  LOSS_FN: RGDBCE # Currently supported: BCE, FocalLoss, BatchWeightedBCE
+  FOCAL_LOSS_GAMMA: 3
+  FOCAL_LOSS_ALPHA: -1
   BCE_POS_WEIGHT: 25 # 671.7130737304688
+  RGDBCE_TEMP: 0.2
 
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False
@@ -33,8 +35,8 @@ params:
   TEST_BATCH_SIZE: 16 # Use 8 for V100, 16 for A100
 
   # Sampling
-  TRAIN_LABEL_SAMPLE_SIZE: 10000 # Use 4000 for V100, 10000 for A100
-  VALIDATION_LABEL_SAMPLE_SIZE: 10000 # Use 4000 for V100, 10000 for A100
+  TRAIN_LABEL_SAMPLE_SIZE: 15000 # Use 4000 for V100, 10000 for A100
+  VALIDATION_LABEL_SAMPLE_SIZE: 15000 # Use 4000 for V100, 10000 for A100
 
   # Subset fractions (for rapid prototyping; set to 1 for final model)
   TRAIN_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data

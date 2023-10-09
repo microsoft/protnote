@@ -71,8 +71,6 @@ def main():
     parser.add_argument('-nr', '--nr', default=0, type=int,
                         help='Ranking within the nodes')
 
-    # TODO: This could be more elegant with parser.add_subparsers()
-    # TODO: Make Optimization metric and normalize probabilities part of arguments
     args = parser.parse_args()
     validate_arguments(args, parser)
 
@@ -264,8 +262,7 @@ def train_validate_test(gpu, args):
         # Output Layer
         output_dim=params["OUTPUT_DIM"],
         output_num_layers=params["OUTPUT_NUM_LAYERS"],
-        # sigmoid_bias_from_prob(0.01) if params["LOSS_FN"] == "FocalLoss" else None,
-        output_neuron_bias=None,
+        output_neuron_bias=sigmoid_bias_from_prob(params["OUTPUT_NEURON_PROBABILITY_BIAS"]) if params["OUTPUT_NEURON_PROBABILITY_BIAS"]is not None else None,
 
         # Training options
         train_label_encoder=params["TRAIN_LABEL_ENCODER"],
