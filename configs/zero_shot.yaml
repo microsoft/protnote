@@ -38,8 +38,8 @@ params:
   VALIDATIONS_PER_EPOCH: 3
   NUM_WORKERS: 3
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
-  LABEL_BATCH_SIZE_LIMIT: 300 # Maximum number of labels that can be passed to the label encoder at once (to avoid OOM errors)
-  SEQUENCE_BATCH_SIZE_LIMIT: 300 # Maximum number of sequences that can be passed to the sequence encoder at once (to avoid OOM errors)
+  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 300 # Maximum number of labels that can be passed to the label encoder at once (to avoid OOM errors)
+  SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 300 # Maximum number of sequences that can be passed to the sequence encoder at once (to avoid OOM errors)
 
 #Constants for protein encoder model (e.g. ProteInfer). Not really params since 
 # we are not going to change these.

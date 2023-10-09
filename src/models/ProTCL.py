@@ -17,18 +17,20 @@ class ProTCL(nn.Module):
         train_sequence_encoder=False,
         output_dim=1024,
         output_num_layers=2,
-        output_neuron_bias=None
+        output_neuron_bias=None,
+        label_batch_size_limit=float("inf"),
+        sequence_batch_size_limit=float("inf"),
     ):
         super().__init__()
-
-        # Default label embedding cache
-        self.cached_label_embeddings = None
 
         # Training options
         self.train_label_encoder, self.train_sequence_encoder = train_label_encoder, train_sequence_encoder
 
         # Encoders
         self.label_encoder, self.sequence_encoder = label_encoder, sequence_encoder
+
+        # Batch size limits
+        self.label_batch_size_limit,  self.sequence_batch_size_limit = label_batch_size_limit, sequence_batch_size_limit
 
         # Projection heads
         self.W_p = nn.Linear(protein_embedding_dim, latent_dim, bias=False)
@@ -81,23 +83,17 @@ class ProTCL(nn.Module):
         if label_embeddings is not None and not self.train_label_encoder:
             L_f = label_embeddings
         elif tokenized_labels is not None:
-            # Throw an error
-            raise ValueError(
+            # Raise NotImplementedError
+            raise NotImplementedError(
                 "Training label encoder is not currently supported. ")
 
-            # If in training loop or we haven't cached the label embeddings, compute the embeddings
-            if self.training or self.cached_label_embeddings is None:
-                # Get label embeddings from tokens
+            # Get label embeddings from tokens
+            with torch.set_grad_enabled(self.train_label_encoder):
                 L_f = get_label_embeddings(
                     tokenized_labels,
                     self.label_encoder,
+                    batch_size_limit=self.label_batch_size_limit
                 )
-                # If not training, cache the label embeddings
-                if not self.training:
-                    # TODO: Rather than an nn.Embedding layer, this should be a mapping from token to embedding
-                    self.cached_label_embeddings = nn.Embedding.from_pretrained(
-                        L_f, freeze=True
-                    )
         else:
             raise ValueError(
                 "Incompatible label parameters passed to forward method.")
@@ -107,7 +103,7 @@ class ProTCL(nn.Module):
             P_f = sequence_embeddings
         elif sequence_onehots is not None and sequence_lengths is not None:
             # Throw an error
-            raise ValueError(
+            raise NotImplementedError(
                 "Training sequence encoder is not currently supported. ")
             P_f = self.sequence_encoder.get_embeddings(
                 sequence_onehots, sequence_lengths)
@@ -131,12 +127,6 @@ class ProTCL(nn.Module):
         logits = logits.reshape(num_sequences, num_labels)
 
         return logits
-
-    def clear_label_embeddings_cache(self):
-        """
-        Clears the cached label embeddings, forcing the model to recompute them on the next forward pass.
-        """
-        self.cached_label_embeddings = None
 
 
 def get_mlp(input_dim, output_dim, num_layers, output_neuron_bias=None):

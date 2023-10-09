@@ -1,6 +1,10 @@
 import torch
 import logging
 import numpy as np
+from torch.utils.data import DataLoader, TensorDataset
+import time
+from torch.cuda.amp import autocast
+
 
 def count_parameters_by_layer(model):
     """
@@ -67,45 +71,68 @@ def tokenize_labels(text, tokenizer, max_length=1024):
     )
 
 
-def get_label_embeddings(tokenized_labels, model, batch_size_limit=300):
+def compute_mean_hidden_states(last_hidden_states, attention_mask):
+    """Compute the mean of the last hidden state for only the relevant tokens."""
+    # Compute the number of relevant tokens for each sequence
+    num_relevant_tokens = attention_mask.sum(dim=1, keepdim=True)
+    # Mask the last_hidden_state tensor and compute the sum
+    sum_hidden_states = (last_hidden_states *
+                         attention_mask.unsqueeze(-1)).sum(dim=1)
+    # Compute the mean of the last hidden state
+    return sum_hidden_states / num_relevant_tokens
+
+
+def get_label_embeddings(tokenized_labels, model, batch_size_limit=1000):
     """
     Get embeddings for a list of tokenized labels.
-
-    Args:
-        tokenized_labels (BatchEncoding): Tokenized labels.
-        model (transformers.PreTrainedModel): The model.
-        batch_size_limit (int): The maximum number of labels to process in a single batch.
-
-    Returns:
-        torch.Tensor: The embeddings.
+    Assumes that tokenized_labels and model are on the same device, ideally GPU.
     """
-    all_label_embeddings = []
+    total_labels = tokenized_labels["input_ids"].shape[0]
 
-    # Move the entire tokenized data to GPU
-    tokenized_labels = {key: value.to(model.device)
-                        for key, value in tokenized_labels.items()}
+    if total_labels <= batch_size_limit:
+        with autocast():
+            last_hidden_states = model(
+                input_ids=tokenized_labels["input_ids"],
+                attention_mask=tokenized_labels["attention_mask"]
+            ).last_hidden_state
+        return compute_mean_hidden_states(last_hidden_states, tokenized_labels["attention_mask"])
 
-    total_labels = len(tokenized_labels["input_ids"])
+    else:
+        # Convert dictionary values to tensors
+        tensors = [tokenized_labels["input_ids"],
+                   tokenized_labels["attention_mask"]]
+        # Create TensorDataset and DataLoader
+        dataset = TensorDataset(*tensors)
+        dataloader = DataLoader(dataset, batch_size=batch_size_limit,
+                                shuffle=False, pin_memory=False, num_workers=2)
 
-    for start_idx in range(0, total_labels, batch_size_limit):
-        end_idx = min(start_idx + batch_size_limit, total_labels)
-        batch = {key: value[start_idx:end_idx]
-                 for key, value in tokenized_labels.items()}
+        all_label_embeddings = []
+        for batch in dataloader:
+            input_ids, attention_mask = batch
+            with autocast():
+                last_hidden_states = model(
+                    input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+            mean_hidden_states = compute_mean_hidden_states(
+                last_hidden_states, attention_mask)
+            all_label_embeddings.append(mean_hidden_states)
 
-        # Get the label embeddings (average across all tokens of the last hidden state)
-        outputs = model(**batch)
-        label_embeddings = outputs.last_hidden_state.mean(dim=1)
-        all_label_embeddings.append(label_embeddings)
-
-    # Concatenate all the label embeddings
-    return torch.cat(all_label_embeddings, dim=0)
+        # Concatenate all the label embeddings
+        return torch.cat(all_label_embeddings, dim=0)
 
 
-def generate_label_embeddings_from_text(label_annotations, label_tokenizer, label_encoder, label_batch_size_limit):
+def generate_label_embeddings_from_text(label_annotations, label_tokenizer, label_encoder, batch_size_limit=1000):
     """Tokenize the labels and generate label embeddings."""
     tokenized_labels = tokenize_labels(label_annotations, label_tokenizer)
-    with torch.no_grad():
-        return get_label_embeddings(tokenized_labels, label_encoder, batch_size_limit=label_batch_size_limit).cpu()
+
+    # Move to GPU
+    tokenized_labels["input_ids"] = tokenized_labels["input_ids"].to(
+        label_encoder.device)
+    tokenized_labels["attention_mask"] = tokenized_labels["attention_mask"].to(
+        label_encoder.device)
+
+    # Generate label embeddings
+    return get_label_embeddings(tokenized_labels, label_encoder, batch_size_limit=batch_size_limit).cpu()
+
 
 def sigmoid_bias_from_prob(prior_prob):
     return -np.log((1 - prior_prob) / prior_prob)

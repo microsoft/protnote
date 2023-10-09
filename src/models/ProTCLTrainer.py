@@ -1,5 +1,5 @@
 import logging
-from src.utils.data import load_gz_json, log_gpu_memory_usage
+from src.utils.data import load_gz_json, log_gpu_memory_usage, save_checkpoint, load_checkpoint
 from src.utils.evaluation import EvalMetrics
 from src.utils.losses import BatchWeightedBCE, FocalLoss, RGDBCE
 from torchmetrics import MetricCollection, Metric
@@ -12,6 +12,7 @@ import json
 from collections import defaultdict
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
+from transformers import BatchEncoding
 
 
 class ProTCLTrainer:
@@ -27,24 +28,19 @@ class ProTCLTrainer:
         use_wandb: bool = False,
         bce_pos_weight: torch.Tensor = None,
         is_master: bool = True,
+        epoch: int = 0,
     ):
-        """_summary_
-        :param model: pytorch model
-        :type model: torch.nn.Module
-        :param device: decide for training on cpu or gpu
-        :type device: str
-        :param config: Training configuration
-        :type config: dict
-        :param logger: logger
-        :type logger: logging.Logger
-        :param timestamp: run timestamp
-        :type timestamp: str
-        :param use_wandb: whether to use weights and biases, defaults to False
-        :type use_wandb: bool, optional
-        :param run_name: name of the run
-        :type run_name: str
-        :param gpu: gpu id, defaults to 0 (which triggers wandb, checkpoint saving, etc.)
-        :type gpu: int, optional
+        """
+        Args:
+            model (nn.Module): The PyTorch model to train.
+            device (str): The device to use for training (e.g., 'cpu' or 'cuda').
+            logger (logging.Logger): The logger to use for logging training progress.
+            timestamp (str): The timestamp to use for naming log files and checkpoints.
+            run_name (str): The name of the current training run.
+            use_wandb (bool, optional): Whether to use Weights & Biases for logging. Defaults to False.
+            bce_pos_weight (torch.Tensor, optional): The positive weight for binary cross-entropy loss. Defaults to None.
+            is_master (bool, optional): Whether the current process is the master process. Defaults to True.
+            epoch (int, optional): The starting epoch number. Defaults to 0. Used for resuming training.
         """
 
         self.model = model
@@ -74,6 +70,7 @@ class ProTCLTrainer:
         self.model_path = self._get_saved_model_path()
         self.best_val_metric = 0.0
         self.scaler = GradScaler()
+        self.epoch = epoch
 
     def _get_saved_model_path(self):
         # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
@@ -104,8 +101,18 @@ class ProTCLTrainer:
             raise ValueError(
                 f"Unknown loss function {config['params']['LOSS_FN']}")
 
-    def to_device(self, *args):
-        return [item.to(self.device) if isinstance(item, torch.Tensor) else item for item in args]
+    def _to_device(self, *args):
+        processed_args = []
+        for item in args:
+            if isinstance(item, torch.Tensor):
+                processed_args.append(item.to(self.device))
+            elif isinstance(item, BatchEncoding) or isinstance(item, dict):
+                processed_dict = {k: v.to(self.device) if isinstance(
+                    v, torch.Tensor) else v for k, v in item.items()}
+                processed_args.append(processed_dict)
+            else:
+                processed_args.append(item)
+        return processed_args
 
     def _set_optimizer(self, lr):
         trainable_params = []
@@ -152,7 +159,7 @@ class ProTCLTrainer:
         )
 
         # Move all unpacked batch elements to GPU, if available
-        sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = self.to_device(
+        sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = self._to_device(
             sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings)
 
         # Forward pass
@@ -185,7 +192,13 @@ class ProTCLTrainer:
         self.logger.info(val_metrics)
 
         if self.use_wandb and self.is_master:
-            wandb.log({f'validation_{k}': v for k, v in val_metrics.items()})
+            try:
+                if self.use_wandb and self.is_master:
+                    wandb.log({f'validation_{k}': v for k,
+                              v in val_metrics.items()})
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to log validation metrics to wandb: {e}")
 
         # Save the model if it has the best validation loss so far (only on master node)
         if self.is_master and val_metrics[val_optimization_metric_name] > self.best_val_metric:
@@ -193,8 +206,14 @@ class ProTCLTrainer:
                 f"New best {val_optimization_metric_name}: {val_metrics[val_optimization_metric_name]}. Saving model..."
             )
             self.best_val_metric = val_metrics[val_optimization_metric_name]
-            # TODO: Break out model saving into separate method (save_checkpoint)
-            torch.save(self.model.module.state_dict(), self.model_path)
+
+            save_checkpoint(
+                model=self.model.module,
+                optimizer=self.optimizer,
+                epoch=self.epoch,
+                best_val_metric=self.best_val_metric,
+                model_path=self.model_path
+            )
             self.logger.info(f"Saved model to {self.model_path}.")
 
             if self.use_wandb:
@@ -376,9 +395,10 @@ class ProTCLTrainer:
         self.logger.info(f"{'='*100}")
         batch_count = 0
 
-        for epoch in range(self.num_epochs):
+        for epoch in range(self.epoch, self.epoch + self.num_epochs):
+            self.epoch = epoch
             self.logger.info(
-                f"Starting epoch {epoch+1}/{self.num_epochs}...")
+                f"Starting epoch {epoch+1}/{self.epoch + self.num_epochs}...")
 
             if self.is_master:
                 log_gpu_memory_usage(self.logger, 0)
@@ -404,7 +424,7 @@ class ProTCLTrainer:
                 )
 
                 # Move all unpacked batch elements to GPU, if available
-                sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = self.to_device(
+                sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = self._to_device(
                     sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings)
 
                 # Forward pass
@@ -458,8 +478,8 @@ class ProTCLTrainer:
                 if batch_count != 0 and batch_count % (len(train_loader) // self.validations_per_epoch) == 0:
                     ####### VALIDATION LOOP #######
                     # Force model to recompute all label embeddings
-                    if self.train_label_encoder:
-                        self.model.clear_label_embeddings_cache()
+                    # if self.train_label_encoder:
+                    #     self.model.clear_label_embeddings_cache()
 
                     # Run validation
                     val_metrics = self.validate(val_loader=val_loader,
@@ -476,7 +496,9 @@ class ProTCLTrainer:
 
         if self.is_master:
             self.logger.info("Restoring model to best validation map_micro...")
-            self.model.module.load_state_dict(torch.load(self.model_path))
+            load_checkpoint(model=self.model.module,
+                            trainer=self,
+                            checkpoint_path=self.model_path)
 
             # Broadcast model state to other processes
             for param in self.model.module.parameters():
