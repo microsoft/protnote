@@ -13,6 +13,7 @@ from collections import defaultdict
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from transformers import BatchEncoding
+from src.utils.models import generate_label_embeddings_from_text
 
 
 class ProTCLTrainer:
@@ -28,7 +29,7 @@ class ProTCLTrainer:
         use_wandb: bool = False,
         bce_pos_weight: torch.Tensor = None,
         is_master: bool = True,
-        epoch: int = 0,
+        starting_epoch: int = 0,
     ):
         """
         Args:
@@ -40,7 +41,7 @@ class ProTCLTrainer:
             use_wandb (bool, optional): Whether to use Weights & Biases for logging. Defaults to False.
             bce_pos_weight (torch.Tensor, optional): The positive weight for binary cross-entropy loss. Defaults to None.
             is_master (bool, optional): Whether the current process is the master process. Defaults to True.
-            epoch (int, optional): The starting epoch number. Defaults to 0. Used for resuming training.
+            starting_epoch (int, optional): The starting epoch number. Defaults to 0. Used for resuming training.
         """
 
         self.model = model
@@ -70,7 +71,8 @@ class ProTCLTrainer:
         self.model_path = self._get_saved_model_path()
         self.best_val_metric = 0.0
         self.scaler = GradScaler()
-        self.epoch = epoch
+        self.starting_epoch = starting_epoch
+        self.epoch = starting_epoch
 
     def _get_saved_model_path(self):
         # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
@@ -395,10 +397,10 @@ class ProTCLTrainer:
         self.logger.info(f"{'='*100}")
         batch_count = 0
 
-        for epoch in range(self.epoch, self.epoch + self.num_epochs):
-            self.epoch = epoch
+        for epoch in range(self.starting_epoch, self.starting_epoch + self.num_epochs):
             self.logger.info(
-                f"Starting epoch {epoch+1}/{self.epoch + self.num_epochs}...")
+                f"Starting epoch {epoch+1}/{self.starting_epoch + self.num_epochs}...")
+            self.epoch = epoch
 
             if self.is_master:
                 log_gpu_memory_usage(self.logger, 0)
@@ -477,9 +479,17 @@ class ProTCLTrainer:
                 # Run validation and log progress every n batches
                 if batch_count != 0 and batch_count % (len(train_loader) // self.validations_per_epoch) == 0:
                     ####### VALIDATION LOOP #######
-                    # Force model to recompute all label embeddings
-                    # if self.train_label_encoder:
-                    #     self.model.clear_label_embeddings_cache()
+                    # Compute all label embeddings
+                    if self.train_label_encoder:
+                        with torch.no_grad():
+                            label_embedding_matrix = generate_label_embeddings_from_text(
+                                val_loader.dataset.label_text_list,
+                                val_loader.dataset.label_tokenizer,
+                                self.model.label_encoder,
+                                self.params["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
+                            ).cpu()
+                        val_loader.dataset.set_label_embedding_matrix(
+                            label_embedding_matrix)
 
                     # Run validation
                     val_metrics = self.validate(val_loader=val_loader,
@@ -488,7 +498,7 @@ class ProTCLTrainer:
                                                 )
 
                     self.logger.info(
-                        f"Epoch {epoch+1}/{self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}"
+                        f"Epoch {epoch+1}/{self.starting_epoch + self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}"
                     )
 
                     self.logger.info(
@@ -496,9 +506,7 @@ class ProTCLTrainer:
 
         if self.is_master:
             self.logger.info("Restoring model to best validation map_micro...")
-            load_checkpoint(model=self.model.module,
-                            trainer=self,
-                            checkpoint_path=self.model_path)
+            load_checkpoint(self, self.model_path)
 
             # Broadcast model state to other processes
             for param in self.model.module.parameters():

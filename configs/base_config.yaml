@@ -5,27 +5,27 @@ params:
   ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET VS. SANDBOX A100 ##############
   ### A100 ###
   # Batch sizes
-  # TRAIN_BATCH_SIZE: 256 # 256 for A100
-  # VALIDATION_BATCH_SIZE: 256 # 256 for A100
-  # TEST_BATCH_SIZE: 16 # 16 for A100
-  # # Sampling
-  # TRAIN_LABEL_SAMPLE_SIZE: 15000 # 15K for both # If training label encoder, must be 100
-  # VALIDATION_LABEL_SAMPLE_SIZE: 15000 # 15K for both
-  # # Inference
-  # LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 1500 # 1500 for A100
-  # SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 128 # 128 for A100 (TO BE VERIFIED)
+  TRAIN_BATCH_SIZE: 16 # 256 for A100
+  VALIDATION_BATCH_SIZE: 16 # 256 for A100
+  TEST_BATCH_SIZE: 16 # 16 for A100
+  # Sampling
+  TRAIN_LABEL_SAMPLE_SIZE: 10 # 15K for both # If training label encoder, must be 100
+  VALIDATION_LABEL_SAMPLE_SIZE: 1000 # 15K for both
+  # Inference
+  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 1500 # 1500 for A100
+  SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 128 # 128 for A100 (TO BE VERIFIED)
 
   ### V100 ###
-  # Batch sizes
-  TRAIN_BATCH_SIZE: 64 # 64 for V100
-  VALIDATION_BATCH_SIZE: 64 # 64 for V100
-  TEST_BATCH_SIZE: 4 # 4 for V100
-  # Sampling
-  TRAIN_LABEL_SAMPLE_SIZE: 15000 # 15K for both
-  VALIDATION_LABEL_SAMPLE_SIZE: 15000 # 15K for both
-  # Inference
-  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 750 # 1K for V100
-  SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 
+  # # Batch sizes
+  # TRAIN_BATCH_SIZE: 128 # 64 for V100
+  # VALIDATION_BATCH_SIZE: 128 # 64 for V100
+  # TEST_BATCH_SIZE: 4 # 4 for V100
+  # # Sampling
+  # TRAIN_LABEL_SAMPLE_SIZE: 10000 # 15K for both
+  # VALIDATION_LABEL_SAMPLE_SIZE: 10000 # 15K for both
+  # # Inference
+  # LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 750 # 1K for V100
+  # SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 
 
   ############## PARAMS THAT DO NOT IMPACT MEMORY ##############
   # General
@@ -35,19 +35,19 @@ params:
   LATENT_EMBEDDING_DIM: 1024
   OUTPUT_DIM: 1024
   OUTPUT_NUM_LAYERS: 2
-  NUM_EPOCHS: 50
+  NUM_EPOCHS: 10
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
   CLIP_VALUE: 10 # Gradient clipping
   OUTPUT_NEURON_PROBABILITY_BIAS: null
-  OPTIMIZATION_METRIC_NAME: map_micro #only micro metrics are supported if sampling labels in validation
+  OPTIMIZATION_METRIC_NAME: map_micro # only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
   
   #Losses. Only the parameters for selected loss will be used
-  LOSS_FN: RGDBCE # Currently supported: BCE, FocalLoss, BatchWeightedBCE
-  FOCAL_LOSS_GAMMA: 3
-  FOCAL_LOSS_ALPHA: -1
+  LOSS_FN: FocalLoss # Currently supported: BCE, FocalLoss, BatchWeightedBCE
+  FOCAL_LOSS_GAMMA: 2.0 # Use a float
+  FOCAL_LOSS_ALPHA: 0.9 # Use a float
   BCE_POS_WEIGHT: 25 # 671.7130737304688
-  RGDBCE_TEMP: 0.2
+  RGDBCE_TEMP: 0.2 # Use a float
 
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False
@@ -101,7 +101,7 @@ paths:
     GO_ANNOTATIONS_PATH: annotations/go_annotations_2019_07_01.pkl
 
     # Embeddings paths (if using frozen pre-trained models)
-    LABEL_EMBEDDING_PATH: embeddings/frozen_BioGPT_label_embeddings.pkl
+    LABEL_EMBEDDING_PATH:  None # embeddings/frozen_BioGPT_label_embeddings.pkl
     SEQUENCE_EMBEDDING_PATH: embeddings/frozen_proteinfer_sequence_embeddings.pkl
 
     PARENTHOOD_LIB_PATH: vocabularies/parenthood.json.gz

@@ -95,7 +95,8 @@ class ProteinDataset(Dataset):
                 label_text_list, label_tokenizer)
 
         # If a label encoder is provided, encode the labels
-        if label_encoder is not None:
+        self.label_embedding_matrix = None
+        if label_encoder is not None and not config["params"]["TRAIN_LABEL_ENCODER"]:
             label_embedding_matrix = get_or_generate_label_embeddings(
                 label_annotations=self.label_text_list,
                 label_tokenizer=label_tokenizer,
@@ -111,8 +112,12 @@ class ProteinDataset(Dataset):
         # TODO: Implement this here
 
     # Helper functions for setting embedding dictionaries
+
     def set_sequence_embedding_df(self, embedding_df: pd.DataFrame):
         self.sequence_embedding_df = embedding_df
+
+    def set_label_embedding_matrix(self, embedding_matrix: torch.Tensor):
+        self.label_embedding_matrix = embedding_matrix
 
     def _remove_duplicates(self):
         """

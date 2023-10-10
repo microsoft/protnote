@@ -5,12 +5,12 @@
 
 # Load previous best model to continue training
 python main.py \
-    --name 'FIXED_LABELS{EPOCHS:70, GAMMA: 1.5, ALPHA: 0.9}' \
+    --name '0_LABELS{EPOCHS:10, GAMMA: 1.5, ALPHA: 0.9}' \
     --full-path-name FULL_DATA_PATH \
     --train-path-name TRAIN_DATA_PATH \
     --validation-path-name VAL_DATA_PATH \
     --test-paths-names TEST_DATA_PATH \
-    --override CLIP_VALUE 10 NUM_EPOCHS 70 FOCAL_LOSS_GAMMA 1.5 FOCAL_LOSS_ALPHA 0.9\
+    --override CLIP_VALUE 10 NUM_EPOCHS 10 FOCAL_LOSS_GAMMA 1.5 FOCAL_LOSS_ALPHA 0.9 \
     --use-wandb 
 
 # Optimize gradient clipping norm

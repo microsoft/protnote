@@ -11,6 +11,7 @@ import wget
 import hashlib
 import transformers
 from collections import OrderedDict
+import logging
 
 
 def log_gpu_memory_usage(logger, device_id):
@@ -137,7 +138,7 @@ def save_checkpoint(model, optimizer, epoch, best_val_metric, model_path):
     torch.save(checkpoint, model_path)
 
 
-def load_checkpoint(Trainer, checkpoint_path):
+def load_checkpoint(trainer, checkpoint_path):
     """
     Load the model's state dict, optimizer's state, and epoch number from the checkpoint.
 
@@ -164,15 +165,30 @@ def load_checkpoint(Trainer, checkpoint_path):
         state_dict = new_state_dict
 
     # Load the state_dict into the model
-    Trainer.model.module.load_state_dict(state_dict)
+    trainer.model.module.load_state_dict(state_dict)
 
     # Load the optimizer state and epoch number if they exist in the checkpoint
     if 'optimizer_state_dict' in checkpoint:
-        Trainer.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        # Check if the optimizer's state matches the current optimizer's state
+        num_checkpoint_params = sum(
+            p.numel()
+            for p in trainer.model.parameters()
+            if p.requires_grad
+        )
+        num_current_optimizer_params = sum(
+            p.numel()
+            for group in checkpoint['optimizer_state_dict']['param_groups']
+            for p in group['params']
+            if p.requires_grad
+        )
+        if num_checkpoint_params == num_current_optimizer_params:
+            trainer.optimizer.load_state_dict(
+                checkpoint['optimizer_state_dict'])
+
     if 'epoch' in checkpoint:
-        Trainer.epoch = checkpoint['epoch']
+        trainer.epoch = checkpoint['epoch']
     if 'best_val_metric' in checkpoint:
-        Trainer.best_val_metric = checkpoint['best_val_metric']
+        trainer.best_val_metric = checkpoint['best_val_metric']
 
 
 def seed_everything(seed: int, device: str):

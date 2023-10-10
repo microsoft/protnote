@@ -23,7 +23,12 @@ def override_config(config: dict, overrides: list):
             # Convert value to appropriate type if necessary (e.g., float, int)
             # Here, we're assuming that the provided keys exist in the 'params' section of the config
             if key in config["params"]:
-                config["params"][key] = type(config["params"][key])(value)
+                original_value = config["params"][key]
+                if isinstance(original_value, bool):
+                    # Handle boolean conversion
+                    config["params"][key] = value.lower() == "true"
+                else:
+                    config["params"][key] = type(original_value)(value)
             else:
                 raise KeyError(
                     f"Key '{key}' not found in the 'params' section of the config."
@@ -150,7 +155,7 @@ def get_setup(
         stream_handler.setFormatter(formatter)
         logger.addHandler(stream_handler)
 
-        print(f"Logging to {full_log_path} and console...")
+        logger.info(f"Logging to {full_log_path} and console...")
     else:
         # Set the logger level to an unreachable level, effectively disabling it
         logger.setLevel(logging.CRITICAL + 1)
