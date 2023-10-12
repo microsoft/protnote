@@ -48,20 +48,6 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--optimization-metric-name",
-    type=str,
-    default="f1_micro",
-    help="Specify the desired metric to optimize for. Default is f1_micro.",
-)
-
-parser.add_argument(
-    "--decision-th",
-    type=float,
-    default=None,
-    help="Specify the desired decision threshold. If not provided, the decision threshold will be optimized on the validation set.",
-)
-
-parser.add_argument(
     "--name",
     type=str,
     default="ProteInfer",
@@ -73,9 +59,6 @@ parser.add_argument(
     default="configs/base_config.yaml",
     help="(Relative) path to the configuration file.",
 )
-parser.add_argument(
-    "--override", nargs="*", help="Override parameters in key-value pairs."
-)
 
 parser.add_argument(
     "--normalize-probabilities",
@@ -85,27 +68,36 @@ parser.add_argument(
 
 # TODO: Add an option to serialize and save config with a name corresponding to the model save path
 
-# TODO: Make Optimization metric and normalize probabilities part of arguments
 args = parser.parse_args()
 
 def to_device(device, *args):
     return [item.to(device) if isinstance(item,torch.Tensor) else None for item in args]
 
-(config, params, paths, paths_list, timestamp, logger, device, ROOT_PATH) = get_setup(
+
+config = get_setup(
     config_path=args.config,
     run_name=args.name,
-    overrides=args.override,
     val_path_name=args.validation_path_name,
     test_paths_names=args.test_paths_names,
+    amlt=False,
+    is_master=True,
+    overrides=[]
 )
+params, paths, timestamp, logger = (config["params"],
+                                    config["paths"],
+                                    config["timestamp"],
+                                    config["logger"])
 
-# Load or generate the vocabularies
+
 vocabularies = get_or_generate_vocabularies(
-    paths[args.full_path_name], paths["VOCABULARIES_DIR"], logger)
+    paths["FULL_DATA_PATH"], paths["VOCABULARIES_DIR"], logger)
 
 # Create datasets
-datasets = ProteinDataset.create_multiple_datasets(paths_list,
-                                                   vocabularies=vocabularies)
+datasets = ProteinDataset.create_multiple_datasets(paths_list=config['dataset_paths_list'],
+                                                   vocabularies=vocabularies,
+                                                   config=config,
+                                                   logger=logger,
+                                                   deduplicate=params["DEDUPLICATE"])
 
 # Initialize new run
 logger.info(f"################## {timestamp} RUNNING train.py ##################")
@@ -119,7 +111,7 @@ loaders = create_multiple_loaders(
     datasets=datasets,
     params=params,
     num_workers=params["NUM_WORKERS"],
-    pin_memory=True,
+    pin_memory=True
 )
 
 
@@ -134,7 +126,7 @@ model = ProteInfer.from_pretrained(
     num_resnet_blocks=config["embed_sequences_params"]["NUM_RESNET_BLOCKS"],
     bottleneck_factor=config["embed_sequences_params"]["BOTTLENECK_FACTOR"],
 )
-
+device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
 model.to(device)
 model = model.eval()
 
@@ -143,73 +135,9 @@ label_normalizer = load_gz_json(paths["PARENTHOOD_LIB_PATH"])
 # Initialize EvalMetrics
 eval_metrics = EvalMetrics(device=device)
 
-best_th = args.decision_th
-
-if best_th is None:
-    assert (
-        args.validation_path_name is not None
-    ), "Must provide validation path name to optimize decision threshold."
-    val_probas = []
-    val_labels = []
-
-    with torch.no_grad():
-        for batch_idx, batch in tqdm(
-            enumerate(loaders["validation"][0]), total=len(loaders["validation"][0])
-        ):
-            sequence_onehots, sequence_embeddings, sequence_lengths, sequence_ids, label_multihots, tokenized_labels, label_embeddings = (
-                batch["sequence_onehots"],
-                batch["sequence_embeddings"],
-                batch["sequence_lengths"],
-                batch["sequence_ids"],
-                batch["label_multihots"],
-                batch["tokenized_labels"],
-                batch["label_embeddings"]
-            )
-
-            if batch_idx==0:
-                print(label_multihots.shape)
-
-            sequence_onehots, sequence_lengths, label_multihots = to_device(device,
-                sequence_onehots, sequence_lengths, label_multihots)
-
-            logits = model(sequence_onehots, sequence_lengths)
-            probabilities = torch.sigmoid(logits)
-
-            if args.normalize_probabilities:
-                probabilities = torch.tensor(
-                    normalize_confidences(
-                        predictions=probabilities.detach().cpu().numpy(),
-                        label_vocab=vocabularies["GO_LABEL_VOCAB_PATH"],
-                        applicable_label_dict=label_normalizer,
-                    ),
-                    device=probabilities.device,
-                )
-
-            val_probas.append(probabilities)
-            val_labels.append(label_multihots)
-
-    val_probas = torch.cat(val_probas)
-    val_labels = torch.cat(val_labels)
-    best_th = 0.0
-    best_f1 = 0.0
-
-    for th in np.arange(0.01, 1, 0.01):
-        optimization_metric = eval_metrics\
-            .get_metric_by_name(name=args.optimization_metric_name,
-                                num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"],
-                                threshold=th)
-
-        optimization_metric(val_probas, val_labels)
-        val_f1_score = optimization_metric.compute()
-        if val_f1_score > best_f1:
-            best_f1 = val_f1_score
-            best_th = th
-        print("TH:", th, "F1:", val_f1_score)
-    print("Best Val F1:", best_f1, "Best Val TH:", best_th)
-
 val_metrics = eval_metrics\
-            .get_metric_collection(type='all',
-                                   threshold=best_th,
+            .get_metric_collection_with_regex(pattern='map_*',
+                                   threshold=None,
                                    num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"]
                                    )
 
@@ -237,20 +165,19 @@ with torch.no_grad():
             probabilities = torch.tensor(
                 normalize_confidences(
                     predictions=probabilities.detach().cpu().numpy(),
-                    label_vocab=vocabularies["GO_LABEL_VOCAB_PATH"],
+                    label_vocab=vocabularies["GO_label_vocab"],
                     applicable_label_dict=label_normalizer,
                 ),
                 device=probabilities.device,
             )
         val_metrics(probabilities, label_multihots)
 
-print(f"{args.optimization_metric_name} optimized val metrics")
 print(val_metrics.compute())
 
 
 test_metrics = eval_metrics\
-            .get_metric_collection(type='all',
-                                   threshold=best_th,
+            .get_metric_collection_with_regex(pattern='map_*',
+                                   threshold=None,
                                    num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"]
                                    )
 all_labels = []
@@ -277,7 +204,7 @@ with torch.no_grad():
             probabilities = torch.tensor(
                 normalize_confidences(
                     predictions=probabilities.detach().cpu().numpy(),
-                    label_vocab=vocabularies["GO_LABEL_VOCAB_PATH"],
+                    label_vocab=vocabularies["GO_label_vocab"],
                     applicable_label_dict=label_normalizer,
                 ),
                 device=probabilities.device,
@@ -289,7 +216,6 @@ with torch.no_grad():
         all_probas.append(probabilities)
         all_seqids.append(sequence_ids)
 
-    print(f"{args.optimization_metric_name} optimized test metrics")
     print(test_metrics.compute())
 
     all_labels = torch.cat(all_labels)
