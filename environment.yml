@@ -24,4 +24,6 @@ dependencies:
   - torchdata
   - wandb
   - sacremoses
+  - loralib
+  - pynvml
 prefix: /anaconda/envs/protein_functions_310

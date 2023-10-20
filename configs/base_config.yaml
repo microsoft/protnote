@@ -5,26 +5,26 @@ params:
   ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET VS. SANDBOX A100 ##############
   ### A100 ###
   # Batch sizes
-  TRAIN_BATCH_SIZE: 16 # 256 for A100
-  VALIDATION_BATCH_SIZE: 16 # 256 for A100
+  TRAIN_BATCH_SIZE: 256 # 256 for A100
+  VALIDATION_BATCH_SIZE: 256 # 256 for A100
   TEST_BATCH_SIZE: 16 # 16 for A100
   # Sampling
-  TRAIN_LABEL_SAMPLE_SIZE: 10 # 15K for both # If training label encoder, must be 100
-  VALIDATION_LABEL_SAMPLE_SIZE: 1000 # 15K for both
+  TRAIN_LABEL_SAMPLE_SIZE: 100 # 15K for both # If training label encoder, must be 100
+  VALIDATION_LABEL_SAMPLE_SIZE: 15000 # 15K for both
   # Inference
-  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 1500 # 1500 for A100
+  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 300 # 1500 for A100
   SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 128 # 128 for A100 (TO BE VERIFIED)
 
   ### V100 ###
   # # Batch sizes
-  # TRAIN_BATCH_SIZE: 128 # 64 for V100
+  # TRAIN_BATCH_SIZE: 1024 # 64 for V100
   # VALIDATION_BATCH_SIZE: 128 # 64 for V100
-  # TEST_BATCH_SIZE: 4 # 4 for V100
+  # TEST_BATCH_SIZE: 16 # 4 for V100
   # # Sampling
-  # TRAIN_LABEL_SAMPLE_SIZE: 10000 # 15K for both
+  # TRAIN_LABEL_SAMPLE_SIZE: 50 # 15K for both
   # VALIDATION_LABEL_SAMPLE_SIZE: 10000 # 15K for both
   # # Inference
-  # LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 750 # 1K for V100
+  # LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 300 # 1K for V100
   # SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 
 
   ############## PARAMS THAT DO NOT IMPACT MEMORY ##############
@@ -35,8 +35,14 @@ params:
   LATENT_EMBEDDING_DIM: 1024
   OUTPUT_DIM: 1024
   OUTPUT_NUM_LAYERS: 2
-  NUM_EPOCHS: 10
+  NUM_EPOCHS: 1
+
+  # Memory optimizations
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
+  GRADIENT_CHECKPOINTING: True # True = gradient checkpointing
+  LORA: False # True = use LORA
+  LORA_RANK: 8
+
   CLIP_VALUE: 10 # Gradient clipping
   OUTPUT_NEURON_PROBABILITY_BIAS: null
   OPTIMIZATION_METRIC_NAME: map_micro # only micro metrics are supported if sampling labels in validation
@@ -51,7 +57,7 @@ params:
 
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False
-  TRAIN_LABEL_ENCODER: False
+  TRAIN_LABEL_ENCODER: True
   TRAIN_PROJECTION_HEAD: True
   LABEL_ENCODER_CHECKPOINT: microsoft/biogpt
 

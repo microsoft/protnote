@@ -1,5 +1,5 @@
 import logging
-from src.utils.data import load_gz_json, log_gpu_memory_usage, save_checkpoint, load_checkpoint
+from src.utils.data import load_gz_json, log_gpu_memory_usage, save_checkpoint, load_model
 from src.utils.evaluation import EvalMetrics
 from src.utils.losses import BatchWeightedBCE, FocalLoss, RGDBCE
 from torchmetrics import MetricCollection, Metric
@@ -73,6 +73,7 @@ class ProTCLTrainer:
         self.scaler = GradScaler()
         self.starting_epoch = starting_epoch
         self.epoch = starting_epoch
+        self.config = config
 
     def _get_saved_model_path(self):
         # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
@@ -130,6 +131,9 @@ class ProTCLTrainer:
             if (name.startswith('W_p.weight') or name.startswith('W_l.weight')) and (not self.train_projection_head):
                 param.requires_grad = False
 
+            if name.startswith('output_layer') and (not self.train_projection_head):
+                param.requires_grad = False
+
             if param.requires_grad:
                 trainable_params.append(param)
                 trainable_params_names.append(name)
@@ -185,8 +189,6 @@ class ProTCLTrainer:
                  val_optimization_metric: Metric,
                  val_optimization_metric_name: str
                  ):
-
-        self.logger.info("Running validation...")
 
         val_metrics, _ = self.evaluate(data_loader=val_loader,
                                        eval_metrics=MetricCollection({val_optimization_metric_name: val_optimization_metric}))
@@ -306,7 +308,26 @@ class ProTCLTrainer:
         :return: dictionary with evaluation metrics. Always return avg_loss and if eval_metrics is not None, it will return the metrics from eval_metrics.compute()
         :rtype: dict
         """
+        if self.is_master:
+            log_gpu_memory_usage(self.logger, 0)
+
         self.model.eval()
+
+        # Compute all label embeddings upfront, since we're not training
+        if data_loader.dataset.label_embedding_matrix is None:
+            logging.info(
+                "Computing label embeddings for evaluation...")
+            with torch.no_grad():
+                label_embedding_matrix = generate_label_embeddings_from_text(
+                    data_loader.dataset.label_text_list,
+                    data_loader.dataset.label_tokenizer,
+                    self.model.module.label_encoder,
+                    self.config["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
+                ).cpu()
+            data_loader.dataset.set_label_embedding_matrix(
+                label_embedding_matrix)
+            logging.info("Done computing label embeddings.")
+
         total_loss = 0
         test_results = defaultdict(list)
         with torch.no_grad():
@@ -452,7 +473,7 @@ class ProTCLTrainer:
                                    "avg_grounth_truth": avg_grounth_truth,
                                    "avg_probabilities_ground_truth_ratio": avg_probabilities/avg_grounth_truth})
 
-                # Compute loss
+                # Compute loss, normalized by the number of gradient accumulation steps
                 loss = self.loss_fn(logits, label_multihots.float()) / \
                     self.gradient_accumulation_steps
 
@@ -479,23 +500,18 @@ class ProTCLTrainer:
                 # Run validation and log progress every n batches
                 if batch_count != 0 and batch_count % (len(train_loader) // self.validations_per_epoch) == 0:
                     ####### VALIDATION LOOP #######
-                    # Compute all label embeddings
-                    if self.train_label_encoder:
-                        with torch.no_grad():
-                            label_embedding_matrix = generate_label_embeddings_from_text(
-                                val_loader.dataset.label_text_list,
-                                val_loader.dataset.label_tokenizer,
-                                self.model.label_encoder,
-                                self.params["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
-                            ).cpu()
-                        val_loader.dataset.set_label_embedding_matrix(
-                            label_embedding_matrix)
+                    self.logger.info("Running validation...")
+                    torch.cuda.empty_cache()
 
                     # Run validation
                     val_metrics = self.validate(val_loader=val_loader,
                                                 val_optimization_metric=val_optimization_metric,
                                                 val_optimization_metric_name=val_optimization_metric_name
                                                 )
+
+                    if self.train_label_encoder:
+                        # Clear the label embedding matrix
+                        val_loader.dataset.set_label_embedding_matrix(None)
 
                     self.logger.info(
                         f"Epoch {epoch+1}/{self.starting_epoch + self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}"
@@ -506,7 +522,7 @@ class ProTCLTrainer:
 
         if self.is_master:
             self.logger.info("Restoring model to best validation map_micro...")
-            load_checkpoint(self, self.model_path)
+            load_model(self, self.model_path)
 
             # Broadcast model state to other processes
             for param in self.model.module.parameters():

@@ -5,13 +5,15 @@
 
 # Load previous best model to continue training
 python main.py \
-    --name '0_LABELS{EPOCHS:10, GAMMA: 1.5, ALPHA: 0.9}' \
+    --name 'TRAIN_ADAPTER_FROM_FT_MODEL' \
     --full-path-name FULL_DATA_PATH \
     --train-path-name TRAIN_DATA_PATH \
     --validation-path-name VAL_DATA_PATH \
     --test-paths-names TEST_DATA_PATH \
-    --override CLIP_VALUE 10 NUM_EPOCHS 10 FOCAL_LOSS_GAMMA 1.5 FOCAL_LOSS_ALPHA 0.9 \
+    --load-model models/ProTCL/2023-10-13_23-31-23_LORA_TRAIN_LABEL_ENCODER.pt \
+    --override NUM_EPOCHS 50 TRAIN_PROJECTION_HEAD True TRAIN_LABEL_ENCODER False \
     --use-wandb 
+
 
 # Optimize gradient clipping norm
 # python main.py \

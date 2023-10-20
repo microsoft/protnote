@@ -90,13 +90,17 @@ class ProteinDataset(Dataset):
 
         # Loop through the label IDs and tokenize the labels if a label tokenizer is provided
         self.tokenized_labels = None
+        self.label_tokenizer = None
         if label_tokenizer is not None:
+            self.label_tokenizer = label_tokenizer
             self.tokenized_labels = tokenize_labels(
                 label_text_list, label_tokenizer)
 
         # If a label encoder is provided, encode the labels
         self.label_embedding_matrix = None
+        self.label_encoder = None
         if label_encoder is not None and not config["params"]["TRAIN_LABEL_ENCODER"]:
+            self.label_encoder = label_encoder
             label_embedding_matrix = get_or_generate_label_embeddings(
                 label_annotations=self.label_text_list,
                 label_tokenizer=label_tokenizer,
