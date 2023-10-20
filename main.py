@@ -383,16 +383,17 @@ def train_validate_test(gpu, args):
             save_results=True
         )
 
+        logger.info(json.dumps(validation_metrics, indent=4))
+        logger.info("Final validation complete.")
+        logger.info("Saving validation results...")
         if is_master:
             save_evaluation_results(results=validation_results,
                                     label_vocabulary=vocabularies["GO_label_vocab"],
                                     run_name=args.name,
                                     output_dir=paths["RESULTS_DIR"],
                                     )
-
-        logger.info(json.dumps(validation_metrics, indent=4))
-        logger.info("Final validation complete.")
-
+        logger.info("Validation results saved")
+        
     # Setup for testing
     if args.test_paths_names:
         for idx, test_loader in enumerate(loaders["test"]):
