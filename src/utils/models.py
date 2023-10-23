@@ -95,7 +95,10 @@ def get_label_embeddings(tokenized_labels, model, batch_size_limit=1000):
                 input_ids=tokenized_labels["input_ids"],
                 attention_mask=tokenized_labels["attention_mask"]
             ).last_hidden_state
-        return compute_mean_hidden_states(last_hidden_states, tokenized_labels["attention_mask"])
+        output = compute_mean_hidden_states(
+            last_hidden_states, tokenized_labels["attention_mask"])
+        del last_hidden_states
+        return output
 
     else:
         # Convert dictionary values to tensors
@@ -104,7 +107,7 @@ def get_label_embeddings(tokenized_labels, model, batch_size_limit=1000):
         # Create TensorDataset and DataLoader
         dataset = TensorDataset(*tensors)
         dataloader = DataLoader(dataset, batch_size=batch_size_limit,
-                                shuffle=False, pin_memory=False, num_workers=2)
+                                shuffle=False, pin_memory=False, num_workers=0)
 
         all_label_embeddings = []
         for batch in dataloader:
@@ -115,7 +118,7 @@ def get_label_embeddings(tokenized_labels, model, batch_size_limit=1000):
             mean_hidden_states = compute_mean_hidden_states(
                 last_hidden_states, attention_mask)
             all_label_embeddings.append(mean_hidden_states)
-
+            del last_hidden_states, mean_hidden_states
         # Concatenate all the label embeddings
         return torch.cat(all_label_embeddings, dim=0)
 

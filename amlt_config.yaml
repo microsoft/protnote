@@ -19,7 +19,7 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-- name: AMLT-FL-70-1.75-0.9
+- name: AMLT-FL-LABEL-ENCODER-1K
   sku: G8
   priority: high
   command:
@@ -30,8 +30,8 @@ jobs:
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
     --full-path-name FULL_DATA_PATH 
-    --name AMLT-FL-70-1.75-0.9
-    --override NUM_EPOCHS 70 FOCAL_LOSS_GAMMA 1.75 FOCAL_LOSS_ALPHA 0.9
+    --name AMLT-FL-LABEL-ENCODER-1K
+    --override NUM_EPOCHS 1200 TRAIN_PROJECTION_HEAD True TRAIN_LABEL_ENCODER True 
     --amlt
     --use-wandb
   submit_args:

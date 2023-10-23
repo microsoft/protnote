@@ -1,5 +1,9 @@
-from src.utils.data import seed_everything,log_gpu_memory_usage
-from src.utils.main_utils import get_or_generate_vocabularies, get_or_generate_sequence_embeddings, validate_arguments
+from src.utils.data import (
+    load_model,
+    seed_everything,
+    log_gpu_memory_usage
+)
+from src.utils.main_utils import get_or_generate_vocabularies,  get_or_generate_label_embeddings, get_or_generate_sequence_embeddings, validate_arguments
 from src.data.datasets import ProteinDataset, calculate_pos_weight, create_multiple_loaders
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
@@ -21,6 +25,7 @@ import pandas as pd
 from transformers import AutoTokenizer, AutoModel
 from src.data.collators import collate_variable_sequence_length
 import mlflow
+import loralib as lora
 
 ### SETUP ###
 torch.cuda.empty_cache()
@@ -46,6 +51,9 @@ def main():
 
     parser.add_argument("--load-model", type=str, default=None,
                         help="(Relative) path to the model to be loaded. If not provided, a new model will be initialized.")
+
+    parser.add_argument('--from-checkpoint', action="store_true", default=False,
+                        help="Continue training from a previous model checkpoint (including optimizer state and epoch). Default is False.")
 
     parser.add_argument("--name", type=str, default="ProTCL",
                         help="Name of the W&B run. If not provided, a name will be generated.")
@@ -147,11 +155,25 @@ def train_validate_test(gpu, args):
 
     # Initialize label tokenizer
     label_tokenizer = AutoTokenizer.from_pretrained(
-        params['LABEL_ENCODER_CHECKPOINT'])
+        params['LABEL_ENCODER_CHECKPOINT'],
+    )
 
     # Initialize label encoder
     label_encoder = AutoModel.from_pretrained(
-        params['LABEL_ENCODER_CHECKPOINT'])
+        params['LABEL_ENCODER_CHECKPOINT'],
+    )
+    if params["GRADIENT_CHECKPOINTING"]:
+        raise NotImplementedError(
+            "Gradient checkpointing is not yet implemented.")
+
+    if params["LORA"]:
+        for layer in label_encoder.biogpt.layers:
+            in_features, out_features = 1024, 1024
+            layer.self_attn.q_proj = lora.Linear(
+                in_features, out_features, r=params["LORA_RANK"])  # TODO: Make rank a hparam
+            layer.self_attn.v_proj = lora.Linear(
+                in_features, out_features, r=params["LORA_RANK"])
+
     label_encoder = label_encoder.to(device)
 
     # Load or generate the vocabularies
@@ -293,8 +315,11 @@ def train_validate_test(gpu, args):
     # Load the model weights if --load-model argument is provided (using the DATA_PATH directory as the root)
     # TODO: Process model loading in the get_setup function
     if args.load_model:
-        load_checkpoint(Trainer, os.path.join(
-            config["DATA_PATH"], args.load_model))
+        load_model(
+            trainer=Trainer,
+            checkpoint_path=os.path.join(config["DATA_PATH"], args.load_model),
+            from_checkpoint=args.from_checkpoint
+        )
         logger.info(
             f"Loading model checkpoing from {os.path.join(config['DATA_PATH'], args.load_model)}. If training, will continue from epoch {Trainer.epoch+1}.\n")
 

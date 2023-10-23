@@ -80,15 +80,11 @@ class ProTCL(nn.Module):
         """
 
         # If label embeddings are provided and we're not training the laebel encoder, use them. Otherwise, compute them.
-        if label_embeddings is not None and not self.train_label_encoder:
+        if label_embeddings is not None and (not self.train_label_encoder or (self.train_label_encoder and not self.training)):
             L_f = label_embeddings
         elif tokenized_labels is not None:
-            # Raise NotImplementedError
-            raise NotImplementedError(
-                "Training label encoder is not currently supported. ")
-
             # Get label embeddings from tokens
-            with torch.set_grad_enabled(self.train_label_encoder):
+            with torch.set_grad_enabled(self.train_label_encoder and self.training):
                 L_f = get_label_embeddings(
                     tokenized_labels,
                     self.label_encoder,

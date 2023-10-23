@@ -37,10 +37,15 @@ params:
   OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 1 #scale with respect to LATENT_EMBEDDING_DIM
   OUTPUT_MLP_NUM_LAYERS: 2
   NUM_EPOCHS: 50
+
+  # Memory optimizations
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
+  GRADIENT_CHECKPOINTING: True # True = gradient checkpointing
+  LORA: False # True = use LORA
+  LORA_RANK: 8
   CLIP_VALUE: 10 # Gradient clipping
   OUTPUT_NEURON_PROBABILITY_BIAS: null
-  OPTIMIZATION_METRIC_NAME: map_micro #only micro metrics are supported if sampling labels in validation
+  OPTIMIZATION_METRIC_NAME: map_micro # only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
   
   #Losses. Only the parameters for selected loss will be used
@@ -52,7 +57,7 @@ params:
 
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False
-  TRAIN_LABEL_ENCODER: False
+  TRAIN_LABEL_ENCODER: True
   TRAIN_PROJECTION_HEAD: True
   LABEL_ENCODER_CHECKPOINT: microsoft/biogpt
 
@@ -102,7 +107,7 @@ paths:
     GO_ANNOTATIONS_PATH: annotations/go_annotations_2019_07_01.pkl
 
     # Embeddings paths (if using frozen pre-trained models)
-    LABEL_EMBEDDING_PATH: embeddings/frozen_BioGPT_label_embeddings.pkl
+    LABEL_EMBEDDING_PATH:  None # embeddings/frozen_BioGPT_label_embeddings.pkl
     SEQUENCE_EMBEDDING_PATH: embeddings/frozen_proteinfer_sequence_embeddings.pkl
 
     PARENTHOOD_LIB_PATH: vocabularies/parenthood.json.gz

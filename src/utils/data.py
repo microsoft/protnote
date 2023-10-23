@@ -10,32 +10,20 @@ import numpy as np
 import wget
 import hashlib
 import transformers
+from collections import OrderedDict
+import logging
+from pynvml import *
 
 
 def log_gpu_memory_usage(logger, device_id):
     device = torch.device(f"cuda:{device_id}")
-    allocated = torch.cuda.memory_allocated(
-        device) / (1024 ** 2)  # Convert bytes to MB
-    reserved = torch.cuda.memory_reserved(
-        device) / (1024 ** 2)  # Convert bytes to MB
-    total_memory = torch.cuda.get_device_properties(
-        device).total_memory / (1024 ** 2)  # Convert bytes to MB
-
-    allocated_percent = (allocated / total_memory) * 100
-    reserved_percent = (reserved / total_memory) * 100
-    combined = allocated + reserved
-    combined_percent = (combined / total_memory) * 100
-    logger.info("-" * 50)
+    nvmlInit()
+    handle = nvmlDeviceGetHandleByIndex(device_id)
+    info = nvmlDeviceGetMemoryInfo(handle)
     logger.info(
         f"Device {device_id} [Name: {torch.cuda.get_device_name(device)}]")
     logger.info(
-        f"  Allocated Memory: {allocated:.2f} MB ({allocated_percent:.2f}%)")
-    logger.info(
-        f"  Reserved Memory: {reserved:.2f} MB ({reserved_percent:.2f}%)")
-    logger.info(
-        f"  Combined (Allocated + Reserved) Memory: {combined:.2f} MB ({combined_percent:.2f}%)")
-    logger.info(f"  Total Device Memory: {total_memory:.2f} MB")
-    logger.info("-" * 50)
+        f"GPU memory occupied: {info.used//1024**2} MB.")
 
 
 def convert_float16_to_float32(df):
@@ -114,6 +102,75 @@ def download_and_unzip(url, output_file):
 
     print(
         f"File {output_file + '.gz'} has been downloaded and unzipped to {output_file}.")
+
+
+def save_checkpoint(model, optimizer, epoch, best_val_metric, model_path):
+    """
+    Save model and optimizer states as a checkpoint.
+
+    Args:
+    - model (torch.nn.Module): The model whose state we want to save.
+    - optimizer (torch.optim.Optimizer): The optimizer whose state we want to save.
+    - epoch (int): The current training epoch.
+    - model_path (str): The path where the checkpoint will be saved.
+    """
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'best_val_metric': best_val_metric,
+    }
+
+    torch.save(checkpoint, model_path)
+
+
+def load_model(trainer, checkpoint_path, from_checkpoint=False):
+    """
+    Load the model's state from a given checkpoint.
+
+    This function is designed to handle checkpoints from both Data Distributed Parallel (DDP) wrapped 
+    and non-DDP models. If the checkpoint originates from a DDP-wrapped model, the function will adjust 
+    the state dictionary keys accordingly before loading.
+
+    Parameters:
+    - trainer (object): An instance of the trainer containing the model, optimizer, and other training attributes.
+    - checkpoint_path (str): The path to the checkpoint file to be loaded.
+    - from_checkpoint (bool, optional): If True, the function will also load the optimizer's state, 
+      epoch number, and best validation metric from the checkpoint. Defaults to False.
+
+    Note:
+    The function assumes that the model in the trainer object is DDP-wrapped.
+    """
+
+    # Load the entire checkpoint
+    checkpoint = torch.load(checkpoint_path)
+
+    # Extract the state_dict from the checkpoint
+    state_dict = checkpoint['model_state_dict']
+
+    # Check if the state_dict is from a DDP-wrapped model
+    if list(state_dict.keys())[0].startswith('module.'):
+        # Remove the "module." prefix
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            name = k[7:]  # remove 'module.' prefix
+            new_state_dict[name] = v
+        state_dict = new_state_dict
+
+    # Load the state_dict into the model
+    trainer.model.module.load_state_dict(state_dict)
+
+    # Load the optimizer state and epoch number if they exist in the checkpoint
+    if 'optimizer_state_dict' in checkpoint and from_checkpoint:
+        trainer.optimizer.load_state_dict(
+            checkpoint['optimizer_state_dict'])
+    if 'epoch' in checkpoint and from_checkpoint:
+        trainer.epoch = checkpoint['epoch']
+    if 'best_val_metric' in checkpoint and from_checkpoint:
+        trainer.best_val_metric = checkpoint['best_val_metric']
+
+    # Delete the checkpoint to save memory
+    del checkpoint
 
 
 def seed_everything(seed: int, device: str):

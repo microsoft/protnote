@@ -1,6 +1,5 @@
 import logging
-from src.utils.data import load_gz_json, log_gpu_memory_usage
-from src.utils.models import save_checkpoint, load_checkpoint
+from src.utils.data import load_gz_json, log_gpu_memory_usage, save_checkpoint, load_model
 from src.utils.evaluation import EvalMetrics,metric_collection_to_dict_float,save_evaluation_results
 from src.utils.losses import BatchWeightedBCE, FocalLoss, RGDBCE
 from torchmetrics import MetricCollection, Metric
@@ -14,6 +13,7 @@ from collections import defaultdict
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from transformers import BatchEncoding
+from src.utils.models import generate_label_embeddings_from_text
 
 
 class ProTCLTrainer:
@@ -29,7 +29,7 @@ class ProTCLTrainer:
         use_wandb: bool = False,
         bce_pos_weight: torch.Tensor = None,
         is_master: bool = True,
-        epoch: int = 0,
+        starting_epoch: int = 0,
     ):
         """
         Args:
@@ -41,7 +41,7 @@ class ProTCLTrainer:
             use_wandb (bool, optional): Whether to use Weights & Biases for logging. Defaults to False.
             bce_pos_weight (torch.Tensor, optional): The positive weight for binary cross-entropy loss. Defaults to None.
             is_master (bool, optional): Whether the current process is the master process. Defaults to True.
-            epoch (int, optional): The starting epoch number. Defaults to 0. Used for resuming training.
+            starting_epoch (int, optional): The starting epoch number. Defaults to 0. Used for resuming training.
         """
 
         self.model = model
@@ -71,7 +71,9 @@ class ProTCLTrainer:
         self.model_path = self._get_saved_model_path()
         self.best_val_metric = 0.0
         self.scaler = GradScaler()
-        self.epoch = epoch
+        self.starting_epoch = starting_epoch
+        self.epoch = starting_epoch
+        self.config = config
 
     def _get_saved_model_path(self):
         # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
@@ -127,6 +129,9 @@ class ProTCLTrainer:
                 param.requires_grad = False
 
             if (name.startswith('W_p.weight') or name.startswith('W_l.weight')) and (not self.train_projection_head):
+                param.requires_grad = False
+
+            if name.startswith('output_layer') and (not self.train_projection_head):
                 param.requires_grad = False
 
             if param.requires_grad:
@@ -310,7 +315,26 @@ class ProTCLTrainer:
         :return: dictionary with evaluation metrics. Always return avg_loss and if eval_metrics is not None, it will return the metrics from eval_metrics.compute()
         :rtype: dict
         """
+        if self.is_master:
+            log_gpu_memory_usage(self.logger, 0)
+
         self.model.eval()
+
+        # Compute all label embeddings upfront, since we're not training
+        if data_loader.dataset.label_embedding_matrix is None:
+            logging.info(
+                "Computing label embeddings for evaluation...")
+            with torch.no_grad():
+                label_embedding_matrix = generate_label_embeddings_from_text(
+                    data_loader.dataset.label_text_list,
+                    data_loader.dataset.label_tokenizer,
+                    self.model.module.label_encoder,
+                    self.config["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
+                ).cpu()
+            data_loader.dataset.set_label_embedding_matrix(
+                label_embedding_matrix)
+            logging.info("Done computing label embeddings.")
+
         total_loss = 0
         test_results = defaultdict(list)
         with torch.no_grad():
@@ -408,10 +432,10 @@ class ProTCLTrainer:
         self.logger.info(f"{'='*100}")
         batch_count = 0
 
-        for epoch in range(self.epoch, self.epoch + self.num_epochs):
-            self.epoch = epoch
+        for epoch in range(self.starting_epoch, self.starting_epoch + self.num_epochs):
             self.logger.info(
-                f"Starting epoch {epoch+1}/{self.epoch + self.num_epochs}...")
+                f"Starting epoch {epoch+1}/{self.starting_epoch + self.num_epochs}...")
+            self.epoch = epoch
 
             if self.is_master:
                 log_gpu_memory_usage(self.logger, 0)
@@ -463,7 +487,7 @@ class ProTCLTrainer:
                                    "avg_grounth_truth": avg_grounth_truth,
                                    "avg_probabilities_ground_truth_ratio": avg_probabilities/avg_grounth_truth})
 
-                # Compute loss
+                # Compute loss, normalized by the number of gradient accumulation steps
                 loss = self.loss_fn(logits, label_multihots.float()) / \
                     self.gradient_accumulation_steps
                 
@@ -494,9 +518,8 @@ class ProTCLTrainer:
                 # Run validation and log progress every n batches
                 if batch_count != 0 and batch_count % (len(train_loader) // self.validations_per_epoch) == 0:
                     ####### VALIDATION LOOP #######
-                    # Force model to recompute all label embeddings
-                    # if self.train_label_encoder:
-                    #     self.model.clear_label_embeddings_cache()
+                    self.logger.info("Running validation...")
+                    torch.cuda.empty_cache()
 
                     # Run validation
                     val_metrics = self.validate(val_loader=val_loader,
@@ -504,8 +527,12 @@ class ProTCLTrainer:
                                                 val_optimization_metric_name=val_optimization_metric_name
                                                 )
 
+                    if self.train_label_encoder:
+                        # Clear the label embedding matrix
+                        val_loader.dataset.set_label_embedding_matrix(None)
+
                     self.logger.info(
-                        f"Epoch {epoch+1}/{self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}"
+                        f"Epoch {epoch+1}/{self.starting_epoch + self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}"
                     )
 
                     self.logger.info(

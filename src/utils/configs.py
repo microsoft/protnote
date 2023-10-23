@@ -162,7 +162,7 @@ def get_setup(
         stream_handler.setFormatter(formatter)
         logger.addHandler(stream_handler)
 
-        print(f"Logging to {full_log_path} and console...")
+        logger.info(f"Logging to {full_log_path} and console...")
     else:
         # Set the logger level to an unreachable level, effectively disabling it
         logger.setLevel(logging.CRITICAL + 1)
