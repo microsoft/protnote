@@ -476,29 +476,14 @@ class ProTCLTrainer:
                 with autocast():
                     logits = self.model(**inputs)
 
-                # log average probabilities to W&B
-                if self.use_wandb:
-                    with torch.no_grad():
-                        avg_probabilities = torch.mean(
-                            torch.sigmoid(logits))
-                        avg_grounth_truth = torch.mean(
-                            label_multihots.float())
-                        wandb.log({"avg_probabilities": avg_probabilities,
-                                   "avg_grounth_truth": avg_grounth_truth,
-                                   "avg_probabilities_ground_truth_ratio": avg_probabilities/avg_grounth_truth})
 
                 # Compute loss, normalized by the number of gradient accumulation steps
                 loss = self.loss_fn(logits, label_multihots.float()) / \
                     self.gradient_accumulation_steps
                 
-                train_metrics = train_eval_metrics(logits, label_multihots)
-                train_metrics.update({"loss": loss.item()})
-                train_metrics = metric_collection_to_dict_float(train_metrics,prefix="train")
-
-                # Log metrics to W&B
                 if self.use_wandb:
-                    wandb.log(train_metrics)
-
+                    wandb.log({"train_loss": loss.item()})
+                
                 # Backward pass with mixed precision
                 self.scaler.scale(loss).backward()
 
@@ -510,13 +495,13 @@ class ProTCLTrainer:
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
 
-                # Log training progress percentage every 2%
+                # Log training progress percentage every 1%
                 if num_training_steps > 100 and batch_count % int(num_training_steps/100) == 0:
                     self.logger.info(
                         f"Training progress: {round(100*batch_count/num_training_steps,2)}%")
 
-                # Run validation and log progress every n batches
-                if batch_count != 0 and batch_count % (len(train_loader) // self.validations_per_epoch) == 0:
+                # WANDB LOGS EVERY N BATCHES: validation and train metrics
+                if (batch_count != 0) & (batch_count % (len(train_loader) // self.validations_per_epoch) == 0):
                     ####### VALIDATION LOOP #######
                     self.logger.info("Running validation...")
                     torch.cuda.empty_cache()
@@ -540,14 +525,33 @@ class ProTCLTrainer:
                     
                     #Reset torchmetrics after every validation loop
                     val_eval_metrics.reset()
-                
-                #Reset torchmetrics for next batch
-                train_eval_metrics.reset()
+
+                    ###### LOG TRAIN AND AUX METRICS ######
                     
+                    # Log train metrics
+                    if self.use_wandb:
+                        train_metrics = train_eval_metrics(logits, label_multihots)
+                        train_metrics = metric_collection_to_dict_float(train_metrics,prefix="train")
+
+                        wandb.log(train_metrics)
+                        
+                        #Reset torchmetrics for next batch
+                        train_eval_metrics.reset()
+                    
+                        # Log aux metrics
+                        with torch.no_grad():
+                            avg_probabilities = torch.mean(
+                                torch.sigmoid(logits))
+                            avg_grounth_truth = torch.mean(
+                                label_multihots.float())
+                            
+                        wandb.log({"avg_probabilities": avg_probabilities,
+                                "avg_grounth_truth": avg_grounth_truth,
+                                "avg_probabilities_ground_truth_ratio": avg_probabilities/avg_grounth_truth})
 
         if self.is_master:
             self.logger.info("Restoring model to best validation map_micro...")
-            load_checkpoint(trainer=self,
+            load_model(trainer=self,
                             checkpoint_path=self.model_path)
 
             # Broadcast model state to other processes

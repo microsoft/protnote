@@ -36,17 +36,19 @@ params:
   LATENT_EMBEDDING_DIM: 1024
   OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 1 #scale with respect to LATENT_EMBEDDING_DIM
   OUTPUT_MLP_NUM_LAYERS: 2
+  OUTPUT_NEURON_PROBABILITY_BIAS: null
+  OPTIMIZATION_METRIC_NAME: map_micro # only micro metrics are supported if sampling labels in validation
+  DECISION_TH_METRIC_NAME: f1_micro
   NUM_EPOCHS: 50
 
   # Memory optimizations
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
-  GRADIENT_CHECKPOINTING: True # True = gradient checkpointing
+  GRADIENT_CHECKPOINTING: False # True = gradient checkpointing
   LORA: False # True = use LORA
   LORA_RANK: 8
   CLIP_VALUE: 10 # Gradient clipping
-  OUTPUT_NEURON_PROBABILITY_BIAS: null
-  OPTIMIZATION_METRIC_NAME: map_micro # only micro metrics are supported if sampling labels in validation
-  DECISION_TH_METRIC_NAME: f1_micro
+
+
   
   #Losses. Only the parameters for selected loss will be used
   LOSS_FN: FocalLoss # Currently supported: BCE, FocalLoss, BatchWeightedBCE
@@ -57,7 +59,7 @@ params:
 
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False
-  TRAIN_LABEL_ENCODER: True
+  TRAIN_LABEL_ENCODER: False
   TRAIN_PROJECTION_HEAD: True
   LABEL_ENCODER_CHECKPOINT: microsoft/biogpt
 

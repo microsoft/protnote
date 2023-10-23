@@ -107,7 +107,7 @@ def get_label_embeddings(tokenized_labels, model, batch_size_limit=1000):
         # Create TensorDataset and DataLoader
         dataset = TensorDataset(*tensors)
         dataloader = DataLoader(dataset, batch_size=batch_size_limit,
-                                shuffle=False, pin_memory=False, num_workers=0)
+                                shuffle=False, pin_memory=False, num_workers=2)
 
         all_label_embeddings = []
         for batch in dataloader:

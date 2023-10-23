@@ -22,8 +22,8 @@ dependencies:
   - torchdata=0.4.1
   - wandb=0.15.11
   - sacremoses=0.0.53
-  - loralib
-  - pynvml
+  - pynvml=11.5.0
   - pip:
     - azureml-mlflow==1.53.0
+    - loralib==0.1.2
 prefix: /anaconda/envs/protein_functions_310
