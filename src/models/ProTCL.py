@@ -15,8 +15,8 @@ class ProTCL(nn.Module):
         sequence_encoder=None,
         train_label_encoder=False,
         train_sequence_encoder=False,
-        output_dim=1024,
-        output_num_layers=2,
+        output_mlp_hidden_dim_scale_factor=1024,
+        output_mlp_num_layers=2,
         output_neuron_bias=None,
         label_batch_size_limit=float("inf"),
         sequence_batch_size_limit=float("inf"),
@@ -38,9 +38,9 @@ class ProTCL(nn.Module):
 
         # TODO: This could change. Currently keeping latent dim.
         self.output_layer = get_mlp(
-            latent_dim*2,
-            output_dim,
-            output_num_layers,
+            input_dim=latent_dim*2,
+            hidden_dim=int(round(output_mlp_hidden_dim_scale_factor*latent_dim)),
+            num_layers=output_mlp_num_layers,
             output_neuron_bias=output_neuron_bias
         )
 
@@ -102,9 +102,7 @@ class ProTCL(nn.Module):
         if sequence_embeddings is not None and not self.train_sequence_encoder:
             P_f = sequence_embeddings
         elif sequence_onehots is not None and sequence_lengths is not None:
-            # Throw an error
-            raise NotImplementedError(
-                "Training sequence encoder is not currently supported. ")
+            
             P_f = self.sequence_encoder.get_embeddings(
                 sequence_onehots, sequence_lengths)
         else:
@@ -129,17 +127,21 @@ class ProTCL(nn.Module):
         return logits
 
 
-def get_mlp(input_dim, output_dim, num_layers, output_neuron_bias=None):
+def get_mlp(input_dim,
+            hidden_dim,
+            num_layers,
+            output_neuron_bias=None):
     """
     Creates a variable length MLP with ReLU activations.
     """
     layers = []
-    layers.append(nn.Linear(input_dim, output_dim))
+    layers.append(nn.Linear(input_dim, hidden_dim))
     layers.append(nn.ReLU())
+    
     for _ in range(num_layers-1):
-        layers.append(nn.Linear(output_dim, output_dim))
+        layers.append(nn.Linear(hidden_dim, hidden_dim))
         layers.append(nn.ReLU())
-    output_neuron = nn.Linear(output_dim, 1)
+    output_neuron = nn.Linear(hidden_dim, 1)
     if output_neuron_bias is not None:
         # Set the bias of the final linear layer
         output_neuron.bias.data.fill_(output_neuron_bias)

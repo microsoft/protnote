@@ -1,15 +1,11 @@
-from src.utils.data import (
-    load_checkpoint,
-    seed_everything,
-    log_gpu_memory_usage
-)
-from src.utils.main_utils import get_or_generate_vocabularies,  get_or_generate_label_embeddings, get_or_generate_sequence_embeddings, validate_arguments
+from src.utils.data import seed_everything,log_gpu_memory_usage
+from src.utils.main_utils import get_or_generate_vocabularies, get_or_generate_sequence_embeddings, validate_arguments
 from src.data.datasets import ProteinDataset, calculate_pos_weight, create_multiple_loaders
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
 from src.models.protein_encoders import ProteInfer
-from src.utils.evaluation import EvalMetrics, save_evaluation_results
-from src.utils.models import count_parameters_by_layer, sigmoid_bias_from_prob, get_label_embeddings
+from src.utils.evaluation import EvalMetrics
+from src.utils.models import count_parameters_by_layer, sigmoid_bias_from_prob,load_checkpoint
 from src.utils.configs import get_setup
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
@@ -24,6 +20,7 @@ import json
 import pandas as pd
 from transformers import AutoTokenizer, AutoModel
 from src.data.collators import collate_variable_sequence_length
+import mlflow
 
 ### SETUP ###
 torch.cuda.empty_cache()
@@ -61,6 +58,9 @@ def main():
 
     parser.add_argument("--override", nargs="*",
                         help="Override config parameters in key-value pairs.")
+    
+    parser.add_argument("--save-prediction-results", action="store_true", default=False,
+                        help="Save predictions and ground truth dataframe for validation and/or test")
 
     parser.add_argument('-n', '--nodes', default=1, type=int,
                         metavar='N', help='Number of nodes (default: 1)')
@@ -70,7 +70,7 @@ def main():
 
     parser.add_argument('-nr', '--nr', default=0, type=int,
                         help='Ranking within the nodes')
-
+    
     args = parser.parse_args()
     validate_arguments(args, parser)
 
@@ -133,6 +133,12 @@ def train_validate_test(gpu, args):
             config={**params, **vars(args)},
             entity="microsoft-research-incubation"
         )
+
+        if args.amlt:
+            #MLFlow logging for Hyperdrive
+            mlflow.autolog()
+            mlflow.start_run()
+
         # Log the wandb link
         logger.info(f"W&B link: {wandb.run.get_url()}")
 
@@ -238,8 +244,8 @@ def train_validate_test(gpu, args):
         sequence_encoder=sequence_encoder,
 
         # Output Layer
-        output_dim=params["OUTPUT_DIM"],
-        output_num_layers=params["OUTPUT_NUM_LAYERS"],
+        output_mlp_hidden_dim_scale_factor=params["OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR"],
+        output_mlp_num_layers=params["OUTPUT_MLP_NUM_LAYERS"],
         output_neuron_bias=sigmoid_bias_from_prob(params["OUTPUT_NEURON_PROBABILITY_BIAS"]) if params["OUTPUT_NEURON_PROBABILITY_BIAS"]is not None else None,
 
         # Training options
@@ -300,21 +306,18 @@ def train_validate_test(gpu, args):
         # Train function
         Trainer.train(train_loader=loaders["train"][0],
                       val_loader=loaders["validation"][0],
-                      val_optimization_metric=eval_metrics.get_metric_by_name(name=params["OPTIMIZATION_METRIC_NAME"],
-                                                                              num_labels=label_sample_sizes["validation"]),
+                      eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="map_.*",
+                                                                                 num_labels=len(vocabularies["GO_label_vocab"])
+                                                                                 ),
                       val_optimization_metric_name=params["OPTIMIZATION_METRIC_NAME"])
     else:
         logger.info("Skipping training...")
 
     ####### TESTING LOOP #######
-    all_test_results = []
-    all_test_metrics = []
+    all_test_metrics = {}
+    all_metrics = {}
 
-    if not params["DECISION_TH"] and not args.validation_path_name:
-        raise ValueError(
-            "DECISION_TH is not provided and no validation set is provided to calculate it.")
 
-    best_val_th = params["DECISION_TH"]
     # Setup for validation
     if args.validation_path_name:
         # Reinitialize the validation loader with all the data, in case we were using a subset to expedite training
@@ -333,14 +336,6 @@ def train_validate_test(gpu, args):
             )
         )
 
-        # If no decision threshold is provided, find the optimal threshold on the validation set
-        if not params["DECISION_TH"]:
-            logger.info("Decision threshold not provided.")
-            best_val_th, _ = Trainer.find_optimal_threshold(
-                data_loader=full_val_loader,
-                optimization_metric_name=params["DECISION_TH_METRIC_NAME"]
-            )
-
         logger.info(
             f"\n{'='*100}\nTesting on validation set\n{'='*100}")
 
@@ -351,26 +346,18 @@ def train_validate_test(gpu, args):
 
         # Final validation using all labels
         torch.cuda.empty_cache()
-        validation_metrics, validation_results = Trainer.evaluate(
+        validation_metrics = Trainer.evaluate(
             data_loader=full_val_loader,
-            eval_metrics=eval_metrics.get_metric_collection(type="all",
-                                                            threshold=best_val_th,
-                                                            num_labels=len(
-                                                                vocabularies["GO_label_vocab"])
+            eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="map_.*",
+                                                                       num_labels=len(vocabularies["GO_label_vocab"])
                                                             ),
-            save_results=True
+            save_results=args.save_prediction_results,
+            metrics_prefix='final_validation'
         )
-
+        all_metrics.update(validation_metrics)
         logger.info(json.dumps(validation_metrics, indent=4))
         logger.info("Final validation complete.")
-        logger.info("Saving validation results...")
-        if is_master:
-            save_evaluation_results(results=validation_results,
-                                    label_vocabulary=vocabularies["GO_label_vocab"],
-                                    run_name=args.name,
-                                    output_dir=paths["RESULTS_DIR"],
-                                    )
-        logger.info("Validation results saved")
+
         
     # Setup for testing
     if args.test_paths_names:
@@ -381,26 +368,50 @@ def train_validate_test(gpu, args):
                 log_gpu_memory_usage(logger, 0)
 
             # TODO: If best_val_th is not defined, alert an error to either provide a decision threshold or a validation datapath
-            test_metrics, test_results = Trainer.evaluate(
+            test_metrics = Trainer.evaluate(
                 data_loader=test_loader,
-                eval_metrics=eval_metrics.get_metric_collection(type="all",
-                                                                threshold=best_val_th,
-                                                                num_labels=len(vocabularies["GO_label_vocab"])),
-                save_results=True
+                eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="map_.*",
+                                                                       num_labels=len(vocabularies["GO_label_vocab"])),
+                save_results=args.save_prediction_results,
+                metrics_prefix=f'test_{idx+1}'
             )
-
-            all_test_results.append(test_results)
-            all_test_metrics.append(test_metrics)
+            all_test_metrics.update(test_metrics)
             logger.info(json.dumps(test_metrics, indent=4))
             logger.info("Testing complete.")
+
+        all_metrics.update(test_metrics)
 
     ####### CLEANUP #######
     logger.info(
         f"\n{'='*100}\nTraining, validating, and testing COMPLETE\n{'='*100}\n")
-    # W&B
-    if is_master and args.use_wandb and all_test_metrics:
-        wandb.log(all_test_metrics[-1])
-        wandb.finish()
+    # W&B and MLFlow
+    if is_master:
+        #Log test metrics
+        if args.test_paths_names:
+            if args.use_wandb:
+                wandb.log(all_test_metrics)
+            if args.amlt:
+                mlflow.log_metrics(all_test_metrics)
+        
+        #Log val metrics
+        if args.validation_path_name:
+            if args.use_wandb:
+                wandb.log(validation_metrics)
+            if args.amlt:
+                mlflow.log_metrics(validation_metrics)
+    
+        '''
+        #Create wandb summary table
+        wandb.log({{'':args.name},
+                   all_metrics
+                   })
+        '''
+        #Close metric loggers
+        if args.use_wandb:
+            wandb.finish()
+        if args.amlt:
+            mlflow.end_run()
+        
     # Loggers
     handlers = logger.handlers[:]
     for handler in handlers:

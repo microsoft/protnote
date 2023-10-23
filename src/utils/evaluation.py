@@ -13,6 +13,8 @@ from torchmetrics.classification import (
 from torchmetrics import MetricCollection, Metric
 from typing import Literal
 import re
+import numpy as np
+from tqdm import tqdm
 
 
 class SamplewisePrecision(Metric):
@@ -81,7 +83,6 @@ class SamplewiseCoverage(Metric):
     def compute(self) -> torch.Tensor:
         return self.at_least_one_positive_pred.float() / self.total_samples
 
-
 class SamplewiseF1Score(Metric):
     def __init__(self, threshold: float):
         super().__init__()
@@ -102,6 +103,23 @@ class SamplewiseF1Score(Metric):
 
         return f1
 
+def metric_collection_to_dict_float(metric_collection:MetricCollection,prefix=None):
+    metric_collection = metric_collection.copy()
+    
+    for k, v in metric_collection.items():
+        if (not isinstance(v,float))&(not isinstance(v,int)):
+            if isinstance(v, torch.Tensor):
+                metric_collection[k] = v.item()
+
+            # Cast numpy floats to float32. Needed to store as parquet
+            # because pyarrow doesn't support float16 from mixed precision
+            if np.issubdtype(type(v), np.floating):
+                metric_collection[k] = v.astype("float32")
+        
+    
+    metric_collection = {(f'{prefix}_{k}' if prefix is not None else k):v for k,v in metric_collection.items()}
+        
+    return metric_collection
 
 class EvalMetrics:
     def __init__(self, device: str):
@@ -205,7 +223,7 @@ class EvalMetrics:
         return MetricCollection(metrics)
 
     def get_metric_collection_with_regex(
-            self, pattern: str, threshold: float, num_labels: int
+            self, pattern: str, num_labels: int, threshold: float = None
     ) -> MetricCollection:
         """_summary_
 
@@ -259,3 +277,48 @@ def save_evaluation_results(results, label_vocabulary, run_name, output_dir):
 
     probabilities_df.to_parquet(os.path.join(
         output_dir, f'probabilities_{run_name}.parquet'))
+
+
+def metrics_per_label_df(label_df:pd.DataFrame,pred_df:pd.DataFrame,device:str,threshold:None)->pd.DataFrame:
+    """Calculate the following per label metrics: Average Precision,F1,Precision,Recall,label frequency
+
+    :param label_df: dataframe where each column is a label and every row an observation. element row=i,col=j is 1
+        if observation i has label j, 0 otherwise
+    :type label_df: pd.DataFrame
+    :param pred_df: dataframe where each column is a label and every row an observation. element row=i,col=j is the prediction probability
+        that observation i has label j.
+    :type pred_df: pd.DataFrame
+    :param device: Device to make calculations (e.g., cuda)
+    :type device: str
+    :param threshold: Threshold to calculate threshold-dependent metrics like F1 Score
+    :type threshold: None
+    :return: The Average Preicion for each label
+    :rtype: pd.DataFrame
+
+    """    
+
+    rows = []
+    labels = label_df.columns
+    mask_at_least_one_label = label_df.sum()>0
+    labels_at_least_one_pos = label_df.columns[mask_at_least_one_label]
+    labels_undefined = label_df.columns[~mask_at_least_one_label]
+    threshold = threshold
+    for col in tqdm(labels_at_least_one_pos):
+        row = {}
+        preds = torch.tensor(pred_df[col].values)
+        ground_truth = torch.tensor(label_df[col].values)
+        
+        row['AUPRC'] = AveragePrecision(task="binary").to(device)(preds,ground_truth).item()
+        row['Frequency'] = ground_truth.sum().item()
+        row['Relative Frequency'] = row['Frequency']/len(ground_truth)
+
+        if threshold is not None:
+            row['Precision'] = Precision(task="binary",threshold=threshold).to(device)(preds,ground_truth).item()
+            row['Recall'] = Precision(task="binary",threshold=threshold).to(device)(preds,ground_truth).item()
+            row['F1'] = 2*row['Precision']*row['Recall']/(row['Precision']+row['Recall']) if (row['Precision']+row['Recall']) >0 else 0
+        
+        rows.append(row)
+
+    metrics = pd.DataFrame(rows,index=labels_at_least_one_pos)
+    metrics_undefined = pd.DataFrame(np.nan,columns=metrics.columns,index=labels_undefined)
+    return pd.concat([metrics,metrics_undefined])

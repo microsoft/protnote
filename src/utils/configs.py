@@ -5,7 +5,19 @@ import datetime
 import logging
 from src.utils.data import read_yaml
 import sys
+from ast import literal_eval
 
+def try_literal_eval(val):
+    try:
+        # Attempt to evaluate as a literal
+        return literal_eval(val)
+    except (ValueError, SyntaxError):
+        # If evaluation fails means input is actually a string
+        if val=='null':
+            return None
+        if (val=="false")|(val=="true"):
+            return literal_eval(val.title())
+        return val
 
 def override_config(config: dict, overrides: list):
     # Process the overrides if provided
@@ -23,7 +35,7 @@ def override_config(config: dict, overrides: list):
             # Convert value to appropriate type if necessary (e.g., float, int)
             # Here, we're assuming that the provided keys exist in the 'params' section of the config
             if key in config["params"]:
-                config["params"][key] = type(config["params"][key])(value)
+                config["params"][key] = try_literal_eval(value)
             else:
                 raise KeyError(
                     f"Key '{key}' not found in the 'params' section of the config."

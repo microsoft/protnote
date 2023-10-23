@@ -45,7 +45,11 @@ def validate_arguments(args, parser):
                      "--train-path-name and --validation-path-name (optional load model)\n"
                      "--train-path-name and --validation-path-name --test-path-names (optional load model)\n"
                      "All cases with including --full-path-name. Please provide the required option(s) and try again.")
-
+    
+    if (args.save_prediction_results)\
+        &((args.test_paths_names is None)\
+        &(args.test_paths_names is None)):
+        parser.error("You must provide --test-path-names and/or --val-path-names to save the results of the validation and/or test sets.")
 
 
 def generate_sequence_embeddings(device, sequence_encoder, datasets, params):

@@ -10,7 +10,6 @@ import numpy as np
 import wget
 import hashlib
 import transformers
-from collections import OrderedDict
 
 
 def log_gpu_memory_usage(logger, device_id):
@@ -115,64 +114,6 @@ def download_and_unzip(url, output_file):
 
     print(
         f"File {output_file + '.gz'} has been downloaded and unzipped to {output_file}.")
-
-
-def save_checkpoint(model, optimizer, epoch, best_val_metric, model_path):
-    """
-    Save model and optimizer states as a checkpoint.
-
-    Args:
-    - model (torch.nn.Module): The model whose state we want to save.
-    - optimizer (torch.optim.Optimizer): The optimizer whose state we want to save.
-    - epoch (int): The current training epoch.
-    - model_path (str): The path where the checkpoint will be saved.
-    """
-    checkpoint = {
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'best_val_metric': best_val_metric,
-    }
-
-    torch.save(checkpoint, model_path)
-
-
-def load_checkpoint(Trainer, checkpoint_path):
-    """
-    Load the model's state dict, optimizer's state, and epoch number from the checkpoint.
-
-    This function handles both DDP-wrapped and non-DDP checkpoints.
-
-    :param model: The model into which the checkpoint's state dict should be loaded.
-    :param trainer: The trainer instance containing the optimizer and epoch attributes.
-    :param checkpoint_path: Path to the checkpoint file.
-    """
-
-    # Load the entire checkpoint
-    checkpoint = torch.load(checkpoint_path)
-
-    # Extract the state_dict from the checkpoint
-    state_dict = checkpoint['model_state_dict']
-
-    # Check if the state_dict is from a DDP-wrapped model
-    if list(state_dict.keys())[0].startswith('module.'):
-        # Remove the "module." prefix
-        new_state_dict = OrderedDict()
-        for k, v in state_dict.items():
-            name = k[7:]  # remove 'module.' prefix
-            new_state_dict[name] = v
-        state_dict = new_state_dict
-
-    # Load the state_dict into the model
-    Trainer.model.module.load_state_dict(state_dict)
-
-    # Load the optimizer state and epoch number if they exist in the checkpoint
-    if 'optimizer_state_dict' in checkpoint:
-        Trainer.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    if 'epoch' in checkpoint:
-        Trainer.epoch = checkpoint['epoch']
-    if 'best_val_metric' in checkpoint:
-        Trainer.best_val_metric = checkpoint['best_val_metric']
 
 
 def seed_everything(seed: int, device: str):

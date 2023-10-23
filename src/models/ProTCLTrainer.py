@@ -1,6 +1,7 @@
 import logging
-from src.utils.data import load_gz_json, log_gpu_memory_usage, save_checkpoint, load_checkpoint
-from src.utils.evaluation import EvalMetrics
+from src.utils.data import load_gz_json, log_gpu_memory_usage
+from src.utils.models import save_checkpoint, load_checkpoint
+from src.utils.evaluation import EvalMetrics,metric_collection_to_dict_float,save_evaluation_results
 from src.utils.losses import BatchWeightedBCE, FocalLoss, RGDBCE
 from torchmetrics import MetricCollection, Metric
 from src.utils.proteinfer import normalize_confidences
@@ -180,22 +181,26 @@ class ProTCLTrainer:
 
     def validate(self,
                  val_loader: torch.utils.data.DataLoader,
-                 val_optimization_metric: Metric,
+                 eval_metrics: MetricCollection,
                  val_optimization_metric_name: str
                  ):
 
         self.logger.info("Running validation...")
 
-        val_metrics, _ = self.evaluate(data_loader=val_loader,
-                                       eval_metrics=MetricCollection({val_optimization_metric_name: val_optimization_metric}))
+        prefix = 'validation'
+
+        val_metrics = self.evaluate(data_loader=val_loader,
+                                       eval_metrics=eval_metrics,
+                                       metrics_prefix=prefix)
+        val_optimization_metric_name = f'{prefix}_{val_optimization_metric_name}'
 
         self.logger.info(val_metrics)
 
         if self.use_wandb and self.is_master:
             try:
                 if self.use_wandb and self.is_master:
-                    wandb.log({f'validation_{k}': v for k,
-                              v in val_metrics.items()})
+                    wandb.log(val_metrics)
+
             except Exception as e:
                 self.logger.warning(
                     f"Failed to log validation metrics to wandb: {e}")
@@ -294,7 +299,8 @@ class ProTCLTrainer:
         self,
         data_loader: torch.utils.data.DataLoader,
         eval_metrics: MetricCollection = None,
-        save_results: bool = False
+        save_results: bool = False,
+        metrics_prefix = None
     ) -> tuple[dict, dict]:
         """Evaluate the model on the given data loader.
         :param data_loader: pytorch data loader
@@ -349,30 +355,34 @@ class ProTCLTrainer:
                         test_results[key] = (
                             torch.cat(test_results[key]).detach().cpu().numpy()
                         )
+                
+                self.logger.info("Saving validation results...")
+                if self.is_master:
+                    save_evaluation_results(results=test_results,
+                                            label_vocabulary=self.vocabularies["GO_label_vocab"],
+                                            run_name=self.run_name,
+                                            output_dir=self.config["paths"]["RESULTS_DIR"],
+                                            )
+                self.logger.info("Validation results saved")
 
             # Compute average validation loss
             avg_loss = total_loss / len(data_loader)
+
             final_metrics = eval_metrics.compute() if eval_metrics is not None else {}
+            final_metrics.update({"loss": avg_loss})
 
-            for k, v in final_metrics.items():
-                if isinstance(v, torch.Tensor):
-                    final_metrics[k] = v.item()
-
-                # Cast numpy floats to float32. Needed to store as parquet
-                # because pyarrow doesn't support float16 from mixed precision
-                if np.issubdtype(type(v), np.floating):
-                    final_metrics[k] = v.astype("float32")
-
-            final_metrics.update({"avg_loss": avg_loss})
+            final_metrics = metric_collection_to_dict_float(
+                final_metrics,
+                prefix=metrics_prefix)            
 
         self.model.train()
-        return final_metrics, test_results
+        return final_metrics
 
     def train(
         self,
         train_loader: torch.utils.data.DataLoader,
         val_loader: torch.utils.data.DataLoader,
-        val_optimization_metric: Metric,
+        eval_metrics: MetricCollection,
         val_optimization_metric_name: str
     ):
         """Train model
@@ -382,6 +392,9 @@ class ProTCLTrainer:
         :type val_loader: torch.utils.data.DataLoader
         """
         self.model.train()
+
+        train_eval_metrics = eval_metrics
+        val_eval_metrics = eval_metrics.clone()
 
         # Watch the model
         if self.use_wandb:
@@ -453,10 +466,14 @@ class ProTCLTrainer:
                 # Compute loss
                 loss = self.loss_fn(logits, label_multihots.float()) / \
                     self.gradient_accumulation_steps
+                
+                train_metrics = train_eval_metrics(logits, label_multihots)
+                train_metrics.update({"loss": loss.item()})
+                train_metrics = metric_collection_to_dict_float(train_metrics,prefix="train")
 
                 # Log metrics to W&B
                 if self.use_wandb:
-                    wandb.log({"train_loss": loss.item()})
+                    wandb.log(train_metrics)
 
                 # Backward pass with mixed precision
                 self.scaler.scale(loss).backward()
@@ -483,7 +500,7 @@ class ProTCLTrainer:
 
                     # Run validation
                     val_metrics = self.validate(val_loader=val_loader,
-                                                val_optimization_metric=val_optimization_metric,
+                                                eval_metrics=val_eval_metrics,
                                                 val_optimization_metric_name=val_optimization_metric_name
                                                 )
 
@@ -493,11 +510,17 @@ class ProTCLTrainer:
 
                     self.logger.info(
                         f"Validation metrics:\n{json.dumps(val_metrics, indent=4)}")
+                    
+                    #Reset torchmetrics after every validation loop
+                    val_eval_metrics.reset()
+                
+                #Reset torchmetrics for next batch
+                train_eval_metrics.reset()
+                    
 
         if self.is_master:
             self.logger.info("Restoring model to best validation map_micro...")
-            load_checkpoint(model=self.model.module,
-                            trainer=self,
+            load_checkpoint(trainer=self,
                             checkpoint_path=self.model_path)
 
             # Broadcast model state to other processes

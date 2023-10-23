@@ -159,3 +159,6 @@ class FocalLoss(torch.nn.Module):
                 f"Invalid Value for arg 'reduction': '{self.reduction} \n Supported reduction modes: 'none', 'mean', 'sum'"
             )
         return loss
+    
+
+    
