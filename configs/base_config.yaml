@@ -69,7 +69,7 @@ params:
 
   # Constants
   SEED: 42
-  VALIDATIONS_PER_EPOCH: 100
+  VALIDATIONS_PER_EPOCH: 1
   NUM_WORKERS: 4
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
 
