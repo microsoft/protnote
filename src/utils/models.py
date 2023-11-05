@@ -1,10 +1,27 @@
 import torch
 import logging
+import re
 import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
 from torch.cuda.amp import autocast
 from collections import OrderedDict
 
+def biogpt_train_last_n_layers(model,n):
+    for param in model.parameters():
+        param.requires_grad = False
+
+    if n>0:
+        max_layer_num = len(model.layers)-1
+        for param_name,param in model.named_parameters():
+            layer_num = re.search(fr'layers\.(\d+)', param_name)
+
+            if layer_num:
+                number = int(layer_num.group(1))
+                if number>max_layer_num-n:
+                    param.requires_grad = True
+
+        for param in model.layer_norm.parameters():
+            param.requires_grad = True
 
 def count_parameters_by_layer(model):
     """

@@ -82,14 +82,13 @@ class ProTCL(nn.Module):
         # If label embeddings are provided and we're not training the laebel encoder, use them. Otherwise, compute them.
         if label_embeddings is not None and (not self.train_label_encoder or (self.train_label_encoder and not self.training)):
             L_f = label_embeddings
-        elif tokenized_labels is not None:
+        elif (tokenized_labels is not None)&(self.train_label_encoder)&(self.training):
             # Get label embeddings from tokens
-            with torch.set_grad_enabled(self.train_label_encoder and self.training):
-                L_f = get_label_embeddings(
-                    tokenized_labels,
-                    self.label_encoder,
-                    batch_size_limit=self.label_batch_size_limit
-                )
+            L_f = get_label_embeddings(
+                tokenized_labels,
+                self.label_encoder,
+                batch_size_limit=self.label_batch_size_limit
+            )
         else:
             raise ValueError(
                 "Incompatible label parameters passed to forward method.")
@@ -106,6 +105,7 @@ class ProTCL(nn.Module):
                 "Incompatible sequence parameters passed to forward method.")
 
         # Project protein and label embeddings to common latent space.
+
         P_e = self.W_p(P_f)
         L_e = self.W_l(L_f)
 

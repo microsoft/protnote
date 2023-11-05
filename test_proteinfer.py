@@ -3,7 +3,7 @@ from src.utils.main_utils import get_or_generate_vocabularies
 from src.utils.configs import get_setup
 from src.models.protein_encoders import ProteInfer
 from src.utils.proteinfer import transfer_tf_weights_to_torch
-from src.utils.evaluation import EvalMetrics
+from src.utils.evaluation import EvalMetrics,save_evaluation_results
 from torchmetrics.classification import F1Score
 from src.utils.data import read_json, load_gz_json
 from src.utils.proteinfer import normalize_confidences
@@ -14,9 +14,10 @@ import logging
 import argparse
 import os
 import json
-
+from collections import defaultdict
+from src.utils.losses import FocalLoss
 """
-sample usage: python test_proteinfer.py --validation-path-name VAL_DATA_PATH --test-paths-names TEST_DATA_PATH --decision-th 0.06
+sample usage: python test_proteinfer.py --validation-path-name VAL_DATA_PATH --full-path-name FULL_DATA_PATH
 """
 
 # Set the TOKENIZERS_PARALLELISM environment variable to False
@@ -25,18 +26,21 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # Argument parser setup
 parser = argparse.ArgumentParser(description="Train and/or Test the ProTCL model.")
 
+
+parser.add_argument(
+    "--train-path-name",
+    type=str
+    )
+
 parser.add_argument(
     "--validation-path-name",
-    type=str,
-    required=True,
-    help="Specify the desired val path name to validate the model during training using names from config file. If not provided, model will not be trained. If provided, must also provide --train-path.",
+    type=str
 )
 
 parser.add_argument(
     "--test-paths-names",
     nargs="+",
     type=str,
-    required=True,
     help="Specify all the desired test paths names to test the model using names from config file to test. If not provided, model will not be tested.",
 )
 
@@ -66,6 +70,9 @@ parser.add_argument(
     help="Normalize probabilities using the label vocabulary and applicable label dictionary."
 )
 
+parser.add_argument("--save-prediction-results", action="store_true", default=False,
+                    help="Save predictions and ground truth dataframe for validation and/or test")
+
 # TODO: Add an option to serialize and save config with a name corresponding to the model save path
 
 args = parser.parse_args()
@@ -77,6 +84,7 @@ def to_device(device, *args):
 config = get_setup(
     config_path=args.config,
     run_name=args.name,
+    train_path_name=args.train_path_name,
     val_path_name=args.validation_path_name,
     test_paths_names=args.test_paths_names,
     amlt=False,
@@ -114,6 +122,7 @@ loaders = create_multiple_loaders(
     pin_memory=True
 )
 
+print(loaders)
 
 model = ProteInfer.from_pretrained(
     weights_path=paths["PROTEINFER_WEIGHTS_PATH"],
@@ -132,98 +141,83 @@ model = model.eval()
 
 label_normalizer = load_gz_json(paths["PARENTHOOD_LIB_PATH"])
 
-# Initialize EvalMetrics
-eval_metrics = EvalMetrics(device=device)
+for loader_name, loader in loaders.items():
+    # Initialize EvalMetrics
+    eval_metrics = EvalMetrics(device=device)
 
-val_metrics = eval_metrics\
-            .get_metric_collection_with_regex(pattern='map_*',
-                                   threshold=None,
-                                   num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"]
-                                   )
+    test_metrics = eval_metrics\
+                .get_metric_collection_with_regex(pattern='f1_micro',
+                                    threshold=0.86,
+                                    num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"]
+                                    )
+   
+    bce_loss = torch.nn.BCEWithLogitsLoss(reduction='mean')
+    focal_loss = FocalLoss(gamma=config["params"]["FOCAL_LOSS_GAMMA"], alpha=config["params"]["FOCAL_LOSS_ALPHA"])
+    total_bce_loss = 0
+    total_focal_loss = 0
+    test_results = defaultdict(list)
+    with torch.no_grad():
+        for batch_idx, batch in tqdm(
+            enumerate(loader[0]), total=len(loader[0])
+        ):
 
-with torch.no_grad():
-    for batch_idx, batch in tqdm(
-        enumerate(loaders["validation"][0]), total=len(loaders["validation"][0])
-    ):
-        sequence_onehots, sequence_embeddings, sequence_lengths, sequence_ids, label_multihots, tokenized_labels, label_embeddings = (
-            batch["sequence_onehots"],
-            batch["sequence_embeddings"],
-            batch["sequence_lengths"],
-            batch["sequence_ids"],
-            batch["label_multihots"],
-            batch["tokenized_labels"],
-            batch["label_embeddings"]
-        )
-
-        sequence_onehots, sequence_lengths, label_multihots = to_device(device,
-            sequence_onehots, sequence_lengths, label_multihots)
-
-        logits = model(sequence_onehots, sequence_lengths)
-        probabilities = torch.sigmoid(logits)
-
-        if args.normalize_probabilities:
-            probabilities = torch.tensor(
-                normalize_confidences(
-                    predictions=probabilities.detach().cpu().numpy(),
-                    label_vocab=vocabularies["GO_label_vocab"],
-                    applicable_label_dict=label_normalizer,
-                ),
-                device=probabilities.device,
+            sequence_onehots, sequence_lengths, sequence_ids, label_multihots = (
+                batch["sequence_onehots"],
+                batch["sequence_lengths"],
+                batch["sequence_ids"],
+                batch["label_multihots"]
             )
-        val_metrics(probabilities, label_multihots)
 
-print(val_metrics.compute())
+            sequence_onehots, sequence_lengths, label_multihots = to_device(device,
+                sequence_onehots, sequence_lengths, label_multihots)
+                
+            logits = model(sequence_onehots, sequence_lengths)
+            probabilities = torch.sigmoid(logits)
+            if args.normalize_probabilities:
+                probabilities = torch.tensor(
+                    normalize_confidences(
+                        predictions=probabilities.detach().cpu().numpy(),
+                        label_vocab=vocabularies["GO_label_vocab"],
+                        applicable_label_dict=label_normalizer,
+                    ),
+                    device=probabilities.device,
+                )
 
-
-test_metrics = eval_metrics\
-            .get_metric_collection_with_regex(pattern='map_*',
-                                   threshold=None,
-                                   num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"]
-                                   )
-all_labels = []
-all_probas = []
-all_seqids = []
-with torch.no_grad():
-    for batch_idx, batch in tqdm(
-        enumerate(loaders["test"][0]), total=len(loaders["test"][0])
-    ):
-
-        sequence_onehots, sequence_lengths, sequence_ids, label_multihots = (
-            batch["sequence_onehots"],
-            batch["sequence_lengths"],
-            batch["sequence_ids"],
-            batch["label_multihots"]
-        )
-
-        sequence_onehots, sequence_lengths, label_multihots = to_device(device,
-            sequence_onehots, sequence_lengths, label_multihots)
+            test_metrics(probabilities, label_multihots)
+            total_bce_loss += bce_loss(logits, label_multihots.float())
+            total_focal_loss += focal_loss(logits, label_multihots.float())
             
-        logits = model(sequence_onehots, sequence_lengths)
-        probabilities = torch.sigmoid(logits)
-        if args.normalize_probabilities:
-            probabilities = torch.tensor(
-                normalize_confidences(
-                    predictions=probabilities.detach().cpu().numpy(),
-                    label_vocab=vocabularies["GO_label_vocab"],
-                    applicable_label_dict=label_normalizer,
-                ),
-                device=probabilities.device,
-            )
+            if args.save_prediction_results:
+                test_results["sequence_ids"].append(sequence_ids)
+                test_results["logits"].append(logits)
+                test_results["labels"].append(label_multihots)
 
-        test_metrics(probabilities, label_multihots)
+        test_metrics = test_metrics.compute()
+        test_metrics.update({"bce_loss": total_bce_loss/len(loader[0])})
+        test_metrics.update({"focal_loss": total_focal_loss/len(loader[0])})
+        
 
-        all_labels.append(label_multihots)
-        all_probas.append(probabilities)
-        all_seqids.append(sequence_ids)
+        print("\n\n","="*20)
+        print(f"##{loader_name}##")
+        print(test_metrics)
+        print("="*20,"\n\n")
 
-    print(test_metrics.compute())
+        if args.save_prediction_results:
+            for key in test_results.keys():
+                if key == "sequence_ids":
+                    test_results[key] = (
+                        np.array(
+                            [j for i in test_results["sequence_ids"] for j in i])
+                    )
+                else:
+                    test_results[key] = (
+                        torch.cat(test_results[key]).detach().cpu().numpy()
+                    )
 
-    all_labels = torch.cat(all_labels)
-    all_probas = torch.cat(all_probas)
-    all_seqids = torch.cat(all_seqids)
-
-    # np.save(PROTEINFER_RESULTS_DIR+'labels.npy',all_labels.detach().cpu().numpy())
-    # np.save(PROTEINFER_RESULTS_DIR+'probas.npy',all_probas.detach().cpu().numpy())
-    # np.save(PROTEINFER_RESULTS_DIR+'seqids.npy',all_seqids.detach().cpu().numpy())
-
+            save_evaluation_results(results=test_results,
+                                                    label_vocabulary=vocabularies["GO_label_vocab"],
+                                                    run_name="proteinfer",
+                                                    output_dir=config["paths"]["RESULTS_DIR"],
+                                                    data_split_name = loader_name
+                                                    )
 torch.cuda.empty_cache()

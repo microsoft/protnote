@@ -13,8 +13,9 @@ from collections import defaultdict
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from transformers import BatchEncoding
-from src.utils.models import generate_label_embeddings_from_text
-
+from src.utils.models import generate_label_embeddings_from_text, biogpt_train_last_n_layers
+from tqdm import tqdm
+from torcheval.metrics import MultilabelAUPRC,BinaryAUPRC
 
 class ProTCLTrainer:
     def __init__(
@@ -121,11 +122,13 @@ class ProTCLTrainer:
         trainable_params = []
         trainable_params_names = []
 
+        #Use to unfreeze last n layers. 0 means entire model frozen.
+        biogpt_train_last_n_layers(self.model.module.label_encoder,
+                                    0
+                                  )
+
         for name, param in self.model.module.named_parameters():
             if name.startswith('sequence_encoder') and (not self.train_sequence_encoder):
-                param.requires_grad = False
-
-            if name.startswith('label_encoder') and (not self.train_label_encoder):
                 param.requires_grad = False
 
             if (name.startswith('W_p.weight') or name.startswith('W_l.weight')) and (not self.train_projection_head):
@@ -178,9 +181,8 @@ class ProTCLTrainer:
         }
         with autocast():
             logits = self.model(**inputs)
-
-        # Compute validation loss for the batch
-        loss = self.loss_fn(logits, label_multihots.float())
+            # Compute validation loss for the batch
+            loss = self.loss_fn(logits, label_multihots.float())
 
         return loss.item(), logits, label_multihots, sequence_ids
 
@@ -204,7 +206,7 @@ class ProTCLTrainer:
         if self.use_wandb and self.is_master:
             try:
                 if self.use_wandb and self.is_master:
-                    wandb.log(val_metrics)
+                    wandb.log(val_metrics,step=self.training_step)
 
             except Exception as e:
                 self.logger.warning(
@@ -263,16 +265,7 @@ class ProTCLTrainer:
                 probabilities = torch.sigmoid(logits)
 
                 if self.normalize_probabilities:
-                    # TODO: Using original normalize_confidences implemented with numpy,
-                    # but this is slow. Should be able to do this with torch tensors.
-                    probabilities = torch.tensor(
-                        normalize_confidences(
-                            predictions=probabilities.detach().cpu().numpy(),
-                            label_vocab=self.vocabularies["GO_label_vocab"],
-                            applicable_label_dict=self.label_normalizer,
-                        ),
-                        device=self.device,
-                    )
+                    probabilities = self._normalize_probabilities(probabilities)
 
                 all_probabilities.append(probabilities)
                 all_label_multihots.append(label_multihots)
@@ -299,6 +292,18 @@ class ProTCLTrainer:
         )
         self.model.train()
         return best_th, best_score
+
+    def _normalize_probabilities(self,probabilities):
+        # TODO: Using original normalize_confidences implemented with numpy,
+                    # but this is slow. Should be able to do this with torch tensors.
+        return torch.tensor(
+                    normalize_confidences(
+                        predictions=probabilities.detach().cpu().numpy(),
+                        label_vocab=self.vocabularies["GO_label_vocab"],
+                        applicable_label_dict=self.label_normalizer,
+                    ),
+                    device=self.device,
+                )
 
     def evaluate(
         self,
@@ -337,8 +342,15 @@ class ProTCLTrainer:
 
         total_loss = 0
         test_results = defaultdict(list)
+
+        if eval_metrics is not None:
+            eval_metrics.reset()
+
+        mAP_micro = BinaryAUPRC(device='cpu')
+        #mAP_macro = MultilabelAUPRC(device='cpu',num_labels=len(self.vocabularies["GO_label_vocab"]))
+
         with torch.no_grad():
-            for batch in data_loader:
+            for batch in tqdm(data_loader,total=len(data_loader)):
                 loss, logits, labels, sequence_ids = self.evaluation_step(
                     batch=batch)
                 if eval_metrics is not None:
@@ -346,24 +358,19 @@ class ProTCLTrainer:
                     probabilities = torch.sigmoid(logits)
 
                     if self.normalize_probabilities:
-                        # TODO: Using original normalize_confidences implemented with numpy,
-                        # but this is slow. Should be able to do this with torch tensors.
-                        probabilities = torch.tensor(
-                            normalize_confidences(
-                                predictions=probabilities.detach().cpu().numpy(),
-                                label_vocab=self.vocabularies["GO_label_vocab"],
-                                applicable_label_dict=self.label_normalizer,
-                            ),
-                            device=self.device,
-                        )
+                        probabilities = self._normalize_probabilities()
+
                     # Update eval metrics
                     eval_metrics(probabilities, labels)
+
+                    mAP_micro.update(probabilities.cpu().flatten(), labels.cpu().flatten())
+                    #mAP_macro.update(probabilities.cpu(), labels.cpu())
 
                     # No need to save results everytime. Only need it for final evaluation.
                     if save_results:
                         test_results["sequence_ids"].append(sequence_ids)
-                        test_results["probabilities"].append(probabilities)
-                        test_results["labels"].append(labels)
+                        test_results["logits"].append(logits.cpu())
+                        test_results["labels"].append(labels.cpu())
 
                 # Accumulate loss
                 total_loss += loss
@@ -373,11 +380,11 @@ class ProTCLTrainer:
                     if key == "sequence_ids":
                         test_results[key] = (
                             np.array(
-                                [[j] for i in test_results["sequence_ids"] for j in i])
+                                [j for i in test_results["sequence_ids"] for j in i])
                         )
                     else:
                         test_results[key] = (
-                            torch.cat(test_results[key]).detach().cpu().numpy()
+                            torch.cat(test_results[key]).numpy()
                         )
                 
                 self.logger.info("Saving validation results...")
@@ -386,22 +393,122 @@ class ProTCLTrainer:
                                             label_vocabulary=self.vocabularies["GO_label_vocab"],
                                             run_name=self.run_name,
                                             output_dir=self.config["paths"]["RESULTS_DIR"],
+                                            data_split_name=metrics_prefix
                                             )
                 self.logger.info("Validation results saved")
 
             # Compute average validation loss
             avg_loss = total_loss / len(data_loader)
+            #print('loss:',avg_loss)
+            
+            mAP_micro = mAP_micro.compute()
+            #print('map micro:',mAP_micro)
+            
+            #mAP_macro = mAP_macro.compute()
+            #print('map macro:',mAP_macro)
 
             final_metrics = eval_metrics.compute() if eval_metrics is not None else {}
-            final_metrics.update({"loss": avg_loss})
+            final_metrics.update({"loss": avg_loss,
+                                  "map_micro":mAP_micro,
+                                  #"map_macro":mAP_macro
+                                  })
 
             final_metrics = metric_collection_to_dict_float(
                 final_metrics,
                 prefix=metrics_prefix)            
 
         self.model.train()
+
         return final_metrics
 
+    def train_one_epoch(self,
+                        train_loader: torch.utils.data.DataLoader,
+                        eval_metrics: MetricCollection
+        ):
+        
+        avg_loss = 0
+        avg_probs = 0
+        avg_gt = 0
+        eval_metrics.reset()
+
+        
+        ####### TRAINING LOOP #######
+        for batch in train_loader:
+            # Increment batch index and set gradients to zero
+            self.training_step += 1
+
+            # Unpack the training batch
+            sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = (
+                batch["sequence_onehots"],
+                batch["sequence_embeddings"],
+                batch["sequence_lengths"],
+                batch["label_multihots"],
+                batch["tokenized_labels"],
+                batch["label_embeddings"]
+            )
+
+            # Move all unpacked batch elements to GPU, if available
+            sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = self._to_device(
+                sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings)
+
+            # Forward pass
+            inputs = {
+                "sequence_onehots": sequence_onehots,
+                "sequence_embeddings": sequence_embeddings,
+                "sequence_lengths": sequence_lengths,
+                "tokenized_labels": tokenized_labels,
+                "label_embeddings": label_embeddings
+            }
+
+
+            with autocast():
+                logits = self.model(**inputs)
+
+                # Compute loss, normalized by the number of gradient accumulation steps
+                loss = self.loss_fn(logits, label_multihots.float()) / \
+                    self.gradient_accumulation_steps
+        
+            # Backward pass with mixed precision
+            self.scaler.scale(loss).backward()
+
+            # Gradient accumulation every GRADIENT_ACCUMULATION_STEPS
+            if (self.training_step % self.gradient_accumulation_steps == 0) or (self.training_step ==len(train_loader)):
+                
+                # Unscales the gradients of optimizer's assigned params in-place
+                self.scaler.unscale_(self.optimizer)
+                
+                # Apply gradient clipping
+                clip_grad_norm_(self.model.module.parameters(),
+                                max_norm=self.clip_value)
+                
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad()
+            
+            avg_loss+=loss.item()
+            avg_probs += torch.mean(torch.sigmoid(logits).detach())
+            avg_gt += torch.mean(label_multihots.float().detach())
+
+            eval_metrics(logits, label_multihots)
+            
+            if self.use_wandb:
+                wandb.log({"per_batch_train_loss": loss.item()},step=self.training_step)
+
+        avg_loss = avg_loss/len(train_loader)
+        avg_probs_gt_ration = avg_probs/avg_gt
+
+        train_metrics = eval_metrics.compute() if eval_metrics is not None else {}
+        train_metrics.update({"loss": avg_loss,
+                              "avg_probabilities_ground_truth_ratio":avg_probs_gt_ration,
+                                })
+        train_metrics = metric_collection_to_dict_float(train_metrics,prefix='train')
+        
+        if self.use_wandb:
+            wandb.log(train_metrics,step=self.training_step)   
+        
+        return train_metrics
+        
+        
     def train(
         self,
         train_loader: torch.utils.data.DataLoader,
@@ -417,7 +524,7 @@ class ProTCLTrainer:
         """
         self.model.train()
 
-        train_eval_metrics = eval_metrics
+        train_eval_metrics = eval_metrics.clone()
         val_eval_metrics = eval_metrics.clone()
 
         # Watch the model
@@ -425,18 +532,19 @@ class ProTCLTrainer:
             wandb.watch(self.model)
 
         # Compute total number of training steps
+        self.training_step = 0
         num_training_steps = len(train_loader) * self.num_epochs
+        
         self.logger.info(f"{'='*100}")
         self.logger.info(
             f"Starting training. Total number of training steps: {num_training_steps}")
         self.logger.info(f"{'='*100}")
-        batch_count = 0
 
         for epoch in range(self.starting_epoch, self.starting_epoch + self.num_epochs):
             self.logger.info(
                 f"Starting epoch {epoch+1}/{self.starting_epoch + self.num_epochs}...")
             self.epoch = epoch
-
+   
             if self.is_master:
                 log_gpu_memory_usage(self.logger, 0)
 
@@ -444,110 +552,31 @@ class ProTCLTrainer:
             if hasattr(train_loader.sampler, "set_epoch"):
                 train_loader.sampler.set_epoch(epoch)
 
-            ####### TRAINING LOOP #######
-            for batch in train_loader:
-                # Increment batch index and set gradients to zero
-                self.optimizer.zero_grad()
-                batch_count += 1
+            train_metrics = self.train_one_epoch(train_loader=train_loader,
+                                                 eval_metrics=train_eval_metrics)
+                
+            # WANDB LOGS EVERY N BATCHES: validation and train metrics
+            if ((epoch - self.starting_epoch + 1) % self.validations_per_epoch == 0):
+                ####### VALIDATION LOOP #######
+                self.logger.info("Running validation...")
+                torch.cuda.empty_cache()
 
-                # Unpack the training batch
-                sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = (
-                    batch["sequence_onehots"],
-                    batch["sequence_embeddings"],
-                    batch["sequence_lengths"],
-                    batch["label_multihots"],
-                    batch["tokenized_labels"],
-                    batch["label_embeddings"]
+                # Run validation
+                val_metrics = self.validate(val_loader=val_loader,
+                                            eval_metrics=val_eval_metrics,
+                                            val_optimization_metric_name=val_optimization_metric_name
+                                            )
+
+                if self.train_label_encoder:
+                    # Clear the label embedding matrix
+                    val_loader.dataset.set_label_embedding_matrix(None)
+
+                self.logger.info(
+                    f"Epoch {epoch+1}/{self.starting_epoch + self.num_epochs}, Batch {self.training_step}, Training Loss: {train_metrics['train_loss']}"
                 )
 
-                # Move all unpacked batch elements to GPU, if available
-                sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = self._to_device(
-                    sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings)
-
-                # Forward pass
-                inputs = {
-                    "sequence_onehots": sequence_onehots,
-                    "sequence_embeddings": sequence_embeddings,
-                    "sequence_lengths": sequence_lengths,
-                    "tokenized_labels": tokenized_labels,
-                    "label_embeddings": label_embeddings
-                }
-
-                with autocast():
-                    logits = self.model(**inputs)
-
-
-                # Compute loss, normalized by the number of gradient accumulation steps
-                loss = self.loss_fn(logits, label_multihots.float()) / \
-                    self.gradient_accumulation_steps
-                
-                if self.use_wandb:
-                    wandb.log({"train_loss": loss.item()})
-                
-                # Backward pass with mixed precision
-                self.scaler.scale(loss).backward()
-
-                # Gradient accumulation every GRADIENT_ACCUMULATION_STEPS
-                if (batch_count % self.gradient_accumulation_steps == 0):
-                    # Apply gradient clipping
-                    clip_grad_norm_(self.model.module.parameters(),
-                                    max_norm=self.clip_value)
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-
-                # Log training progress percentage every 1%
-                if num_training_steps > 100 and batch_count % int(num_training_steps/100) == 0:
-                    self.logger.info(
-                        f"Training progress: {round(100*batch_count/num_training_steps,2)}%")
-
-                # WANDB LOGS EVERY N BATCHES: validation and train metrics
-                if (batch_count != 0) & (batch_count % (len(train_loader) // self.validations_per_epoch) == 0):
-                    ####### VALIDATION LOOP #######
-                    self.logger.info("Running validation...")
-                    torch.cuda.empty_cache()
-
-                    # Run validation
-                    val_metrics = self.validate(val_loader=val_loader,
-                                                eval_metrics=val_eval_metrics,
-                                                val_optimization_metric_name=val_optimization_metric_name
-                                                )
-
-                    if self.train_label_encoder:
-                        # Clear the label embedding matrix
-                        val_loader.dataset.set_label_embedding_matrix(None)
-
-                    self.logger.info(
-                        f"Epoch {epoch+1}/{self.starting_epoch + self.num_epochs}, Batch {batch_count}, Training Loss: {loss.item()}"
-                    )
-
-                    self.logger.info(
-                        f"Validation metrics:\n{json.dumps(val_metrics, indent=4)}")
-                    
-                    #Reset torchmetrics after every validation loop
-                    val_eval_metrics.reset()
-
-                    ###### LOG TRAIN AND AUX METRICS ######
-                    
-                    # Log train metrics
-                    if self.use_wandb:
-                        train_metrics = train_eval_metrics(logits, label_multihots)
-                        train_metrics = metric_collection_to_dict_float(train_metrics,prefix="train")
-
-                        wandb.log(train_metrics)
-                        
-                        #Reset torchmetrics for next batch
-                        train_eval_metrics.reset()
-                    
-                        # Log aux metrics
-                        with torch.no_grad():
-                            avg_probabilities = torch.mean(
-                                torch.sigmoid(logits))
-                            avg_grounth_truth = torch.mean(
-                                label_multihots.float())
-                            
-                        wandb.log({"avg_probabilities": avg_probabilities,
-                                "avg_grounth_truth": avg_grounth_truth,
-                                "avg_probabilities_ground_truth_ratio": avg_probabilities/avg_grounth_truth})
+                self.logger.info(
+                    f"Validation metrics:\n{json.dumps(val_metrics, indent=4)}")
 
         if self.is_master:
             self.logger.info("Restoring model to best validation map_micro...")

@@ -48,7 +48,7 @@ def validate_arguments(args, parser):
     
     if (args.save_prediction_results)\
         &((args.test_paths_names is None)\
-        &(args.test_paths_names is None)):
+        &(args.validation_path_name is None)):
         parser.error("You must provide --test-path-names and/or --val-path-names to save the results of the validation and/or test sets.")
 
 

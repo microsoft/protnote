@@ -342,6 +342,7 @@ def create_multiple_loaders(
     datasets: dict,
     params: dict,
     label_sample_sizes: dict = None,
+    shuffle_labels: bool = False,
     num_workers: int = 2,
     pin_memory: bool = True,
     world_size: int = 1,
@@ -362,7 +363,7 @@ def create_multiple_loaders(
                 batch_size=batch_size_for_type,
                 shuffle=False,
                 collate_fn=partial(
-                    collate_variable_sequence_length, label_sample_size=label_sample_size),
+                    collate_variable_sequence_length, label_sample_size=label_sample_size, shuffle_labels=shuffle_labels),
                 num_workers=num_workers,
                 pin_memory=pin_memory,
                 drop_last=True,

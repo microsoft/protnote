@@ -166,7 +166,7 @@ class EvalMetrics:
 
             if num_labels is not None:
                 label_centered_metrics[f"map_{average}"] = AveragePrecision(
-                    num_labels=num_labels, task="multilabel", thresholds=100, average=average
+                    num_labels=num_labels, task="multilabel", average=average
                 ).to(self.device)
 
         return label_centered_metrics
@@ -255,7 +255,7 @@ class EvalMetrics:
         return metrics[name]
 
 
-def save_evaluation_results(results, label_vocabulary, run_name, output_dir):
+def save_evaluation_results(results, label_vocabulary, run_name,output_dir,data_split_name):
     # Do not need to check if is_master, since this function is only called by the master node
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -264,19 +264,20 @@ def save_evaluation_results(results, label_vocabulary, run_name, output_dir):
                             columns=label_vocabulary,
                             index=results['sequence_ids'])
 
-    probabilities_df = pd.DataFrame(results['probabilities'],
+    logits_df = pd.DataFrame(results['logits'],
                                     columns=label_vocabulary,
                                     index=results['sequence_ids'])
 
     # Convert all float16 columns to float32
     label_df = convert_float16_to_float32(label_df)
-    probabilities_df = convert_float16_to_float32(probabilities_df)
+    logits_df = convert_float16_to_float32(logits_df)
 
     # Save the DataFrame to Parquet
-    label_df.to_parquet(os.path.join(output_dir, f'labels_{run_name}.parquet'))
+    label_df.to_parquet(os.path.join(
+        output_dir, f'{data_split_name}_labels_{run_name}.parquet'))
 
-    probabilities_df.to_parquet(os.path.join(
-        output_dir, f'probabilities_{run_name}.parquet'))
+    logits_df.to_parquet(os.path.join(
+        output_dir, f'{data_split_name}_logits_{run_name}.parquet'))
 
 
 def metrics_per_label_df(label_df:pd.DataFrame,pred_df:pd.DataFrame,device:str,threshold:None)->pd.DataFrame:
@@ -305,8 +306,8 @@ def metrics_per_label_df(label_df:pd.DataFrame,pred_df:pd.DataFrame,device:str,t
     threshold = threshold
     for col in tqdm(labels_at_least_one_pos):
         row = {}
-        preds = torch.tensor(pred_df[col].values)
-        ground_truth = torch.tensor(label_df[col].values)
+        preds = torch.tensor(pred_df[col].values,device=device)
+        ground_truth = torch.tensor(label_df[col].values,device=device)
         
         row['AUPRC'] = AveragePrecision(task="binary").to(device)(preds,ground_truth).item()
         row['Frequency'] = ground_truth.sum().item()

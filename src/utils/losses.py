@@ -103,7 +103,7 @@ class BatchLabelWeightedBCE(torch.nn.Module):
         # Compute weighted binary cross-entropy loss
         return torch.nn.functional.binary_cross_entropy_with_logits(input, target, weight=weights.unsqueeze(0))
 
-class FocalLossV2(torch.nn.Module):
+class FocalLoss(torch.nn.Module):
     def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
         super().__init__()
         self.alpha = alpha
@@ -127,7 +127,7 @@ class FocalLossV2(torch.nn.Module):
             return loss
         
 
-class FocalLoss(torch.nn.Module):
+class FocalLossUnstable(torch.nn.Module):
     def __init__(self, gamma=2, alpha=0.25, reduction='mean', epsilon=1e-10):
         super().__init__()
 

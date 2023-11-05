@@ -214,6 +214,7 @@ def train_validate_test(gpu, args):
         datasets,
         params,
         label_sample_sizes=label_sample_sizes,
+        shuffle_labels=params['SHUFFLE_LABELS'],
         num_workers=params["NUM_WORKERS"],
         world_size=args.world_size,
         rank=rank,
@@ -326,13 +327,14 @@ def train_validate_test(gpu, args):
     # Initialize EvalMetrics
     eval_metrics = EvalMetrics(device=device)
 
+    train_sample_size = params['TRAIN_LABEL_SAMPLE_SIZE'] if params['TRAIN_LABEL_SAMPLE_SIZE'] else len(vocabularies["GO_label_vocab"])
     ####### TRAINING AND VALIDATION LOOPS #######
     if args.train_path_name is not None:
         # Train function
         Trainer.train(train_loader=loaders["train"][0],
                       val_loader=loaders["validation"][0],
-                      eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="map_.*",
-                                                                                 num_labels=len(vocabularies["GO_label_vocab"])
+                      eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_micro", threshold=0.5,
+                                                                                 num_labels=train_sample_size
                                                                                  ),
                       val_optimization_metric_name=params["OPTIMIZATION_METRIC_NAME"])
     else:
@@ -371,14 +373,17 @@ def train_validate_test(gpu, args):
 
         # Final validation using all labels
         torch.cuda.empty_cache()
+
+        
         validation_metrics = Trainer.evaluate(
             data_loader=full_val_loader,
-            eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="map_.*",
-                                                                       num_labels=len(vocabularies["GO_label_vocab"])
+            eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_micro",
+                                                                    threshold=0.5,
+                                                                    num_labels=train_sample_size
                                                             ),
             save_results=args.save_prediction_results,
             metrics_prefix='final_validation'
-        )
+                    )
         all_metrics.update(validation_metrics)
         logger.info(json.dumps(validation_metrics, indent=4))
         logger.info("Final validation complete.")
@@ -395,8 +400,9 @@ def train_validate_test(gpu, args):
             # TODO: If best_val_th is not defined, alert an error to either provide a decision threshold or a validation datapath
             test_metrics = Trainer.evaluate(
                 data_loader=test_loader,
-                eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="map_.*",
-                                                                       num_labels=len(vocabularies["GO_label_vocab"])),
+                eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_micro",
+                                                                          threshold=0.5,
+                                                                          num_labels=train_sample_size),
                 save_results=args.save_prediction_results,
                 metrics_prefix=f'test_{idx+1}'
             )

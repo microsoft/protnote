@@ -3,7 +3,7 @@ from typing import List, Tuple
 from transformers import BatchEncoding
 
 
-def collate_variable_sequence_length(batch: List[Tuple], label_sample_size=None):
+def collate_variable_sequence_length(batch: List[Tuple], label_sample_size=None, shuffle_labels=False):
     """
     Collates batches with variable sequence lengths by padding sequences to the maximum length in the batch.
 
@@ -40,7 +40,8 @@ def collate_variable_sequence_length(batch: List[Tuple], label_sample_size=None)
     sampled_label_indices = None
     if label_sample_size:
         all_labels = batch[0]["label_multihots"].shape[0]
-        sampled_label_indices = torch.randperm(all_labels)[:label_sample_size]
+        
+        sampled_label_indices = torch.randperm(all_labels)[:label_sample_size] if shuffle_labels else torch.arange(label_sample_size)
 
     # Apply the sampled labels to the tokenized labels and label embeddings
     tokenized_labels = batch[0]["tokenized_labels"]
