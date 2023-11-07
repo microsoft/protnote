@@ -18,6 +18,7 @@ class ProTCL(nn.Module):
         output_mlp_hidden_dim_scale_factor=1024,
         output_mlp_num_layers=2,
         output_neuron_bias=None,
+        outout_mlp_add_batchnorm=True,
         label_batch_size_limit=float("inf"),
         sequence_batch_size_limit=float("inf"),
     ):
@@ -41,7 +42,8 @@ class ProTCL(nn.Module):
             input_dim=latent_dim*2,
             hidden_dim=int(round(output_mlp_hidden_dim_scale_factor*latent_dim)),
             num_layers=output_mlp_num_layers,
-            output_neuron_bias=output_neuron_bias
+            output_neuron_bias=output_neuron_bias,
+            batch_norm=outout_mlp_add_batchnorm
         )
 
     def _get_joint_embeddings(self, P_e, L_e):
@@ -126,17 +128,24 @@ class ProTCL(nn.Module):
 def get_mlp(input_dim,
             hidden_dim,
             num_layers,
+            batch_norm = False,
             output_neuron_bias=None):
     """
     Creates a variable length MLP with ReLU activations.
     """
     layers = []
-    layers.append(nn.Linear(input_dim, hidden_dim))
-    layers.append(nn.ReLU())
-    
-    for _ in range(num_layers-1):
-        layers.append(nn.Linear(hidden_dim, hidden_dim))
+   
+    for idx in range(num_layers):
+        if idx ==0:
+            layers.append(nn.Linear(input_dim, hidden_dim))
+        else:
+            layers.append(nn.Linear(hidden_dim, hidden_dim))
+ 
+        if batch_norm:
+            layers.append(nn.BatchNorm1d(hidden_dim))
+ 
         layers.append(nn.ReLU())
+       
     output_neuron = nn.Linear(hidden_dim, 1)
     if output_neuron_bias is not None:
         # Set the bias of the final linear layer

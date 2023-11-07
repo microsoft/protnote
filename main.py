@@ -270,6 +270,7 @@ def train_validate_test(gpu, args):
         output_mlp_hidden_dim_scale_factor=params["OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR"],
         output_mlp_num_layers=params["OUTPUT_MLP_NUM_LAYERS"],
         output_neuron_bias=sigmoid_bias_from_prob(params["OUTPUT_NEURON_PROBABILITY_BIAS"]) if params["OUTPUT_NEURON_PROBABILITY_BIAS"]is not None else None,
+        outout_mlp_add_batchnorm=params["OUTPUT_MLP_BATCHNORM"],
 
         # Training options
         train_label_encoder=params["TRAIN_LABEL_ENCODER"],
