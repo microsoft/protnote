@@ -1,58 +1,55 @@
 ---
 # Parameters for model training
-#TODO: Optimizer can also be a hyperparameter
+# TODO: Optimizer can also be a hyperparameter
 params:
   ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET VS. SANDBOX A100 ##############
-  ### A100 ###
+  ## A100 ###
   # Batch sizes
-  TRAIN_BATCH_SIZE: 110 # 256 for A100
-  VALIDATION_BATCH_SIZE: 100 # 256 for A100
-  TEST_BATCH_SIZE: 100 # 16 for A100
-  # # Sampling
-  TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. If training label encoder, must be 100. Set to Null to turn off sampling
+  TRAIN_BATCH_SIZE: 256 # 256 for A100
+  VALIDATION_BATCH_SIZE: 64 # 256 for A100
+  TEST_BATCH_SIZE: 64 # 16 for A100
+  # Sampling
+  TRAIN_LABEL_SAMPLE_SIZE: 180 # 15K for both. If training label encoder, must be 100. Set to Null to turn off sampling
   VALIDATION_LABEL_SAMPLE_SIZE: null # 15K for both. Set to Null to turn off sampling
-  SHUFFLE_LABELS: False #Only has an effect if sample sizes are set. If False, simply select same labels in order
-  # # Inference
+  # Inference
   LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 1500 # 1500 for A100
   SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 128 # 128 for A100 (TO BE VERIFIED)
 
   ### V100 ###
-  # Batch sizes
-  #TRAIN_BATCH_SIZE: 64 # 64 for V100
-  #VALIDATION_BATCH_SIZE: 64 # 64 for V100
-  #TEST_BATCH_SIZE: 4 # 4 for V100
-  # Sampling
-  #TRAIN_LABEL_SAMPLE_SIZE: 15000 # 15K for both
-  #VALIDATION_LABEL_SAMPLE_SIZE: 15000 # 15K for both
-  # Inference
-  #LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 750 # 1K for V100
-  #SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 
+  # # Batch sizes
+  # TRAIN_BATCH_SIZE: 64 # 64 for V100
+  # VALIDATION_BATCH_SIZE: 4 # 64 for V100
+  # TEST_BATCH_SIZE: 4 # 4 for V100
+  # # Sampling
+  # TRAIN_LABEL_SAMPLE_SIZE: 64 # 15K for both
+  # VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
+  # # Inference
+  # LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 750 # 1K for V100
+  # SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 
 
-  ############## PARAMS THAT DO NOT IMPACT MEMORY ##############
-  #@Nate the DIM params do impact memory
+  ############## PARAMS DO NOT NEED TO VARY BETWEEN VIRTUAL MACHINES ##############
   # General
   LEARNING_RATE: 0.0003
   PROTEIN_EMBEDDING_DIM: 1100
   LABEL_EMBEDDING_DIM: 1024
   LATENT_EMBEDDING_DIM: 1024
-  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 1 #scale with respect to LATENT_EMBEDDING_DIM
+  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 1 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
   OUTPUT_MLP_NUM_LAYERS: 2
-  OUTPUT_NEURON_PROBABILITY_BIAS: null,
+  OUTPUT_NEURON_PROBABILITY_BIAS: null
   OUTPUT_MLP_BATCHNORM: True
-  OPTIMIZATION_METRIC_NAME: map_micro # only micro metrics are supported if sampling labels in validation
+  OPTIMIZATION_METRIC_NAME: map_micro # Only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
   NUM_EPOCHS: 50
 
   # Memory optimizations
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
   GRADIENT_CHECKPOINTING: False # True = gradient checkpointing
-  LORA: False # True = use LORA
+  LORA: True # True = use LORA
   LORA_RANK: 8
-  CLIP_VALUE: 10 # Gradient clipping
+  CLIP_VALUE: 1 # Gradient clipping, set to "null" to turn off
 
-
-  #Losses. Only the parameters for selected loss will be used
-  LOSS_FN: BCE # Currently supported: BCE, FocalLoss, BatchWeightedBCE
+  # Losses. Only the parameters for selected loss will be used
+  LOSS_FN: FocalLoss # Currently supported: BCE, FocalLoss, BatchWeightedBCE
   FOCAL_LOSS_GAMMA: 2
   FOCAL_LOSS_ALPHA: -1
   BCE_POS_WEIGHT: 1 # 671.7130737304688
@@ -60,7 +57,8 @@ params:
 
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False
-  TRAIN_LABEL_ENCODER: False
+  TRAIN_LABEL_ENCODER: True
+  DISTRIBUTE_LABELS: True
   TRAIN_PROJECTION_HEAD: True
   LABEL_ENCODER_CHECKPOINT: microsoft/biogpt
 
@@ -78,6 +76,7 @@ params:
   TRAIN_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
   VALIDATION_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
   TEST_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
+  SHUFFLE_LABELS: True # Only has an effect if sample sizes are set. If False, simply select same labels in order
 
 # Constants for protein encoder model (e.g. ProteInfer). Not really params since 
 # we are not going to change these.

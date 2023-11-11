@@ -5,13 +5,11 @@
 
 # Load previous best model to continue training
 python main.py \
-    --name 'TRAIN_ADAPTER_FROM_FT_MODEL' \
+    --name 'Train Label Encoder A100 LORA' \
     --full-path-name FULL_DATA_PATH \
     --train-path-name TRAIN_DATA_PATH \
     --validation-path-name VAL_DATA_PATH \
     --test-paths-names TEST_DATA_PATH \
-    --load-model models/ProTCL/2023-10-13_23-31-23_LORA_TRAIN_LABEL_ENCODER.pt \
-    --override NUM_EPOCHS 50 TRAIN_PROJECTION_HEAD True TRAIN_LABEL_ENCODER False \
     --use-wandb 
 
 

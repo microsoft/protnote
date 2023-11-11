@@ -13,7 +13,8 @@ def biogpt_train_last_n_layers(model,n):
     if n>0:
         max_layer_num = len(model.layers)-1
         for param_name,param in model.named_parameters():
-            layer_num = re.search(fr'layers\.(\d+)', param_name)
+            print(param_name)
+            layer_num = re.search(r'layers\.(\d+)', param_name)
 
             if layer_num:
                 number = int(layer_num.group(1))
@@ -23,19 +24,22 @@ def biogpt_train_last_n_layers(model,n):
         for param in model.layer_norm.parameters():
             param.requires_grad = True
 
+
 def count_parameters_by_layer(model):
     """
-    Logs the number of total and trainable parameters for each major category of a PyTorch model.
+    Logs the number of total and trainable parameters for each major category of a PyTorch model,
+    and prints the names of the trainable layers.
 
     Args:
         model (torch.nn.Module): The PyTorch model for which parameters are to be counted.
 
     Outputs:
-        Logs major categories along with their total and trainable parameters.
+        Logs major categories along with their total and trainable parameters, and names of trainable layers.
     """
     total_params = 0
     trainable_params = 0
     category_params = {}
+    trainable_layers = []
 
     for name, param in model.named_parameters():
         category = name.split('.')[0]
@@ -47,29 +51,36 @@ def count_parameters_by_layer(model):
         category_params[category]['total'] += num_params
         if param.requires_grad:
             category_params[category]['trainable'] += num_params
+            if name not in trainable_layers:
+                trainable_layers.append(name)
 
         total_params += num_params
         if param.requires_grad:
             trainable_params += num_params
 
-    max_name_length = max([len(category)
-                          for category in category_params.keys()])
+    max_name_length = max([len(category) for category in category_params.keys()])
 
     # Formatting and logging
     line = "=" * 120
     logging.info(line)
-    logging.info(
-        f"{'Major Category':<{max_name_length}} {'Total Parameters':<20} {'Trainable Parameters'}")
+    logging.info(f"{'Major Category':<{max_name_length}} {'Total Parameters':<20} {'Trainable Parameters'}")
     logging.info(line)
     for category, params in category_params.items():
-        logging.info(
-            f"{category:<{max_name_length}} {params['total']:<20} {params['trainable']}")
+        logging.info(f"{category:<{max_name_length}} {params['total']:<20} {params['trainable']}")
 
     assert trainable_params > 0, "No trainable parameters found. Check the config file to ensure that the model is not frozen."
     logging.info(line)
-    logging.info(
-        f"{'TOTAL':<{max_name_length}} {total_params:<20} {trainable_params}")
+    logging.info(f"{'TOTAL':<{max_name_length}} {total_params:<20} {trainable_params}")
     logging.info(line)
+
+    # Log names of trainable layers
+    logging.info("Trainable Layers:")
+    for layer in trainable_layers:
+        logging.info(f"- {layer}")
+
+    logging.info(line)
+
+
 
 
 def tokenize_labels(text, tokenizer, max_length=1024):
@@ -124,7 +135,7 @@ def get_label_embeddings(tokenized_labels, model, batch_size_limit=1000):
         # Create TensorDataset and DataLoader
         dataset = TensorDataset(*tensors)
         dataloader = DataLoader(dataset, batch_size=batch_size_limit,
-                                shuffle=False, pin_memory=False, num_workers=2)
+                                shuffle=False, pin_memory=False, num_workers=0)
 
         all_label_embeddings = []
         for batch in dataloader:
@@ -151,7 +162,7 @@ def generate_label_embeddings_from_text(label_annotations, label_tokenizer, labe
         label_encoder.device)
 
     # Generate label embeddings
-    return get_label_embeddings(tokenized_labels, label_encoder, batch_size_limit=batch_size_limit).cpu()
+    return get_label_embeddings(tokenized_labels, label_encoder, batch_size_limit=batch_size_limit)
 
 
 def sigmoid_bias_from_prob(prior_prob):

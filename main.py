@@ -26,10 +26,10 @@ from transformers import AutoTokenizer, AutoModel
 from src.data.collators import collate_variable_sequence_length
 import mlflow
 import loralib as lora
+import random
 
 ### SETUP ###
 torch.cuda.empty_cache()
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -167,12 +167,18 @@ def train_validate_test(gpu, args):
             "Gradient checkpointing is not yet implemented.")
 
     if params["LORA"]:
-        for layer in label_encoder.biogpt.layers:
+        for layer in label_encoder.layers:
             in_features, out_features = 1024, 1024
             layer.self_attn.q_proj = lora.Linear(
-                in_features, out_features, r=params["LORA_RANK"])  # TODO: Make rank a hparam
+                in_features, out_features, r=params["LORA_RANK"])
             layer.self_attn.v_proj = lora.Linear(
                 in_features, out_features, r=params["LORA_RANK"])
+            layer.self_attn.k_proj = lora.Linear(
+                in_features, out_features, r=params["LORA_RANK"])
+            layer.self_attn.out_proj = lora.Linear(
+                in_features, out_features, r=params["LORA_RANK"])
+        # Mark only the LoRA parameters as trainable
+        lora.mark_only_lora_as_trainable(label_encoder)
 
     label_encoder = label_encoder.to(device)
 
@@ -191,7 +197,8 @@ def train_validate_test(gpu, args):
         subset_fractions={
             "train": params["TRAIN_SUBSET_FRACTION"],
             "validation": params["VALIDATION_SUBSET_FRACTION"],
-            "test": params["TEST_SUBSET_FRACTION"]},
+            "test": params["TEST_SUBSET_FRACTION"],
+        },
         deduplicate=params["DEDUPLICATE"],
     )
 
@@ -269,7 +276,7 @@ def train_validate_test(gpu, args):
         # Output Layer
         output_mlp_hidden_dim_scale_factor=params["OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR"],
         output_mlp_num_layers=params["OUTPUT_MLP_NUM_LAYERS"],
-        output_neuron_bias=sigmoid_bias_from_prob(params["OUTPUT_NEURON_PROBABILITY_BIAS"]) if params["OUTPUT_NEURON_PROBABILITY_BIAS"]is not None else None,
+        output_neuron_bias=sigmoid_bias_from_prob(params["OUTPUT_NEURON_PROBABILITY_BIAS"]) if params["OUTPUT_NEURON_PROBABILITY_BIAS"] is not None else None,
         outout_mlp_add_batchnorm=params["OUTPUT_MLP_BATCHNORM"],
 
         # Training options
@@ -327,17 +334,25 @@ def train_validate_test(gpu, args):
 
     # Initialize EvalMetrics
     eval_metrics = EvalMetrics(device=device)
+    train_sample_size = params.get('TRAIN_LABEL_SAMPLE_SIZE', len(vocabularies["GO_label_vocab"]))
+    val_sample_size = params.get('VALIDATION_LABEL_SAMPLE_SIZE', len(vocabularies["GO_label_vocab"]))
+    test_sample_size = params.get('TEST_LABEL_SAMPLE_SIZE', len(vocabularies["GO_label_vocab"]))
 
-    train_sample_size = params['TRAIN_LABEL_SAMPLE_SIZE'] if params['TRAIN_LABEL_SAMPLE_SIZE'] else len(vocabularies["GO_label_vocab"])
+    # Log sizes of all datasets
+    [logger.info(f"{subset_name} dataset size: {len(dataset)}") for subset_name, subset in datasets.items() for dataset in subset]
+
     ####### TRAINING AND VALIDATION LOOPS #######
     if args.train_path_name is not None:
         # Train function
         Trainer.train(train_loader=loaders["train"][0],
-                      val_loader=loaders["validation"][0],
-                      eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_micro", threshold=0.5,
-                                                                                 num_labels=train_sample_size
-                                                                                 ),
-                      val_optimization_metric_name=params["OPTIMIZATION_METRIC_NAME"])
+            val_loader=loaders["validation"][0],
+            train_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_micro", threshold=0.5,
+                                                                        num_labels=train_sample_size
+                                                                        ),
+            val_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_micro", threshold=0.5,
+                                                                num_labels=val_sample_size
+                                                                ),
+            val_optimization_metric_name=params["OPTIMIZATION_METRIC_NAME"])
     else:
         logger.info("Skipping training...")
 
@@ -375,12 +390,11 @@ def train_validate_test(gpu, args):
         # Final validation using all labels
         torch.cuda.empty_cache()
 
-        
         validation_metrics = Trainer.evaluate(
             data_loader=full_val_loader,
             eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_micro",
                                                                     threshold=0.5,
-                                                                    num_labels=train_sample_size
+                                                                    num_labels=val_sample_size
                                                             ),
             save_results=args.save_prediction_results,
             metrics_prefix='final_validation'
@@ -403,7 +417,7 @@ def train_validate_test(gpu, args):
                 data_loader=test_loader,
                 eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_micro",
                                                                           threshold=0.5,
-                                                                          num_labels=train_sample_size),
+                                                                          num_labels=test_sample_size),
                 save_results=args.save_prediction_results,
                 metrics_prefix=f'test_{idx+1}'
             )

@@ -1,9 +1,9 @@
 import torch
 from typing import List, Tuple
 from transformers import BatchEncoding
+import torch.distributed as dist
 
-
-def collate_variable_sequence_length(batch: List[Tuple], label_sample_size=None, shuffle_labels=False):
+def collate_variable_sequence_length(batch: List[Tuple], label_sample_size=None, distribute_labels=False, shuffle_labels=False, world_size=1, rank=0):
     """
     Collates batches with variable sequence lengths by padding sequences to the maximum length in the batch.
 
@@ -38,10 +38,20 @@ def collate_variable_sequence_length(batch: List[Tuple], label_sample_size=None,
 
     # Sample labels if num_sampled_labels is specified
     sampled_label_indices = None
+    num_labels = batch[0]["label_multihots"].shape[0]
     if label_sample_size:
-        all_labels = batch[0]["label_multihots"].shape[0]
-        
-        sampled_label_indices = torch.randperm(all_labels)[:label_sample_size] if shuffle_labels else torch.arange(label_sample_size)
+        if not distribute_labels:
+            # If not distributing labels, sample from entire dataset
+            sampled_label_indices = torch.randperm(num_labels)[:label_sample_size] if shuffle_labels else torch.arange(label_sample_size)
+        else:
+            # Otherwise, sample from the labels on this GPU
+            labels_per_partition = num_labels // world_size
+            start_idx = rank * labels_per_partition
+            end_idx = start_idx + labels_per_partition
+            partition_indices = torch.arange(start_idx, end_idx)
+            sampled_label_indices = partition_indices[torch.randperm(len(partition_indices))[:label_sample_size // world_size]]
+            # if rank < 2:
+            #     print("GPU {}. Sampling range: {} to {}. Sampled {} labels".format(rank, start_idx, end_idx, sampled_label_indices[:10]))
 
     # Apply the sampled labels to the tokenized labels and label embeddings
     tokenized_labels = batch[0]["tokenized_labels"]
@@ -101,6 +111,9 @@ def collate_variable_sequence_length(batch: List[Tuple], label_sample_size=None,
     if len(processed_sequence_embeddings) == len(processed_sequence_onehots):
         processed_sequence_embeddings = torch.stack(
             processed_sequence_embeddings)
+    
+    # if rank < 2:
+    #     print("GPU {}. sequence_ids: {}".format(rank, processed_sequence_ids[:10]))
 
     return {
         "sequence_onehots": torch.stack(processed_sequence_onehots),

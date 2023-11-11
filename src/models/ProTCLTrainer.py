@@ -15,7 +15,7 @@ from torch.nn.utils import clip_grad_norm_
 from transformers import BatchEncoding
 from src.utils.models import generate_label_embeddings_from_text, biogpt_train_last_n_layers
 from tqdm import tqdm
-from torcheval.metrics import MultilabelAUPRC,BinaryAUPRC
+from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC
 
 class ProTCLTrainer:
     def __init__(
@@ -66,7 +66,7 @@ class ProTCLTrainer:
             config["paths"]["PARENTHOOD_LIB_PATH"]
         )
         self.output_model_dir = config["paths"]["OUTPUT_MODEL_DIR"]
-        self._set_optimizer(config["params"]["LEARNING_RATE"])
+        self._set_optimizer(config["params"]["LEARNING_RATE"], config["params"]["LORA"])
         self.bce_pos_weight = bce_pos_weight
         self.loss_fn = self._get_loss_fn(config)
         self.model_path = self._get_saved_model_path()
@@ -118,14 +118,13 @@ class ProTCLTrainer:
                 processed_args.append(item)
         return processed_args
 
-    def _set_optimizer(self, lr):
+    def _set_optimizer(self, lr, use_lora):
         trainable_params = []
         trainable_params_names = []
 
-        #Use to unfreeze last n layers. 0 means entire model frozen.
-        biogpt_train_last_n_layers(self.model.module.label_encoder,
-                                    0
-                                  )
+        # Use to unfreeze last n layers. 0 means entire model frozen.
+        if not use_lora:
+            biogpt_train_last_n_layers(self.model.module.label_encoder, 0)
 
         for name, param in self.model.module.named_parameters():
             if name.startswith('sequence_encoder') and (not self.train_sequence_encoder):
@@ -201,7 +200,13 @@ class ProTCLTrainer:
                                        metrics_prefix=prefix)
         val_optimization_metric_name = f'{prefix}_{val_optimization_metric_name}'
 
-        self.logger.info(val_metrics)
+        
+        self.logger.info("+-------------------------------- Validation Results --------------------------------+")
+        # Print memory consumption
+        if self.is_master:
+            log_gpu_memory_usage(self.logger, 0)
+        self.logger.info(
+            f"Validation metrics:\n{json.dumps(val_metrics, indent=4)}")
 
         if self.use_wandb and self.is_master:
             try:
@@ -230,6 +235,8 @@ class ProTCLTrainer:
 
             if self.use_wandb:
                 wandb.save(f"{self.timestamp}_best_ProTCL.pt")
+        
+        self.logger.info("+------------------------------------------------------------------------------------+") 
 
         return val_metrics
 
@@ -320,9 +327,6 @@ class ProTCLTrainer:
         :return: dictionary with evaluation metrics. Always return avg_loss and if eval_metrics is not None, it will return the metrics from eval_metrics.compute()
         :rtype: dict
         """
-        if self.is_master:
-            log_gpu_memory_usage(self.logger, 0)
-
         self.model.eval()
 
         # Compute all label embeddings upfront, since we're not training
@@ -395,7 +399,6 @@ class ProTCLTrainer:
                                             output_dir=self.config["paths"]["RESULTS_DIR"],
                                             data_split_name=metrics_prefix
                                             )
-                self.logger.info("Validation results saved")
 
             # Compute average validation loss
             avg_loss = total_loss / len(data_loader)
@@ -415,7 +418,7 @@ class ProTCLTrainer:
 
             final_metrics = metric_collection_to_dict_float(
                 final_metrics,
-                prefix=metrics_prefix)            
+                prefix=metrics_prefix)           
 
         self.model.train()
 
@@ -430,10 +433,9 @@ class ProTCLTrainer:
         avg_probs = 0
         avg_gt = 0
         eval_metrics.reset()
-
         
         ####### TRAINING LOOP #######
-        for batch in train_loader:
+        for batch_idx, batch in enumerate(train_loader):
             # Increment batch index and set gradients to zero
             self.training_step += 1
 
@@ -472,14 +474,14 @@ class ProTCLTrainer:
             self.scaler.scale(loss).backward()
 
             # Gradient accumulation every GRADIENT_ACCUMULATION_STEPS
-            if (self.training_step % self.gradient_accumulation_steps == 0) or (self.training_step ==len(train_loader)):
-                
+            if (self.training_step % self.gradient_accumulation_steps == 0) or (self.training_step == len(train_loader)):     
                 # Unscales the gradients of optimizer's assigned params in-place
                 self.scaler.unscale_(self.optimizer)
                 
                 # Apply gradient clipping
-                clip_grad_norm_(self.model.module.parameters(),
-                                max_norm=self.clip_value)
+                if self.clip_value is not None:
+                    clip_grad_norm_(self.model.module.parameters(),
+                                    max_norm=self.clip_value)
                 
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
@@ -494,7 +496,13 @@ class ProTCLTrainer:
             if self.use_wandb:
                 wandb.log({"per_batch_train_loss": loss.item()},step=self.training_step)
 
-        avg_loss = avg_loss/len(train_loader)
+            # Print memory consumption after first batch (to get the max memory consumption during training)
+            if batch_idx == 1 and self.is_master:
+                self.logger.info("+----------------- Train GPU Memory Usage -----------------+")
+                log_gpu_memory_usage(self.logger, 0)
+                self.logger.info("+----------------------------------------------------------+")
+
+        avg_loss = avg_loss/len(train_loader) if len(train_loader)> 0 else avg_loss
         avg_probs_gt_ration = avg_probs/avg_gt
 
         train_metrics = eval_metrics.compute() if eval_metrics is not None else {}
@@ -504,7 +512,7 @@ class ProTCLTrainer:
         train_metrics = metric_collection_to_dict_float(train_metrics,prefix='train')
         
         if self.use_wandb:
-            wandb.log(train_metrics,step=self.training_step)   
+            wandb.log(train_metrics, step=self.training_step)   
         
         return train_metrics
         
@@ -513,7 +521,8 @@ class ProTCLTrainer:
         self,
         train_loader: torch.utils.data.DataLoader,
         val_loader: torch.utils.data.DataLoader,
-        eval_metrics: MetricCollection,
+        train_eval_metrics: MetricCollection,
+        val_eval_metrics: MetricCollection,
         val_optimization_metric_name: str
     ):
         """Train model
@@ -524,8 +533,8 @@ class ProTCLTrainer:
         """
         self.model.train()
 
-        train_eval_metrics = eval_metrics.clone()
-        val_eval_metrics = eval_metrics.clone()
+        train_eval_metrics = train_eval_metrics.clone()
+        val_eval_metrics = val_eval_metrics.clone()
 
         # Watch the model
         if self.use_wandb:
@@ -544,9 +553,6 @@ class ProTCLTrainer:
             self.logger.info(
                 f"Starting epoch {epoch+1}/{self.starting_epoch + self.num_epochs}...")
             self.epoch = epoch
-   
-            if self.is_master:
-                log_gpu_memory_usage(self.logger, 0)
 
             # Set distributed loader epoch to shuffle data
             if hasattr(train_loader.sampler, "set_epoch"):
@@ -558,11 +564,10 @@ class ProTCLTrainer:
             # WANDB LOGS EVERY N BATCHES: validation and train metrics
             if ((epoch - self.starting_epoch + 1) % self.validations_per_epoch == 0):
                 ####### VALIDATION LOOP #######
-                self.logger.info("Running validation...")
                 torch.cuda.empty_cache()
 
                 # Run validation
-                val_metrics = self.validate(val_loader=val_loader,
+                self.validate(val_loader=val_loader,
                                             eval_metrics=val_eval_metrics,
                                             val_optimization_metric_name=val_optimization_metric_name
                                             )
@@ -574,9 +579,6 @@ class ProTCLTrainer:
                 self.logger.info(
                     f"Epoch {epoch+1}/{self.starting_epoch + self.num_epochs}, Batch {self.training_step}, Training Loss: {train_metrics['train_loss']}"
                 )
-
-                self.logger.info(
-                    f"Validation metrics:\n{json.dumps(val_metrics, indent=4)}")
 
         if self.is_master:
             self.logger.info("Restoring model to best validation map_micro...")
