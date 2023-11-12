@@ -31,24 +31,24 @@ params:
   ############## PARAMS THAT DO NOT IMPACT MEMORY ##############
   #@Nate the DIM params do impact memory
   # General
-  LEARNING_RATE: 0.0003
+  LEARNING_RATE: 0.0007
   PROTEIN_EMBEDDING_DIM: 1100
   LABEL_EMBEDDING_DIM: 1024
   LATENT_EMBEDDING_DIM: 1024
   OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 1 #scale with respect to LATENT_EMBEDDING_DIM
   OUTPUT_MLP_NUM_LAYERS: 2
-  OUTPUT_NEURON_PROBABILITY_BIAS: null,
+  OUTPUT_NEURON_PROBABILITY_BIAS: null
   OUTPUT_MLP_BATCHNORM: True
   OPTIMIZATION_METRIC_NAME: map_micro # only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
-  NUM_EPOCHS: 50
+  NUM_EPOCHS: 13
 
   # Memory optimizations
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
   GRADIENT_CHECKPOINTING: False # True = gradient checkpointing
   LORA: False # True = use LORA
   LORA_RANK: 8
-  CLIP_VALUE: 10 # Gradient clipping
+  CLIP_VALUE: 1 # Gradient clipping
 
 
   #Losses. Only the parameters for selected loss will be used
@@ -70,12 +70,12 @@ params:
 
   # Constants
   SEED: 42
-  VALIDATIONS_PER_EPOCH: 1
+  VALIDATIONS_PER_EPOCH: 100
   NUM_WORKERS: 4
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
 
   # Subset fractions (for rapid prototyping; set to 1 for final model)
-  TRAIN_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
+  TRAIN_SUBSET_FRACTION: .05 # Set to 1.0 if you want to use all data
   VALIDATION_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
   TEST_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
 
