@@ -19,7 +19,7 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-- name: AMLT-FROZEN-FL-BEST
+- name: AMLT-TEST-DISTRIBUTE-LABELS
   sku: G8
   priority: high
   preemptible: True
@@ -31,27 +31,7 @@ jobs:
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
     --full-path-name FULL_DATA_PATH 
-    --name AMLT-FROZEN-FL-BEST
-    --override LOSS_FN FocalLoss NUM_EPOCHS 3
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
-- name: AMLT-FROZEN-VANILLA-BCE
-  sku: G8
-  priority: high
-  preemptible: True
-  command:
-  - python main.py 
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH 
-    --validation-path-name VAL_DATA_PATH 
-    --test-paths-names TEST_DATA_PATH 
-    --full-path-name FULL_DATA_PATH 
-    --name AMLT-FROZEN-VANILLA-BCE
-    --override LOSS_FN FocalLoss NUM_EPOCHS 3
+    --name AMLT-TEST-DISTRIBUTE-LABELS
     --amlt
     --use-wandb
   submit_args:

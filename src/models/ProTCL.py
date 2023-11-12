@@ -107,7 +107,6 @@ class ProTCL(nn.Module):
                 "Incompatible sequence parameters passed to forward method.")
 
         # Project protein and label embeddings to common latent space.
-
         P_e = self.W_p(P_f)
         L_e = self.W_l(L_f)
 

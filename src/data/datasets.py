@@ -19,7 +19,6 @@ class ProteinDataset(Dataset):
     """
     Dataset class for protein sequences with GO annotations.
     """
-
     def __init__(
         self,
         data_paths: dict,
@@ -27,7 +26,6 @@ class ProteinDataset(Dataset):
         vocabularies: dict,
         label_tokenizer=None,
         label_encoder=None,
-        sequence_encoder=None,
         logger=None,
         subset_fraction: float = 1.0,
         deduplicate: bool = False,
@@ -67,7 +65,7 @@ class ProteinDataset(Dataset):
         self.data = read_fasta(data_paths["data_path"])
         self.label_embedding_matrix = self.sequence_embedding_df = None
 
-        # Subset the data if subset_fraction is provided (to improve training speed)
+        # Subset the data if subset_fraction is provided
         if subset_fraction < 1.0:
             logging.info(
                 f"Subsetting {subset_fraction*100}% of the {self.dataset_type} set..."
@@ -97,6 +95,7 @@ class ProteinDataset(Dataset):
                 label_text_list, label_tokenizer)
 
         # If a label encoder is provided, encode the labels
+        # TODO: Move back to main to remove warning
         self.label_embedding_matrix = None
         self.label_encoder = None
         if label_encoder is not None and not config["params"]["TRAIN_LABEL_ENCODER"]:
@@ -111,9 +110,6 @@ class ProteinDataset(Dataset):
                 is_master=is_master,
             )
             self.label_embedding_matrix = label_embedding_matrix
-
-        # If a sequence encoder is provided, generate sequence embeddings
-        # TODO: Implement this here
 
     # Helper functions for setting embedding dictionaries
 
@@ -358,21 +354,25 @@ def create_multiple_loaders(
             label_sample_size = label_sample_sizes.get(dataset_type)
 
         for dataset in dataset_list:
+            if params["DISTRIBUTE_LABELS"]:
+                sampler = None
+            else:
+                sampler = DistributedSampler(
+                    dataset,
+                    num_replicas=world_size,
+                    rank=rank,
+                    shuffle=True
+                )
             loader = DataLoader(
                 dataset,
                 batch_size=batch_size_for_type,
                 shuffle=False,
                 collate_fn=partial(
-                    collate_variable_sequence_length, label_sample_size=label_sample_size, shuffle_labels=shuffle_labels),
+                    collate_variable_sequence_length, label_sample_size=label_sample_size, shuffle_labels=shuffle_labels, distribute_labels=params["DISTRIBUTE_LABELS"], world_size=world_size, rank=rank),
                 num_workers=num_workers,
                 pin_memory=pin_memory,
                 drop_last=True,
-                sampler=DistributedSampler(
-                    dataset,
-                    num_replicas=world_size,
-                    rank=rank,
-                    shuffle=True
-                ),
+                sampler=sampler,
             )
             loaders[dataset_type].append(loader)
 

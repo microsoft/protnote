@@ -11,19 +11,27 @@ import wget
 import hashlib
 import transformers
 from collections import OrderedDict
-import logging
-from pynvml import *
-
+from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo
 
 def log_gpu_memory_usage(logger, device_id):
-    device = torch.device(f"cuda:{device_id}")
+    # Initialize NVML and get handle for the device
     nvmlInit()
     handle = nvmlDeviceGetHandleByIndex(device_id)
+
+    # Get memory information using NVML
     info = nvmlDeviceGetMemoryInfo(handle)
+    total_memory = info.total
+    used_memory = info.used
+    memory_percent = used_memory / total_memory * 100
+
+    # Reset peak memory stats
+    torch.cuda.reset_peak_memory_stats(device_id)
+
+    # Log memory usage information
     logger.info(
-        f"Device {device_id} [Name: {torch.cuda.get_device_name(device)}]")
-    logger.info(
-        f"GPU memory occupied: {info.used//1024**2} MB.")
+        f"GPU memory occupied: {used_memory // 1024 ** 2} MB ({memory_percent:.2f}% of total memory {total_memory // 1024 ** 2} MB). "
+        f"Device {device_id} [Name: {torch.cuda.get_device_name(device_id)}]")
+
 
 
 def convert_float16_to_float32(df):
