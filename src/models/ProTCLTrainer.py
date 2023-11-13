@@ -142,7 +142,7 @@ class ProTCLTrainer:
 
         self.trainable_params_names = trainable_params_names
 
-        self.optimizer = torch.optim.Adam(
+        self.optimizer = torch.optim.SGD(
             trainable_params, lr=lr
         )
 
@@ -351,7 +351,7 @@ class ProTCLTrainer:
             eval_metrics.reset()
 
         mAP_micro = BinaryAUPRC(device='cpu')
-        #mAP_macro = MultilabelAUPRC(device='cpu',num_labels=len(self.vocabularies["GO_label_vocab"]))
+        mAP_macro = MultilabelAUPRC(device='cpu',num_labels=len(self.vocabularies["GO_label_vocab"]))
 
         with torch.no_grad():
             for batch in tqdm(data_loader,total=len(data_loader)):
@@ -368,7 +368,7 @@ class ProTCLTrainer:
                     eval_metrics(probabilities, labels)
 
                     mAP_micro.update(probabilities.cpu().flatten(), labels.cpu().flatten())
-                    #mAP_macro.update(probabilities.cpu(), labels.cpu())
+                    mAP_macro.update(probabilities.cpu(), labels.cpu())
 
                     # No need to save results everytime. Only need it for final evaluation.
                     if save_results:
@@ -402,18 +402,13 @@ class ProTCLTrainer:
 
             # Compute average validation loss
             avg_loss = total_loss / len(data_loader)
-            #print('loss:',avg_loss)
-            
-            mAP_micro = mAP_micro.compute()
-            #print('map micro:',mAP_micro)
-            
-            #mAP_macro = mAP_macro.compute()
-            #print('map macro:',mAP_macro)
+            mAP_micro = mAP_micro.compute()           
+            mAP_macro = mAP_macro.compute()
 
             final_metrics = eval_metrics.compute() if eval_metrics is not None else {}
             final_metrics.update({"loss": avg_loss,
                                   "map_micro":mAP_micro,
-                                  #"map_macro":mAP_macro
+                                  "map_macro":mAP_macro
                                   })
 
             final_metrics = metric_collection_to_dict_float(
@@ -532,9 +527,6 @@ class ProTCLTrainer:
         :type val_loader: torch.utils.data.DataLoader
         """
         self.model.train()
-
-        train_eval_metrics = train_eval_metrics.clone()
-        val_eval_metrics = val_eval_metrics.clone()
 
         # Watch the model
         if self.use_wandb:

@@ -16,6 +16,9 @@ import os
 import json
 from collections import defaultdict
 from src.utils.losses import FocalLoss
+from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC
+
+
 """
 sample usage: python test_proteinfer.py --validation-path-name VAL_DATA_PATH --full-path-name FULL_DATA_PATH
 """
@@ -62,6 +65,12 @@ parser.add_argument(
     type=str,
     default="configs/base_config.yaml",
     help="(Relative) path to the configuration file.",
+)
+
+parser.add_argument(
+    "--threshold",
+    type=float,
+    default=0.5
 )
 
 parser.add_argument(
@@ -146,8 +155,8 @@ for loader_name, loader in loaders.items():
     eval_metrics = EvalMetrics(device=device)
 
     test_metrics = eval_metrics\
-                .get_metric_collection_with_regex(pattern='f1_micro',
-                                    threshold=0.86,
+                .get_metric_collection_with_regex(pattern='f1_m.*',
+                                    threshold=args.threshold,
                                     num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"]
                                     )
    
@@ -156,6 +165,10 @@ for loader_name, loader in loaders.items():
     total_bce_loss = 0
     total_focal_loss = 0
     test_results = defaultdict(list)
+    
+    mAP_micro = BinaryAUPRC(device='cpu')
+    mAP_macro = MultilabelAUPRC(device='cpu',num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"])
+
     with torch.no_grad():
         for batch_idx, batch in tqdm(
             enumerate(loader[0]), total=len(loader[0])
@@ -184,6 +197,11 @@ for loader_name, loader in loaders.items():
                 )
 
             test_metrics(probabilities, label_multihots)
+
+            if loader_name in ['validation','test']:
+                mAP_micro.update(probabilities.cpu().flatten(), label_multihots.cpu().flatten())
+                mAP_macro.update(probabilities.cpu(), label_multihots.cpu())
+                                
             total_bce_loss += bce_loss(logits, label_multihots.float())
             total_focal_loss += focal_loss(logits, label_multihots.float())
             
@@ -195,6 +213,12 @@ for loader_name, loader in loaders.items():
         test_metrics = test_metrics.compute()
         test_metrics.update({"bce_loss": total_bce_loss/len(loader[0])})
         test_metrics.update({"focal_loss": total_focal_loss/len(loader[0])})
+
+        if loader_name in ['validation','test']:
+            test_metrics.update({
+                                  "map_micro":mAP_micro.compute(),
+                                  "map_macro":mAP_macro.compute()
+                                  })
         
 
         print("\n\n","="*20)

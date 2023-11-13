@@ -334,9 +334,9 @@ def train_validate_test(gpu, args):
 
     # Initialize EvalMetrics
     eval_metrics = EvalMetrics(device=device)
-    train_sample_size = params.get('TRAIN_LABEL_SAMPLE_SIZE', len(vocabularies["GO_label_vocab"]))
-    val_sample_size = params.get('VALIDATION_LABEL_SAMPLE_SIZE', len(vocabularies["GO_label_vocab"]))
-    test_sample_size = params.get('TEST_LABEL_SAMPLE_SIZE', len(vocabularies["GO_label_vocab"]))
+    
+    label_sample_sizes = {k:(v if v is not None else len(vocabularies['GO_label_vocab'])) 
+                          for k,v in label_sample_sizes.items()}
 
     # Log sizes of all datasets
     [logger.info(f"{subset_name} dataset size: {len(dataset)}") for subset_name, subset in datasets.items() for dataset in subset]
@@ -346,11 +346,11 @@ def train_validate_test(gpu, args):
         # Train function
         Trainer.train(train_loader=loaders["train"][0],
             val_loader=loaders["validation"][0],
-            train_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_micro", threshold=0.5,
-                                                                        num_labels=train_sample_size
+            train_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*", threshold=0.5,
+                                                                        num_labels=label_sample_sizes["train"]
                                                                         ),
-            val_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_micro", threshold=0.5,
-                                                                num_labels=val_sample_size
+            val_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*", threshold=0.5,
+                                                                num_labels=label_sample_sizes["validation"]
                                                                 ),
             val_optimization_metric_name=params["OPTIMIZATION_METRIC_NAME"])
     else:
@@ -392,9 +392,9 @@ def train_validate_test(gpu, args):
 
         validation_metrics = Trainer.evaluate(
             data_loader=full_val_loader,
-            eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_micro",
+            eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*",
                                                                     threshold=0.5,
-                                                                    num_labels=val_sample_size
+                                                                    num_labels=label_sample_sizes["validation"]
                                                             ),
             save_results=args.save_prediction_results,
             metrics_prefix='final_validation'
@@ -415,9 +415,9 @@ def train_validate_test(gpu, args):
             # TODO: If best_val_th is not defined, alert an error to either provide a decision threshold or a validation datapath
             test_metrics = Trainer.evaluate(
                 data_loader=test_loader,
-                eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_micro",
+                eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*",
                                                                           threshold=0.5,
-                                                                          num_labels=test_sample_size),
+                                                                          num_labels=label_sample_sizes["test"]),
                 save_results=args.save_prediction_results,
                 metrics_prefix=f'test_{idx+1}'
             )
