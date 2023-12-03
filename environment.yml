@@ -28,5 +28,6 @@ dependencies:
     - pip
     - azureml-mlflow==1.53.0
     - loralib==0.1.2
-    - torcheval=0.0.7
+    - torcheval==0.0.7
+    - tensorboard==2.15.1
 prefix: /anaconda/envs/protein_functions_310

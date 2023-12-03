@@ -19,7 +19,7 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-- name: AMLT-TEST-DISTRIBUTE-LABELS
+- name: test_all_labels
   sku: G8
   priority: high
   preemptible: True
@@ -31,7 +31,7 @@ jobs:
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
     --full-path-name FULL_DATA_PATH 
-    --name AMLT-TEST-DISTRIBUTE-LABELS
+    --name test_all_labels
     --amlt
     --use-wandb
   submit_args:

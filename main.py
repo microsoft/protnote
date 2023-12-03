@@ -4,7 +4,7 @@ from src.utils.data import (
     log_gpu_memory_usage
 )
 from src.utils.main_utils import get_or_generate_vocabularies,  get_or_generate_label_embeddings, get_or_generate_sequence_embeddings, validate_arguments
-from src.data.datasets import ProteinDataset, calculate_pos_weight, create_multiple_loaders
+from src.data.datasets import ProteinDataset, calculate_pos_weight, create_multiple_loaders, calculate_label_weights
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
 from src.models.protein_encoders import ProteInfer
@@ -139,6 +139,7 @@ def train_validate_test(gpu, args):
             project="protein-functions",
             name=f"{args.name}_{timestamp}",
             config={**params, **vars(args)},
+            sync_tensorboard=False,
             entity="microsoft-research-incubation"
         )
 
@@ -222,6 +223,7 @@ def train_validate_test(gpu, args):
         params,
         label_sample_sizes=label_sample_sizes,
         shuffle_labels=params['SHUFFLE_LABELS'],
+        in_batch_sampling=params['IN_BATCH_SAMPLING'],
         num_workers=params["NUM_WORKERS"],
         world_size=args.world_size,
         rank=rank,
@@ -278,6 +280,7 @@ def train_validate_test(gpu, args):
         output_mlp_num_layers=params["OUTPUT_MLP_NUM_LAYERS"],
         output_neuron_bias=sigmoid_bias_from_prob(params["OUTPUT_NEURON_PROBABILITY_BIAS"]) if params["OUTPUT_NEURON_PROBABILITY_BIAS"] is not None else None,
         outout_mlp_add_batchnorm=params["OUTPUT_MLP_BATCHNORM"],
+        projection_head_num_layers=params["PROJECTION_HEAD_NUM_LAYERS"],
 
         # Training options
         train_label_encoder=params["TRAIN_LABEL_ENCODER"],
@@ -286,10 +289,17 @@ def train_validate_test(gpu, args):
         # Batch size limits
         label_batch_size_limit=params["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
         sequence_batch_size_limit=params["SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD"],
+
+        #
+        feature_fusion=config["params"]["FEATURE_FUSION"],
+        temperature=config["params"]["SUPCON_TEMP"]
     ).to(device)
+
 
     # Wrap the model in DDP for distributed computing
     model = DDP(model, device_ids=[gpu], find_unused_parameters=True)
+
+
 
     # Calculate bce_pos_weight based on the training set
     if (params["BCE_POS_WEIGHT"] is None) & (args.train_path_name is not None):
@@ -304,6 +314,38 @@ def train_validate_test(gpu, args):
         raise ValueError(
             "BCE_POS_WEIGHT is not provided and no training set is provided to calculate it.")
 
+    if (params["LOSS_FN"]=='WeightedBCE'):
+        if (args.train_path_name is not None):
+            logger.info("Calculating label weights...")
+            label_weights = calculate_label_weights(datasets["train"][0].data,inv_freq=True)
+            label_weights = {datasets["train"][0].label2int[k]:v for k,v in label_weights.items()}
+            missing_label_weights = {v:0 for v in datasets["train"][0].label2int.values() if v not in label_weights} #needed in case of sampling or labels that don't show up
+            print("# always negative labels:",len(missing_label_weights))
+            label_weights.update(missing_label_weights)
+            label_weights = torch.tensor([value for _, value in sorted(label_weights.items())]).float().to(device)
+        else:
+            raise ValueError("Must provde training set")
+    else:
+        label_weights = None
+
+    if (params["LOSS_FN"]=='CBLoss'):
+        if (args.train_path_name is not None):
+            logger.info("Calculating label weights...")
+            label_weights = calculate_label_weights(datasets["train"][0].data,inv_freq=False)
+            label_weights = {datasets["train"][0].label2int[k]:v for k,v in label_weights.items()}
+            missing_label_weights = {v:0 for v in datasets["train"][0].label2int.values() if v not in label_weights} #TODO: This should be done by calculate_label_weights. needed in case of sampling or labels that don't show up
+            print("# always negative labels:",len(missing_label_weights))
+            label_weights.update(missing_label_weights)
+            label_weights = torch.tensor([value for _, value in sorted(label_weights.items())]).float().to(device)
+        else:
+            raise ValueError("Must provde training set")
+    else:
+        label_weights = None
+    
+    
+
+    
+
     # Initialize trainer class to handle model training, validation, and testing
     Trainer = ProTCLTrainer(
         model=model,
@@ -315,6 +357,7 @@ def train_validate_test(gpu, args):
         run_name=args.name,
         use_wandb=args.use_wandb and is_master,
         bce_pos_weight=bce_pos_weight,
+        label_weights=label_weights,
         is_master=is_master,
     )
 
@@ -346,8 +389,9 @@ def train_validate_test(gpu, args):
         # Train function
         Trainer.train(train_loader=loaders["train"][0],
             val_loader=loaders["validation"][0],
-            train_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*", threshold=0.5,
-                                                                        num_labels=label_sample_sizes["train"]
+            train_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*",
+                                                                             threshold=0.5,
+                                                                        num_labels=label_sample_sizes["train"] if params['IN_BATCH_SAMPLING'] is False else None
                                                                         ),
             val_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*", threshold=0.5,
                                                                 num_labels=label_sample_sizes["validation"]
