@@ -3,7 +3,13 @@ from typing import List, Tuple
 from transformers import BatchEncoding
 import torch.distributed as dist
 
-def collate_variable_sequence_length(batch: List[Tuple], label_sample_size=None, distribute_labels=False, shuffle_labels=False, world_size=1, rank=0):
+def collate_variable_sequence_length(batch: List[Tuple],
+                                     label_sample_size=None,
+                                     distribute_labels=False,
+                                     shuffle_labels=False,
+                                     in_batch_sampling=False,
+                                     world_size=1,
+                                     rank=0):
     """
     Collates batches with variable sequence lengths by padding sequences to the maximum length in the batch.
 
@@ -37,6 +43,8 @@ def collate_variable_sequence_length(batch: List[Tuple], label_sample_size=None,
     processed_tokenized_labels = None
 
     # Sample labels if num_sampled_labels is specified
+    assert not (in_batch_sampling and (label_sample_size is not None)),"either use in batch sampling or label sample size"
+
     sampled_label_indices = None
     num_labels = batch[0]["label_multihots"].shape[0]
     if label_sample_size:
@@ -53,9 +61,13 @@ def collate_variable_sequence_length(batch: List[Tuple], label_sample_size=None,
             # if rank < 2:
             #     print("GPU {}. Sampling range: {} to {}. Sampled {} labels".format(rank, start_idx, end_idx, sampled_label_indices[:10]))
 
+    elif in_batch_sampling:
+        sampled_label_indices=torch.where(sum(i['label_multihots'] for i in batch)>0)[0]
+    
     # Apply the sampled labels to the tokenized labels and label embeddings
     tokenized_labels = batch[0]["tokenized_labels"]
     label_embeddings = batch[0]["label_embeddings"]
+
     if sampled_label_indices is not None:
         # Index input_ids and attention_mask with the sampled labels
         tokenized_labels_input_ids = tokenized_labels["input_ids"][sampled_label_indices]

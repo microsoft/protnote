@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import torch
 from src.utils.models import get_label_embeddings
 import os
-
+from torchvision.ops import MLP
 
 class ProTCL(nn.Module):
     def __init__(
@@ -19,8 +19,11 @@ class ProTCL(nn.Module):
         output_mlp_num_layers=2,
         output_neuron_bias=None,
         outout_mlp_add_batchnorm=True,
+        projection_head_num_layers=1,
         label_batch_size_limit=float("inf"),
         sequence_batch_size_limit=float("inf"),
+        feature_fusion='concatenation',
+        temperature=0.07
     ):
         super().__init__()
 
@@ -33,22 +36,26 @@ class ProTCL(nn.Module):
         # Batch size limits
         self.label_batch_size_limit,  self.sequence_batch_size_limit = label_batch_size_limit, sequence_batch_size_limit
 
+        self.feature_fusion = feature_fusion
+        self.temperature = temperature
+
         # Projection heads
-        self.W_p = nn.Linear(protein_embedding_dim, latent_dim, bias=False)
-        self.W_l = nn.Linear(label_embedding_dim, latent_dim, bias=False)
+        self.W_p = MLP(protein_embedding_dim,[latent_dim]*projection_head_num_layers,bias=False,norm_layer=torch.nn.BatchNorm1d)
+        self.W_l = MLP(label_embedding_dim,[latent_dim]*projection_head_num_layers,bias=False,norm_layer=torch.nn.BatchNorm1d)
+        
 
-        # TODO: This could change. Currently keeping latent dim.
-        self.output_layer = get_mlp(
-            input_dim=latent_dim*2,
-            hidden_dim=int(round(output_mlp_hidden_dim_scale_factor*latent_dim)),
-            num_layers=output_mlp_num_layers,
-            output_neuron_bias=output_neuron_bias,
-            batch_norm=outout_mlp_add_batchnorm
-        )
+        if self.feature_fusion=='concatenation':
+            # TODO: This could change. Currently keeping latent dim.
+            self.output_layer = get_mlp(
+                input_dim=latent_dim*2,
+                hidden_dim=int(round(output_mlp_hidden_dim_scale_factor*latent_dim)),
+                num_layers=output_mlp_num_layers,
+                output_neuron_bias=output_neuron_bias,
+                batch_norm=outout_mlp_add_batchnorm
+            )
 
-    def _get_joint_embeddings(self, P_e, L_e):
-        num_sequences = P_e.shape[0]
-        num_labels = L_e.shape[0]
+    def _get_joint_embeddings(self, P_e, L_e, num_sequences,num_labels):
+
         sequence_embedding_dim = P_e.shape[1]
         label_embedding_dim = L_e.shape[1]
 
@@ -60,8 +67,8 @@ class ProTCL(nn.Module):
                 num_sequences, num_labels, label_embedding_dim)
         ], dim=2).reshape(-1, sequence_embedding_dim + label_embedding_dim)
 
-        return joint_embeddings, num_sequences, num_labels
-
+        return joint_embeddings
+    
     def forward(
         self,
         sequence_onehots=None,
@@ -110,19 +117,28 @@ class ProTCL(nn.Module):
         P_e = self.W_p(P_f)
         L_e = self.W_l(L_f)
 
+        num_sequences = P_e.shape[0]
+        num_labels = L_e.shape[0]
+
         # Get concatenated embeddings, representing all possible combinations of protein and label embeddings
         # (number proteins * number labels by latent_dim*2)
-        joint_embeddings, num_sequences, num_labels = self._get_joint_embeddings(
-            P_e, L_e)
 
-        # Feed through MLP to get logits (which represent similarities)
-        logits = self.output_layer(joint_embeddings)
+        if self.feature_fusion=='similarity':
+            logits = torch.mm(P_e, L_e.t()) / self.temperature
+            
+        elif self.feature_fusion=='concatenation':
+            joint_embeddings = self._get_joint_embeddings(
+                P_e, L_e, num_sequences, num_labels)
 
+            # Feed through MLP to get logits (which represent similarities)
+            logits = self.output_layer(joint_embeddings)
+        else:
+            raise ValueError("feature fusion method not implemented")
+        
         # Reshape for loss function
         logits = logits.reshape(num_sequences, num_labels)
 
         return logits
-
 
 def get_mlp(input_dim,
             hidden_dim,
@@ -133,12 +149,14 @@ def get_mlp(input_dim,
     Creates a variable length MLP with ReLU activations.
     """
     layers = []
+
+    add_hidden_layers_bias =  not batch_norm
    
     for idx in range(num_layers):
         if idx ==0:
-            layers.append(nn.Linear(input_dim, hidden_dim))
+            layers.append(nn.Linear(input_dim, hidden_dim,bias=add_hidden_layers_bias))
         else:
-            layers.append(nn.Linear(hidden_dim, hidden_dim))
+            layers.append(nn.Linear(hidden_dim, hidden_dim,bias=add_hidden_layers_bias))
  
         if batch_norm:
             layers.append(nn.BatchNorm1d(hidden_dim))

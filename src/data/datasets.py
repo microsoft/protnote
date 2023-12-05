@@ -112,7 +112,6 @@ class ProteinDataset(Dataset):
             self.label_embedding_matrix = label_embedding_matrix
 
     # Helper functions for setting embedding dictionaries
-
     def set_sequence_embedding_df(self, embedding_df: pd.DataFrame):
         self.sequence_embedding_df = embedding_df
 
@@ -271,7 +270,7 @@ def calculate_pos_weight(data: list, num_labels: int):
     return pos_weight
 
 
-def calculate_label_weights(data: list):
+def calculate_label_weights(data: list, inv_freq= True,power=0.3, normalize = True):
     def count_labels(chunk):
         label_freq = Counter()
         for _, labels in chunk:
@@ -289,10 +288,19 @@ def calculate_label_weights(data: list):
     label_freq = Counter()
     for result in results:
         label_freq.update(result)
-
+    
+    if not inv_freq:
+        return label_freq
+    
     # Inverse frequency
     total = sum(label_freq.values())
-    label_inv_freq = {k: total/v for k, v in label_freq.items()}
+    num_labels = len(label_freq.keys())
+    label_inv_freq = {k: (total/v)**power for k, v in label_freq.items()}
+    
+    if normalize:
+        sum_raw_weights = sum(label_inv_freq.values())
+        label_inv_freq = {k:v*num_labels/sum_raw_weights for k,v in label_inv_freq.items()}
+
     return label_inv_freq
 
 
@@ -339,6 +347,7 @@ def create_multiple_loaders(
     params: dict,
     label_sample_sizes: dict = None,
     shuffle_labels: bool = False,
+    in_batch_sampling: bool = False,
     num_workers: int = 2,
     pin_memory: bool = True,
     world_size: int = 1,
@@ -352,6 +361,8 @@ def create_multiple_loaders(
         label_sample_size = None
         if label_sample_sizes:
             label_sample_size = label_sample_sizes.get(dataset_type)
+
+        in_batch_sampling = in_batch_sampling if dataset_type == 'train' else False
 
         for dataset in dataset_list:
             if params["DISTRIBUTE_LABELS"]:
@@ -368,7 +379,14 @@ def create_multiple_loaders(
                 batch_size=batch_size_for_type,
                 shuffle=False,
                 collate_fn=partial(
-                    collate_variable_sequence_length, label_sample_size=label_sample_size, shuffle_labels=shuffle_labels, distribute_labels=params["DISTRIBUTE_LABELS"], world_size=world_size, rank=rank),
+                    collate_variable_sequence_length,
+                    label_sample_size=label_sample_size,
+                    shuffle_labels=shuffle_labels,
+                    in_batch_sampling=in_batch_sampling,
+                    distribute_labels=params["DISTRIBUTE_LABELS"],
+                    world_size=world_size,
+                    rank=rank),
+
                 num_workers=num_workers,
                 pin_memory=pin_memory,
                 drop_last=True,
