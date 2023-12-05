@@ -171,7 +171,7 @@ def train_validate_test(gpu, args):
         for layer in label_encoder.layers:
             in_features, out_features = 1024, 1024
             layer.self_attn.q_proj = lora.Linear(
-                in_features, out_features, r=params["LORA_RANK"])
+                in_features, out_features, r=params["LORA_RANK"])  
             layer.self_attn.v_proj = lora.Linear(
                 in_features, out_features, r=params["LORA_RANK"])
             layer.self_attn.k_proj = lora.Linear(
