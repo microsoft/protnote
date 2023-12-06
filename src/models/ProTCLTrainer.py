@@ -1,7 +1,7 @@
 import logging
 from src.utils.data import load_gz_json, log_gpu_memory_usage, save_checkpoint, load_model
 from src.utils.evaluation import EvalMetrics,metric_collection_to_dict_float,save_evaluation_results
-from src.utils.losses import BatchWeightedBCE, FocalLoss, RGDBCE
+from src.utils.losses import BatchWeightedBCE, FocalLoss, RGDBCE, WeightedBCE,SupCon, CBLoss
 from torchmetrics import MetricCollection, Metric
 from src.utils.proteinfer import normalize_confidences
 import numpy as np
@@ -16,6 +16,7 @@ from transformers import BatchEncoding
 from src.utils.models import generate_label_embeddings_from_text, biogpt_train_last_n_layers
 from tqdm import tqdm
 from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC
+from torch.utils.tensorboard import SummaryWriter
 
 class ProTCLTrainer:
     def __init__(
@@ -29,6 +30,7 @@ class ProTCLTrainer:
         run_name: str,
         use_wandb: bool = False,
         bce_pos_weight: torch.Tensor = None,
+        label_weights: torch.Tensor = None,
         is_master: bool = True,
         starting_epoch: int = 0,
     ):
@@ -66,8 +68,11 @@ class ProTCLTrainer:
             config["paths"]["PARENTHOOD_LIB_PATH"]
         )
         self.output_model_dir = config["paths"]["OUTPUT_MODEL_DIR"]
-        self._set_optimizer(config["params"]["LEARNING_RATE"], config["params"]["LORA"])
+        self._set_optimizer(opt_name = config["params"]["OPTIMIZER"],
+                            lr = config["params"]["LEARNING_RATE"],
+                            use_lora = config["params"]["LORA"])
         self.bce_pos_weight = bce_pos_weight
+        self.label_weights=label_weights
         self.loss_fn = self._get_loss_fn(config)
         self.model_path = self._get_saved_model_path()
         self.best_val_metric = 0.0
@@ -75,6 +80,7 @@ class ProTCLTrainer:
         self.starting_epoch = starting_epoch
         self.epoch = starting_epoch
         self.config = config
+        self.tb = SummaryWriter(f"runs/{self.run_name}_{self.timestamp}") if self.is_master else None
 
     def _get_saved_model_path(self):
         # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
@@ -93,6 +99,12 @@ class ProTCLTrainer:
         if config["params"]["LOSS_FN"] == "BCE":
             assert self.bce_pos_weight is not None, "bce_pos_weight must be provided for BCE loss"
             return torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self.bce_pos_weight)
+        elif (config["params"]["LOSS_FN"] == "WeightedBCE"):
+            assert self.label_weights is not None, "label_weights must be provided for WeightedBCE Loss"
+            return WeightedBCE(label_weights = self.label_weights)
+        elif (config["params"]["LOSS_FN"] == "CBLoss"):
+            assert self.label_weights is not None, "label_weights must be provided for CBLoss"
+            return CBLoss(label_weights = self.label_weights)
         elif config["params"]["LOSS_FN"] == "BatchWeightedBCE":
             return BatchWeightedBCE()
         elif config["params"]["LOSS_FN"] == "FocalLoss":
@@ -101,6 +113,8 @@ class ProTCLTrainer:
             return FocalLoss(gamma=config["params"]["FOCAL_LOSS_GAMMA"], alpha=config["params"]["FOCAL_LOSS_ALPHA"])
         elif config["params"]["LOSS_FN"] == "RGDBCE":
             return RGDBCE(temp=config["params"]["RGDBCE_TEMP"])
+        elif config["params"]["LOSS_FN"] == "SupCon":
+            return SupCon(temperature=config["params"]["SUPCON_TEMP"])
         else:
             raise ValueError(
                 f"Unknown loss function {config['params']['LOSS_FN']}")
@@ -118,7 +132,7 @@ class ProTCLTrainer:
                 processed_args.append(item)
         return processed_args
 
-    def _set_optimizer(self, lr, use_lora):
+    def _set_optimizer(self, opt_name, lr, use_lora):
         trainable_params = []
         trainable_params_names = []
 
@@ -142,7 +156,14 @@ class ProTCLTrainer:
 
         self.trainable_params_names = trainable_params_names
 
-        self.optimizer = torch.optim.SGD(
+        if opt_name == 'Adam':
+            opt = torch.optim.Adam
+        elif opt_name == 'SGD':
+            opt = torch.optim.SGD
+        else:
+            raise ValueError("Unsupported optimizer name")
+
+        self.optimizer = opt(
             trainable_params, lr=lr
         )
 
@@ -211,7 +232,9 @@ class ProTCLTrainer:
         if self.use_wandb and self.is_master:
             try:
                 if self.use_wandb and self.is_master:
-                    wandb.log(val_metrics,step=self.training_step)
+                    wandb.log(val_metrics,
+                              step=self.training_step
+                              )
 
             except Exception as e:
                 self.logger.warning(
@@ -402,13 +425,11 @@ class ProTCLTrainer:
 
             # Compute average validation loss
             avg_loss = total_loss / len(data_loader)
-            mAP_micro = mAP_micro.compute()           
-            mAP_macro = mAP_macro.compute()
 
             final_metrics = eval_metrics.compute() if eval_metrics is not None else {}
             final_metrics.update({"loss": avg_loss,
-                                  "map_micro":mAP_micro,
-                                  "map_macro":mAP_macro
+                                  "map_micro":mAP_micro.compute(),
+                                  "map_macro":mAP_macro.compute()
                                   })
 
             final_metrics = metric_collection_to_dict_float(
@@ -431,7 +452,7 @@ class ProTCLTrainer:
         
         ####### TRAINING LOOP #######
         for batch_idx, batch in enumerate(train_loader):
-            # Increment batch index and set gradients to zero
+            
             self.training_step += 1
 
             # Unpack the training batch
@@ -467,9 +488,10 @@ class ProTCLTrainer:
         
             # Backward pass with mixed precision
             self.scaler.scale(loss).backward()
+        
 
             # Gradient accumulation every GRADIENT_ACCUMULATION_STEPS
-            if (self.training_step % self.gradient_accumulation_steps == 0) or (self.training_step == len(train_loader)):     
+            if (self.training_step % self.gradient_accumulation_steps == 0) or (batch_idx + 1 == len(train_loader)):     
                 # Unscales the gradients of optimizer's assigned params in-place
                 self.scaler.unscale_(self.optimizer)
                 
@@ -480,6 +502,14 @@ class ProTCLTrainer:
                 
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
+
+                #Log at this point to TB to have weights and gradients after a full epoch
+                if (batch_idx + 1 == len(train_loader)) & self.is_master:
+                    for name, weight in self.model.module.named_parameters():
+                        if weight.requires_grad:
+                            self.tb.add_histogram(name,weight, self.epoch)
+                            self.tb.add_histogram(f'{name}.grad',weight.grad, self.epoch)
+
                 self.optimizer.zero_grad()
             
             avg_loss+=loss.item()
@@ -489,7 +519,9 @@ class ProTCLTrainer:
             eval_metrics(logits, label_multihots)
             
             if self.use_wandb:
-                wandb.log({"per_batch_train_loss": loss.item()},step=self.training_step)
+                wandb.log({"per_batch_train_loss": loss.item()},
+                          step=self.training_step
+                          )
 
             # Print memory consumption after first batch (to get the max memory consumption during training)
             if batch_idx == 1 and self.is_master:
@@ -507,7 +539,10 @@ class ProTCLTrainer:
         train_metrics = metric_collection_to_dict_float(train_metrics,prefix='train')
         
         if self.use_wandb:
-            wandb.log(train_metrics, step=self.training_step)   
+            wandb.log(train_metrics,
+                      step=self.training_step
+                      )
+
         
         return train_metrics
         
@@ -553,7 +588,7 @@ class ProTCLTrainer:
             train_metrics = self.train_one_epoch(train_loader=train_loader,
                                                  eval_metrics=train_eval_metrics)
                 
-            # WANDB LOGS EVERY N BATCHES: validation and train metrics
+
             if ((epoch - self.starting_epoch + 1) % self.validations_per_epoch == 0):
                 ####### VALIDATION LOOP #######
                 torch.cuda.empty_cache()
@@ -585,3 +620,5 @@ class ProTCLTrainer:
             # For non-master processes, just receive the broadcasted data
             for param in self.model.module.parameters():
                 torch.distributed.broadcast(param.data, src=0)
+        
+        self.tb.close()
