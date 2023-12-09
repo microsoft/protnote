@@ -98,7 +98,7 @@ class ProteinDataset(Dataset):
         # TODO: Move back to main to remove warning
         self.label_embedding_matrix = None
         self.label_encoder = None
-        if label_encoder is not None and not config["params"]["TRAIN_LABEL_ENCODER"]:
+        if label_encoder is not None and config["params"]["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"]==0:
             self.label_encoder = label_encoder
             label_embedding_matrix = get_or_generate_label_embeddings(
                 label_annotations=self.label_text_list,
@@ -108,6 +108,7 @@ class ProteinDataset(Dataset):
                 logger=logger,
                 batch_size_limit=config["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
                 is_master=is_master,
+                pooling_method=config["params"]["LABEL_EMBEDDING_POOLING_METHOD"]
             )
             self.label_embedding_matrix = label_embedding_matrix
 

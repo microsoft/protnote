@@ -56,7 +56,7 @@ class ProTCLTrainer:
         self.use_wandb = use_wandb
         self.num_epochs = config["params"]["NUM_EPOCHS"]
         self.train_sequence_encoder = config["params"]["TRAIN_SEQUENCE_ENCODER"]
-        self.train_label_encoder = config["params"]["TRAIN_LABEL_ENCODER"]
+        self.label_encoder_num_trainable_layers = config["params"]["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"]
         self.train_projection_head = config["params"]["TRAIN_PROJECTION_HEAD"]
 
         self.normalize_probabilities = config["params"]["NORMALIZE_PROBABILITIES"]
@@ -68,9 +68,15 @@ class ProTCLTrainer:
             config["paths"]["PARENTHOOD_LIB_PATH"]
         )
         self.output_model_dir = config["paths"]["OUTPUT_MODEL_DIR"]
+        self.lora_params = {'rank':config["params"]["LORA_RANK"],
+                            'in_features':config["params"]["LABEL_EMBEDDING_DIM"],
+                            'out_features':config["params"]["LABEL_EMBEDDING_DIM"],
+                            'device':self.device
+                            } if config["params"]["LORA"] else None
+        
         self._set_optimizer(opt_name = config["params"]["OPTIMIZER"],
-                            lr = config["params"]["LEARNING_RATE"],
-                            use_lora = config["params"]["LORA"])
+                            lr = config["params"]["LEARNING_RATE"])
+        
         self.bce_pos_weight = bce_pos_weight
         self.label_weights=label_weights
         self.loss_fn = self._get_loss_fn(config)
@@ -132,14 +138,16 @@ class ProTCLTrainer:
                 processed_args.append(item)
         return processed_args
 
-    def _set_optimizer(self, opt_name, lr, use_lora):
+    def _set_optimizer(self, opt_name, lr):
         trainable_params = []
         trainable_params_names = []
 
         # Use to unfreeze last n layers. 0 means entire model frozen.
-        if not use_lora:
-            biogpt_train_last_n_layers(self.model.module.label_encoder, 0)
-
+        biogpt_train_last_n_layers(self.model.module.label_encoder,
+                                   self.label_encoder_num_trainable_layers,
+                                   lora_params=self.lora_params
+                                   )
+        
         for name, param in self.model.module.named_parameters():
             if name.startswith('sequence_encoder') and (not self.train_sequence_encoder):
                 param.requires_grad = False
@@ -599,7 +607,7 @@ class ProTCLTrainer:
                                             val_optimization_metric_name=val_optimization_metric_name
                                             )
 
-                if self.train_label_encoder:
+                if self.label_encoder_num_trainable_layers>0:
                     # Clear the label embedding matrix
                     val_loader.dataset.set_label_embedding_matrix(None)
 

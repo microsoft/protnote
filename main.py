@@ -167,19 +167,6 @@ def train_validate_test(gpu, args):
         raise NotImplementedError(
             "Gradient checkpointing is not yet implemented.")
 
-    if params["LORA"]:
-        for layer in label_encoder.layers:
-            in_features, out_features = 1024, 1024
-            layer.self_attn.q_proj = lora.Linear(
-                in_features, out_features, r=params["LORA_RANK"])  
-            layer.self_attn.v_proj = lora.Linear(
-                in_features, out_features, r=params["LORA_RANK"])
-            layer.self_attn.k_proj = lora.Linear(
-                in_features, out_features, r=params["LORA_RANK"])
-            layer.self_attn.out_proj = lora.Linear(
-                in_features, out_features, r=params["LORA_RANK"])
-        # Mark only the LoRA parameters as trainable
-        lora.mark_only_lora_as_trainable(label_encoder)
 
     label_encoder = label_encoder.to(device)
 
@@ -229,7 +216,7 @@ def train_validate_test(gpu, args):
         rank=rank,
     )
 
-    if not params["TRAIN_LABEL_ENCODER"]:
+    if params["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"]==0:
         # Move the label encoder to CPU
         label_encoder = label_encoder.cpu()
 
@@ -283,7 +270,7 @@ def train_validate_test(gpu, args):
         projection_head_num_layers=params["PROJECTION_HEAD_NUM_LAYERS"],
 
         # Training options
-        train_label_encoder=params["TRAIN_LABEL_ENCODER"],
+        label_encoder_num_trainable_layers=params["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"],
         train_sequence_encoder=params["TRAIN_SEQUENCE_ENCODER"],
 
         # Batch size limits

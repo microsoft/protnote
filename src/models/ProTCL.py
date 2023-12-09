@@ -10,10 +10,11 @@ class ProTCL(nn.Module):
         self,
         protein_embedding_dim=1100,
         label_embedding_dim=1024,
+        label_embedding_pooling_method='mean',
         latent_dim=1024,
         label_encoder=None,
         sequence_encoder=None,
-        train_label_encoder=False,
+        label_encoder_num_trainable_layers=False,
         train_sequence_encoder=False,
         output_mlp_hidden_dim_scale_factor=1024,
         output_mlp_num_layers=2,
@@ -28,7 +29,7 @@ class ProTCL(nn.Module):
         super().__init__()
 
         # Training options
-        self.train_label_encoder, self.train_sequence_encoder = train_label_encoder, train_sequence_encoder
+        self.label_encoder_num_trainable_layers, self.train_sequence_encoder = label_encoder_num_trainable_layers, train_sequence_encoder
 
         # Encoders
         self.label_encoder, self.sequence_encoder = label_encoder, sequence_encoder
@@ -38,11 +39,17 @@ class ProTCL(nn.Module):
 
         self.feature_fusion = feature_fusion
         self.temperature = temperature
+        self.label_embedding_pooling_method = label_embedding_pooling_method
 
         # Projection heads
         self.W_p = MLP(protein_embedding_dim,[latent_dim]*projection_head_num_layers,bias=False,norm_layer=torch.nn.BatchNorm1d)
         self.W_l = MLP(label_embedding_dim,[latent_dim]*projection_head_num_layers,bias=False,norm_layer=torch.nn.BatchNorm1d)
         
+        #MLP For raw attention score in case label embedding pooling method = all
+        if self.label_embedding_pooling_method=='all':
+
+            #TODO: this could be a simple mlp using get_mlp because it includes output neuron
+            self.raw_attn_scorer = nn.Linear(label_embedding_dim,1, bias=True)
 
         if self.feature_fusion=='concatenation':
             # TODO: This could change. Currently keeping latent dim.
@@ -89,15 +96,29 @@ class ProTCL(nn.Module):
         """
 
         # If label embeddings are provided and we're not training the laebel encoder, use them. Otherwise, compute them.
-        if label_embeddings is not None and (not self.train_label_encoder or (self.train_label_encoder and not self.training)):
+        if label_embeddings is not None and (self.label_encoder_num_trainable_layers==0 or (self.label_encoder_num_trainable_layers>0 and not self.training)):
             L_f = label_embeddings
-        elif (tokenized_labels is not None)&(self.train_label_encoder)&(self.training):
+        elif (tokenized_labels is not None)&(self.label_encoder_num_trainable_layers>0)&(self.training):
             # Get label embeddings from tokens
             L_f = get_label_embeddings(
                 tokenized_labels,
                 self.label_encoder,
+                method=self.label_embedding_pooling_method,
                 batch_size_limit=self.label_batch_size_limit
             )
+
+            if self.label_embedding_pooling_method=='all':
+                raw_attn_scores = self.raw_attn_scorer(L_f).squeeze(-1)
+                
+                #Masked scored for softmax
+                raw_attn_scores = raw_attn_scores.masked_fill(tokenized_labels['attention_mask']==0,float('-inf'))
+
+                #Normalized attention weights
+                attn_weights = torch.softmax(raw_attn_scores,dim=-1)
+
+                #Get final label embedding
+                L_f = torch.bmm(attn_weights.unsqueeze(1),L_f)
+
         else:
             raise ValueError(
                 "Incompatible label parameters passed to forward method.")

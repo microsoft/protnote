@@ -5,25 +5,43 @@ import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
 from torch.cuda.amp import autocast
 from collections import OrderedDict
+import loralib as lora
 
-def biogpt_train_last_n_layers(model,n):
+def apply_lora_biogpt_attention(layer,rank,device,in_features= 1024, out_features= 1024):
+    layer.self_attn.q_proj = lora.Linear(
+        in_features, out_features, r=rank)  
+    layer.self_attn.v_proj = lora.Linear(
+        in_features, out_features, r=rank)
+    layer.self_attn.k_proj = lora.Linear(
+        in_features, out_features, r=rank)
+    layer.self_attn.out_proj = lora.Linear(
+        in_features, out_features, r=rank)
+    layer=layer.to(device)
+    
+def biogpt_train_last_n_layers(model,n,lora_params=None):
     for param in model.parameters():
         param.requires_grad = False
 
     if n>0:
         max_layer_num = len(model.layers)-1
         for param_name,param in model.named_parameters():
-            print(param_name)
             layer_num = re.search(r'layers\.(\d+)', param_name)
-
             if layer_num:
                 number = int(layer_num.group(1))
                 if number>max_layer_num-n:
                     param.requires_grad = True
+                    if lora_params is not None:
 
+                        apply_lora_biogpt_attention(**{**lora_params,
+                                                     'layer':model.layers[number]}
+                                                     )
+        
+        if lora_params is not None:
+            lora.mark_only_lora_as_trainable(model)
+        
+        #Always train last layer norm.
         for param in model.layer_norm.parameters():
             param.requires_grad = True
-
 
 def count_parameters_by_layer(model):
     """
@@ -109,8 +127,38 @@ def compute_mean_hidden_states(last_hidden_states, attention_mask):
     # Compute the mean of the last hidden state
     return sum_hidden_states / num_relevant_tokens
 
+def pool_embeddings(last_hidden_states,attention_mask,method):
+    '''
+    '''
+    sequence_length = attention_mask.sum(dim=1, keepdim=True) #includind SOS token
+    last_token_indices = sequence_length - 1
 
-def get_label_embeddings(tokenized_labels, model, batch_size_limit=1000):
+ 
+    if method=='mean':
+        #Account for SOS token
+        adjusted_attention_mask = attention_mask.clone()
+        adjusted_attention_mask[:,0]=0
+ 
+        # Mask the last_hidden_state tensor and compute the sum
+        sum_hidden_states = (last_hidden_states *
+                                adjusted_attention_mask.unsqueeze(-1)).sum(dim=1)
+ 
+        # Compute the mean of the last hidden state
+        sequence_embedding = sum_hidden_states / (sequence_length-1) #subtract -1 for SOS token
+ 
+    elif method == 'last_token':
+        last_token_indices = last_token_indices\
+            .unsqueeze(-1)\
+            .expand(-1, -1, last_hidden_states.size(-1))
+ 
+        sequence_embedding = last_hidden_states.gather(1, last_token_indices).squeeze()
+    elif method == 'all':
+ 
+        sequence_embedding = last_hidden_states
+ 
+    return sequence_embedding
+
+def get_label_embeddings(tokenized_labels, model, method, batch_size_limit=1000,append_in_cpu = False):
     """
     Get embeddings for a list of tokenized labels.
     Assumes that tokenized_labels and model are on the same device, ideally GPU.
@@ -123,10 +171,10 @@ def get_label_embeddings(tokenized_labels, model, batch_size_limit=1000):
                 input_ids=tokenized_labels["input_ids"],
                 attention_mask=tokenized_labels["attention_mask"]
             ).last_hidden_state
-        output = compute_mean_hidden_states(
-            last_hidden_states, tokenized_labels["attention_mask"])
+        sequence_embeddings = pool_embeddings(
+            last_hidden_states, tokenized_labels["attention_mask"],method)
         del last_hidden_states
-        return output
+        return sequence_embeddings
 
     else:
         # Convert dictionary values to tensors
@@ -138,20 +186,27 @@ def get_label_embeddings(tokenized_labels, model, batch_size_limit=1000):
                                 shuffle=False, pin_memory=False, num_workers=0)
 
         all_label_embeddings = []
-        for batch in dataloader:
+        for idx,batch in enumerate(dataloader):
+            print(idx)
             input_ids, attention_mask = batch
             with autocast():
                 last_hidden_states = model(
                     input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-            mean_hidden_states = compute_mean_hidden_states(
-                last_hidden_states, attention_mask)
-            all_label_embeddings.append(mean_hidden_states)
-            del last_hidden_states, mean_hidden_states
+            sequence_embeddings = pool_embeddings(
+                last_hidden_states, attention_mask,method)
+            
+            print(sequence_embeddings.shape)
+            
+            all_label_embeddings.append(sequence_embeddings.cpu() if append_in_cpu else sequence_embeddings)
+
+            del last_hidden_states, sequence_embeddings
+
+        
         # Concatenate all the label embeddings
         return torch.cat(all_label_embeddings, dim=0)
 
 
-def generate_label_embeddings_from_text(label_annotations, label_tokenizer, label_encoder, batch_size_limit=1000):
+def generate_label_embeddings_from_text(label_annotations, label_tokenizer, label_encoder, pooling_method, batch_size_limit=1000, append_in_cpu=False):
     """Tokenize the labels and generate label embeddings."""
     tokenized_labels = tokenize_labels(label_annotations, label_tokenizer)
 
@@ -162,7 +217,7 @@ def generate_label_embeddings_from_text(label_annotations, label_tokenizer, labe
         label_encoder.device)
 
     # Generate label embeddings
-    return get_label_embeddings(tokenized_labels, label_encoder, batch_size_limit=batch_size_limit)
+    return get_label_embeddings(tokenized_labels, label_encoder, pooling_method ,batch_size_limit=batch_size_limit,append_in_cpu=append_in_cpu)
 
 
 def sigmoid_bias_from_prob(prior_prob):
