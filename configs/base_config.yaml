@@ -2,7 +2,7 @@
 # Parameters for model training
 # TODO: Optimizer can also be a hyperparameter
 params:
-  ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET VS. SANDBOX A100 ##############
+  ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET V100 VS. SANDBOX A100 VS. T4 ##############
   ## A100 ###
   # Batch sizes
   TRAIN_BATCH_SIZE: 32 # 256 for A100
@@ -26,9 +26,9 @@ params:
   # VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
   # # Inference
   # LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 750 # 1K for V100
-  # SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 
+  # SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 (TO BE VERIFIED)
 
-  ############## PARAMS DO NOT NEED TO VARY BETWEEN VIRTUAL MACHINES ##############
+  ############## PARAMS THAT DO NOT NEED TO VARY BETWEEN VIRTUAL MACHINES ##############
   # General
   LEARNING_RATE: 0.0003
   OPTIMIZER: Adam
@@ -71,6 +71,7 @@ params:
   # Data processing and metrics
   DEDUPLICATE: True
   NORMALIZE_PROBABILITIES: False
+  WEIGHTED_SAMPLING: True
 
   # Constants
   SEED: 42

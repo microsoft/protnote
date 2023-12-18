@@ -4,7 +4,7 @@ from src.utils.data import (
     log_gpu_memory_usage
 )
 from src.utils.main_utils import get_or_generate_vocabularies,  get_or_generate_label_embeddings, get_or_generate_sequence_embeddings, validate_arguments
-from src.data.datasets import ProteinDataset, calculate_pos_weight, create_multiple_loaders, calculate_label_weights
+from src.data.datasets import ProteinDataset, calculate_pos_weight, create_multiple_loaders, calculate_label_weights, calculate_sequence_weights
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
 from src.models.protein_encoders import ProteInfer
@@ -203,6 +203,11 @@ def train_validate_test(gpu, args):
         "validation": params["VALIDATION_LABEL_SAMPLE_SIZE"],
         "test": None  # No sampling for the test set
     }
+    
+    # Calculate the weighting for the train dataset
+    sequence_weights = None
+    if params["WEIGHTED_SAMPLING"]:
+        sequence_weights = calculate_sequence_weights(datasets["train"][0].data, calculate_label_weights(datasets["train"][0].data))
 
     # Define data loaders
     loaders = create_multiple_loaders(
@@ -210,10 +215,10 @@ def train_validate_test(gpu, args):
         params,
         label_sample_sizes=label_sample_sizes,
         shuffle_labels=params['SHUFFLE_LABELS'],
-        in_batch_sampling=params['IN_BATCH_SAMPLING'],
         num_workers=params["NUM_WORKERS"],
         world_size=args.world_size,
         rank=rank,
+        sequence_weights=sequence_weights
     )
 
     if params["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"]==0:

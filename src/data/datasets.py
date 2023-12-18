@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Sampler, WeightedRandomSampler
 from src.utils.data import read_fasta, read_json, get_vocab_mappings, read_pickle
 from src.utils.models import tokenize_labels, get_label_embeddings
 from typing import Dict
@@ -13,7 +13,8 @@ from functools import partial
 from collections import Counter
 from torch.utils.data.distributed import DistributedSampler
 from src.utils.main_utils import get_or_generate_label_embeddings
-
+import torch.distributed as dist
+import math
 
 class ProteinDataset(Dataset):
     """
@@ -304,6 +305,34 @@ def calculate_label_weights(data: list, inv_freq= True,power=0.3, normalize = Tr
 
     return label_inv_freq
 
+def calculate_sequence_weights(data: list, label_inv_freq: dict):
+    """
+    Calculate the sequence weights for weighted sampling. 
+    The sequence weights are the sum of the inverse frequencies of the labels in the sequence.
+    """
+    # TODO: Convert inverse frequencies into a more normal distribution
+    
+    def sum_label_inverse_freqs(chunk):
+        sequence_weights = []
+        for _, labels in chunk:
+            labels = labels[1:]
+            sequence_weight = sum([label_inv_freq[label] for label in labels])
+            sequence_weights.append(sequence_weight)
+        return sequence_weights
+
+    # Adjust chunk size if necessary.
+    chunk_size = max(len(data) // cpu_count(), 1)
+
+    results = Parallel(n_jobs=-1)(
+        delayed(sum_label_inverse_freqs)(data[i:i+chunk_size]) for i in range(0, len(data), chunk_size)
+    )
+
+    sequence_weights = []
+    for result in results:
+        sequence_weights.extend(result)
+
+    return sequence_weights
+
 
 def set_padding_to_sentinel(
     padded_representations: torch.Tensor,
@@ -353,6 +382,7 @@ def create_multiple_loaders(
     pin_memory: bool = True,
     world_size: int = 1,
     rank: int = 0,
+    sequence_weights: torch.Tensor = None,
 ) -> List[DataLoader]:
     loaders = defaultdict(list)
     for dataset_type, dataset_list in datasets.items():
@@ -366,15 +396,36 @@ def create_multiple_loaders(
         in_batch_sampling = in_batch_sampling if dataset_type == 'train' else False
 
         for dataset in dataset_list:
-            if params["DISTRIBUTE_LABELS"]:
-                sampler = None
+            if dataset_type == "train":
+                if not params["DISTRIBUTE_LABELS"] and params["WEIGHTED_SAMPLING"]:
+                    # If NOT distributing labels, but using weighted sampling, create a non-distributed weighted sampler
+                    sampler = WeightedRandomSampler(
+                        sequence_weights, 
+                        len(sequence_weights), 
+                        replacement=True
+                    )
+                elif params["DISTRIBUTE_LABELS"] and params["WEIGHTED_SAMPLING"]:
+                    # If distributing labels and using weighted sampling, create a distributed weighted sampler
+                    sampler = DistributedWeightedSampler(
+                        dataset,
+                        sequence_weights,
+                        num_replicas=world_size,
+                        rank=rank,
+                        replacement=True,
+                    )
+                elif params["DISTRIBUTE_LABELS"] and not params["WEIGHTED_SAMPLING"]:
+                    sampler = DistributedSampler(
+                        dataset,
+                        num_replicas=world_size,
+                        rank=rank,
+                        shuffle=True
+                    )
+                else:
+                    # Raise error
+                    raise ValueError("Invalid combination of WEIGHTED_SAMPLING and DISTRIBUTE_LABELS parameters")
             else:
-                sampler = DistributedSampler(
-                    dataset,
-                    num_replicas=world_size,
-                    rank=rank,
-                    shuffle=True
-                )
+                sampler = None
+                
             loader = DataLoader(
                 dataset,
                 batch_size=batch_size_for_type,
@@ -396,3 +447,47 @@ def create_multiple_loaders(
             loaders[dataset_type].append(loader)
 
     return loaders
+
+class DistributedWeightedSampler(Sampler):
+    def __init__(self, dataset, weights, num_replicas=None, rank=None, replacement=True):
+        if num_replicas is None:
+            if not dist.is_available():
+                raise RuntimeError("Requires distributed package to be available")
+            num_replicas = dist.get_world_size()
+        if rank is None:
+            rank = dist.get_rank()
+
+        self.dataset = dataset
+        self.weights = weights
+        self.num_replicas = num_replicas
+        self.rank = rank
+        self.epoch = 0
+        self.replacement = replacement
+
+        self.num_samples = int(math.ceil(len(self.dataset) * 1.0 / self.num_replicas))
+        self.total_size = self.num_samples * self.num_replicas
+
+    def __iter__(self):
+        # Shuffle based on the epoch
+        g = torch.Generator()
+        g.manual_seed(self.epoch)
+        
+        # Create a weighted sample for the entire dataset
+        if self.replacement:
+            indices = torch.multinomial(self.weights, self.total_size, replacement=True)
+        else:
+            indices = torch.multinomial(self.weights, len(self.weights), replacement=False)
+
+        # Subsample for the current process
+        indices = indices[self.rank:self.total_size:self.num_replicas]
+        
+        # Shuffle each epoch
+        indices = torch.randperm(len(indices), generator=g).tolist()
+            
+        return iter(indices.tolist())
+
+    def __len__(self):
+        return self.num_samples
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch

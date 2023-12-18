@@ -148,9 +148,14 @@ def get_or_generate_sequence_embeddings(paths, device, sequence_encoder, dataset
         logger.info("Generating sequence embeddings...")
         sequence_embedding_df = generate_sequence_embeddings(
             device, sequence_encoder, datasets, params)
-        # TODO: Save sequence embeddings here to the provided path
-        raise NotImplementedError(
-            "Saving sequence embeddings is not yet implemented.")
+        
+        # Save the sequence embeddings to paths["SEQUENCE_EMBEDDING_PATH"]
+        if paths["SEQUENCE_EMBEDDING_PATH"] is not None:
+            torch.save(sequence_embedding_df, paths["SEQUENCE_EMBEDDING_PATH"])
+            if logger is not None:
+                    logger.info(
+                        f"Saved label embeddings to {paths['SEQUENCE_EMBEDDING_PATH']}")
+
     return sequence_embedding_df
  
  

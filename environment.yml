@@ -18,7 +18,7 @@ dependencies:
   - torchmetrics=1.2.0
   - biopython=1.79
   - python-wget=3.2
-  - obonet=0.2.3
+  - obonet=1.0.0
   - torchdata=0.4.1
   - wandb=0.15.11
   - sacremoses=0.0.53
