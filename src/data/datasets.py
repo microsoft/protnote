@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Sampler, WeightedRandomSampler
 from src.utils.data import read_fasta, read_json, get_vocab_mappings, read_pickle
 from src.utils.models import tokenize_labels, get_label_embeddings
 from typing import Dict
@@ -13,6 +13,8 @@ from functools import partial
 from collections import Counter
 from torch.utils.data.distributed import DistributedSampler
 from src.utils.main_utils import get_or_generate_label_embeddings
+import torch.distributed as dist
+import math
 from torch.utils.data import RandomSampler
 from src.data.samplers import GridBatchSampler
 class ProteinDataset(Dataset):
@@ -324,6 +326,34 @@ def calculate_label_weights(data: list, inv_freq= True,power=0.3, normalize = Tr
 
     return label_inv_freq
 
+def calculate_sequence_weights(data: list, label_inv_freq: dict):
+    """
+    Calculate the sequence weights for weighted sampling. 
+    The sequence weights are the sum of the inverse frequencies of the labels in the sequence.
+    """
+    # TODO: Convert inverse frequencies into a more normal distribution
+    
+    def sum_label_inverse_freqs(chunk):
+        sequence_weights = []
+        for _, labels in chunk:
+            labels = labels[1:]
+            sequence_weight = sum([label_inv_freq[label] for label in labels])
+            sequence_weights.append(sequence_weight)
+        return sequence_weights
+
+    # Adjust chunk size if necessary.
+    chunk_size = max(len(data) // cpu_count(), 1)
+
+    results = Parallel(n_jobs=-1)(
+        delayed(sum_label_inverse_freqs)(data[i:i+chunk_size]) for i in range(0, len(data), chunk_size)
+    )
+
+    sequence_weights = []
+    for result in results:
+        sequence_weights.extend(result)
+
+    return sequence_weights
+
 
 def set_padding_to_sentinel(
     padded_representations: torch.Tensor,
@@ -374,6 +404,7 @@ def create_multiple_loaders(
     pin_memory: bool = True,
     world_size: int = 1,
     rank: int = 0,
+    sequence_weights: torch.Tensor = None,
 ) -> List[DataLoader]:
     loaders = defaultdict(list)
     for dataset_type, dataset_list in datasets.items():
@@ -388,15 +419,40 @@ def create_multiple_loaders(
         grid_sampler = grid_sampler if dataset_type == 'train' else False
 
         for dataset in dataset_list:
-            if params["DISTRIBUTE_LABELS"]:
-                sampler = None
+            if dataset_type == "train":
+                if params["DISTRIBUTE_LABELS"] and not params["WEIGHTED_SAMPLING"]:
+                    # If distributing labels across GPU's (vs. distributing sequences across GPU's), then do not use a sequence sampler
+                    sampler = None
+                elif not params["DISTRIBUTE_LABELS"] and world_size == 1 and params["WEIGHTED_SAMPLING"]:
+                    # If NOT distributing labels, and not training on multiple GPU's, create a non-distributed weighted sampler with replacement
+                    sampler = WeightedRandomSampler(
+                        sequence_weights, 
+                        len(sequence_weights), 
+                        replacement=True
+                    )
+                elif not params["DISTRIBUTE_LABELS"] and world_size > 1 and params["WEIGHTED_SAMPLING"]:
+                    # If distributing sequences across multiple GPUs with a weighted sampler, create custom DistributedWeightedSampler
+                    sampler = DistributedWeightedSampler(
+                        sequence_weights,
+                        world_size=world_size,
+                        rank=rank,
+                        replacement=True,
+                    )
+                elif not params["DISTRIBUTE_LABELS"] and not params["WEIGHTED_SAMPLING"]:
+                    # If simply distributing sequences across GPU's without weighted sampling, use a distributed sampler
+                    sampler = DistributedSampler(
+                        dataset,
+                        num_replicas=world_size,
+                        rank=rank,
+                        shuffle=True
+                    )
+                else:
+                    # Raise error
+                    raise ValueError("Invalid combination of WEIGHTED_SAMPLING, WORLD_SIZE, and DISTRIBUTE_LABELS parameters")
             else:
-                sampler = DistributedSampler(
-                    dataset,
-                    num_replicas=world_size,
-                    rank=rank,
-                    shuffle=True
-                )
+                # No sampling in validation and test sets
+                sampler = None
+                
                 
             batch_sampler = None
             drop_last = True
@@ -438,3 +494,51 @@ def create_multiple_loaders(
             loaders[dataset_type].append(loader)
 
     return loaders
+
+class DistributedWeightedSampler(Sampler):
+    def __init__(self, weights, world_size=None, rank=None, replacement=True):
+        # Get the world size and rank if not provided
+        if world_size is None:
+            if not dist.is_available():
+                raise RuntimeError("Requires distributed package to be available")
+            world_size = dist.get_world_size()
+        if rank is None:
+            rank = dist.get_rank()
+
+        self.weights = weights
+        self.world_size = world_size
+        self.rank = rank
+        self.epoch = 0
+        self.replacement = replacement
+
+        # Determine the number of samples for each GPU, rounding down to ensure it is evenly divisible
+        self.num_samples = int(math.floor(len(self.weights) * 1.0 / self.world_size))
+        
+        # Determine the total number of samples
+        self.total_size = self.num_samples * self.world_size
+
+    def __iter__(self):
+        # Shuffle based on the epoch
+        g = torch.Generator()
+        g.manual_seed(self.epoch)
+        
+        # Create a weighted sample for the entire dataset
+        if self.replacement:
+            indices = torch.multinomial(self.weights, self.total_size, replacement=True, generator=g)
+        else:
+            assert len(self.weights) > self.total_size, "When sampling without replacement, number of samples to draw must be less than the number of elements in the dataset"
+            indices = torch.multinomial(self.weights, self.total_size, replacement=False, generator=g)
+
+        # Subsample for the current process
+        indices_for_one_gpu = indices[self.rank:self.total_size:self.world_size]
+        
+        # Shuffle each epoch
+        indices_for_one_gpu = indices_for_one_gpu[torch.randperm(len(indices_for_one_gpu), generator=g)].tolist()
+            
+        return iter(indices_for_one_gpu)
+
+    def __len__(self):
+        return self.num_samples
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch

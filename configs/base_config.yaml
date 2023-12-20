@@ -2,7 +2,7 @@
 # Parameters for model training
 # TODO: Optimizer can also be a hyperparameter
 params:
-  ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET VS. SANDBOX A100 ##############
+  ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET V100 VS. SANDBOX A100 VS. T4 ##############
   ## A100 ###
   # Batch sizes
   # TRAIN_BATCH_SIZE: 4 # 256 for A100
@@ -26,16 +26,15 @@ params:
   TEST_BATCH_SIZE: 64 # 4 for V100
   # Sampling
   GRID_SAMPLER: False
-
   IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
-
+  WEIGHTED_SAMPLING: False #Sample rare sequences more often as dictaded by inverse frequency of labels
   TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both
   VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
   # Inference
   LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 500 # 1K for V100
   SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 
 
-  ############## PARAMS DO NOT NEED TO VARY BETWEEN VIRTUAL MACHINES ##############
+  ############## PARAMS THAT DO NOT NEED TO VARY BETWEEN VIRTUAL MACHINES ##############
   # General
   LEARNING_RATE: 0.0003
   OPTIMIZER: Adam
@@ -72,6 +71,7 @@ params:
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False
   LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 0
+  LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 0
   DISTRIBUTE_LABELS: False
   TRAIN_PROJECTION_HEAD: True
   LABEL_ENCODER_CHECKPOINT: microsoft/biogpt
@@ -83,7 +83,7 @@ params:
   # Constants
   SEED: 42
   VALIDATIONS_PER_EPOCH: 1 #TODO: This really is epochs per validation
-  NUM_WORKERS: 4
+  NUM_WORKERS: 3
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
 
   # Subset fractions (for rapid prototyping; set to 1 for final model)

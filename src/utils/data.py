@@ -101,10 +101,13 @@ def download_and_unzip(url, output_file):
     filename = output_file + '.gz'
 
     # Download the file from the web
-    wget.download(url, filename)
+    zip_name = wget.download(url)
+    
+    # Move the file to data/swissprot
+    os.rename(zip_name, filename)
 
     # Unzip the downloaded file
-    with gzip.open(filename, 'rb') as f_in:
+    with gzip.open(zip_name, 'rb') as f_in:
         with open(output_file, 'wb') as f_out:
             f_out.write(f_in.read())
 
