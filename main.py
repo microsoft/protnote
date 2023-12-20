@@ -332,9 +332,6 @@ def train_validate_test(gpu, args):
     else:
         label_weights = None
     
-    
-
-    
 
     # Initialize trainer class to handle model training, validation, and testing
     Trainer = ProTCLTrainer(

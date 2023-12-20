@@ -19,7 +19,7 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-- name: FL_Experiments_MLP_scale_3_layers3_projection_head_scale2_layers3
+- name: FL_Experiments_MLP_scale_3_layers4_projection_head_scale2_layers4
   sku: G8
   priority: high
   preemptible: False
@@ -31,7 +31,7 @@ jobs:
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
     --full-path-name FULL_DATA_PATH 
-    --name FL_Experiments_MLP_scale_2_layers2_projection_head_scale1_layers2
+    --name FL_Experiments_MLP_scale_3_layers4_projection_head_scale2_layers4
     --amlt
     --use-wandb
   submit_args:
