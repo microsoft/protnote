@@ -19,10 +19,10 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-- name: test_all_labels
+- name: FL_Experiments_MLP_scale_2_layers2_projection_head_scale1_layers2
   sku: G8
   priority: high
-  preemptible: True
+  preemptible: False
   command:
   - python main.py 
     --nodes 1
@@ -31,7 +31,7 @@ jobs:
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
     --full-path-name FULL_DATA_PATH 
-    --name test_all_labels
+    --name FL_Experiments_MLP_scale_2_layers2_projection_head_scale1_layers2
     --amlt
     --use-wandb
   submit_args:

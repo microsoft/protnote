@@ -21,6 +21,7 @@ class ProTCL(nn.Module):
         output_neuron_bias=None,
         outout_mlp_add_batchnorm=True,
         projection_head_num_layers=1,
+        projection_head_hidden_dim_scale_factor = 1,
         label_batch_size_limit=float("inf"),
         sequence_batch_size_limit=float("inf"),
         feature_fusion='concatenation',
@@ -42,8 +43,17 @@ class ProTCL(nn.Module):
         self.label_embedding_pooling_method = label_embedding_pooling_method
 
         # Projection heads
-        self.W_p = MLP(protein_embedding_dim,[latent_dim]*projection_head_num_layers,bias=False,norm_layer=torch.nn.BatchNorm1d)
-        self.W_l = MLP(label_embedding_dim,[latent_dim]*projection_head_num_layers,bias=False,norm_layer=torch.nn.BatchNorm1d)
+        self.W_p = MLP(protein_embedding_dim,
+                       [latent_dim*projection_head_hidden_dim_scale_factor]*(projection_head_num_layers-1) + [latent_dim],
+                       bias=False,
+                       norm_layer=torch.nn.BatchNorm1d
+                       )
+        
+        self.W_l = MLP(label_embedding_dim,
+                       [latent_dim*projection_head_hidden_dim_scale_factor]*(projection_head_num_layers-1) + [latent_dim],
+                       bias=False,
+                       norm_layer=torch.nn.BatchNorm1d
+                       )
         
         #MLP For raw attention score in case label embedding pooling method = all
         if self.label_embedding_pooling_method=='all':
@@ -76,6 +86,18 @@ class ProTCL(nn.Module):
 
         return joint_embeddings
     
+    def additive_attention(self,hidden_states,attention_mask):
+        raw_attn_scores = self.raw_attn_scorer(hidden_states).squeeze(-1)
+        
+        #Masked scored for softmax
+        raw_attn_scores = raw_attn_scores.masked_fill(attention_mask==0,float('-inf'))
+
+        #Normalized attention weights
+        attn_weights = torch.softmax(raw_attn_scores,dim=-1)
+
+        #Get final label embedding
+        return torch.bmm(attn_weights.unsqueeze(1),hidden_states).squeeze(1)
+
     def forward(
         self,
         sequence_onehots=None,
@@ -96,6 +118,7 @@ class ProTCL(nn.Module):
         """
 
         # If label embeddings are provided and we're not training the laebel encoder, use them. Otherwise, compute them.
+        
         if label_embeddings is not None and (self.label_encoder_num_trainable_layers==0 or (self.label_encoder_num_trainable_layers>0 and not self.training)):
             L_f = label_embeddings
         elif (tokenized_labels is not None)&(self.label_encoder_num_trainable_layers>0)&(self.training):
@@ -106,18 +129,6 @@ class ProTCL(nn.Module):
                 method=self.label_embedding_pooling_method,
                 batch_size_limit=self.label_batch_size_limit
             )
-
-            if self.label_embedding_pooling_method=='all':
-                raw_attn_scores = self.raw_attn_scorer(L_f).squeeze(-1)
-                
-                #Masked scored for softmax
-                raw_attn_scores = raw_attn_scores.masked_fill(tokenized_labels['attention_mask']==0,float('-inf'))
-
-                #Normalized attention weights
-                attn_weights = torch.softmax(raw_attn_scores,dim=-1)
-
-                #Get final label embedding
-                L_f = torch.bmm(attn_weights.unsqueeze(1),L_f)
 
         else:
             raise ValueError(
@@ -133,6 +144,12 @@ class ProTCL(nn.Module):
         else:
             raise ValueError(
                 "Incompatible sequence parameters passed to forward method.")
+
+        
+        if self.label_embedding_pooling_method=='all':
+            print('attention')
+            L_f = self.additive_attention(L_f,tokenized_labels['attention_mask'])
+            print('attention done')
 
         # Project protein and label embeddings to common latent space.
         P_e = self.W_p(P_f)

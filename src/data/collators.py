@@ -8,6 +8,7 @@ def collate_variable_sequence_length(batch: List[Tuple],
                                      distribute_labels=False,
                                      shuffle_labels=False,
                                      in_batch_sampling=False,
+                                     grid_sampler=False,
                                      world_size=1,
                                      rank=0):
     """
@@ -42,28 +43,41 @@ def collate_variable_sequence_length(batch: List[Tuple],
     processed_label_embeddings = None
     processed_tokenized_labels = None
 
-    # Sample labels if num_sampled_labels is specified
-    assert not (in_batch_sampling and (label_sample_size is not None)),"either use in batch sampling or label sample size"
+    if grid_sampler:
+        assert label_sample_size is not None, "Must provide label_sample_size if using grid sampler"
+        assert not in_batch_sampling, "Can't use in batch sampling with grid sampler"
+    
+    else:
+        assert not (in_batch_sampling and (label_sample_size is not None)), "Cant use both in_batch_sampling with lable_sample_size"
+    
 
     sampled_label_indices = None
     num_labels = batch[0]["label_multihots"].shape[0]
+
+
     if label_sample_size:
-        if not distribute_labels:
-            # If not distributing labels, sample from entire dataset
-            sampled_label_indices = torch.randperm(num_labels)[:label_sample_size] if shuffle_labels else torch.arange(label_sample_size)
+
+        if grid_sampler:
+            sampled_label_indices = batch[0]["label_idxs"]
         else:
-            # Otherwise, sample from the labels on this GPU
-            labels_per_partition = num_labels // world_size
-            start_idx = rank * labels_per_partition
-            end_idx = start_idx + labels_per_partition
-            partition_indices = torch.arange(start_idx, end_idx)
-            sampled_label_indices = partition_indices[torch.randperm(len(partition_indices))[:label_sample_size // world_size]]
-            # if rank < 2:
-            #     print("GPU {}. Sampling range: {} to {}. Sampled {} labels".format(rank, start_idx, end_idx, sampled_label_indices[:10]))
+            if not distribute_labels:
+                # If not distributing labels, sample from entire dataset
+                sampled_label_indices = torch.randperm(num_labels)[:label_sample_size] if shuffle_labels else torch.arange(label_sample_size)
+            else:
+                # Otherwise, sample from the labels on this GPU
+                labels_per_partition = num_labels // world_size
+                start_idx = rank * labels_per_partition
+                end_idx = start_idx + labels_per_partition
+                partition_indices = torch.arange(start_idx, end_idx)
+                sampled_label_indices = partition_indices[torch.randperm(len(partition_indices))[:label_sample_size // world_size]]
+                # if rank < 2:
+                #     print("GPU {}. Sampling range: {} to {}. Sampled {} labels".format(rank, start_idx, end_idx, sampled_label_indices[:10]))
 
     elif in_batch_sampling:
         sampled_label_indices=torch.where(sum(i['label_multihots'] for i in batch)>0)[0]
     
+        
+
     # Apply the sampled labels to the tokenized labels and label embeddings
     tokenized_labels = batch[0]["tokenized_labels"]
     label_embeddings = batch[0]["label_embeddings"]
@@ -109,8 +123,8 @@ def collate_variable_sequence_length(batch: List[Tuple],
             )
         )
 
-        # Use the sampled labels for each element in the batch
-        if sampled_label_indices is not None:
+        # Use the sampled labels for each element in the batch. 
+        if (sampled_label_indices is not None):
             label_multihots = label_multihots[sampled_label_indices]
 
         # Append the other values to the processed lists
@@ -127,7 +141,7 @@ def collate_variable_sequence_length(batch: List[Tuple],
     # if rank < 2:
     #     print("GPU {}. sequence_ids: {}".format(rank, processed_sequence_ids[:10]))
 
-    return {
+    processed_batch = {
         "sequence_onehots": torch.stack(processed_sequence_onehots),
         "sequence_ids": processed_sequence_ids,
         "sequence_embeddings": processed_sequence_embeddings,
@@ -136,3 +150,4 @@ def collate_variable_sequence_length(batch: List[Tuple],
         "tokenized_labels": processed_tokenized_labels,
         "label_embeddings": processed_label_embeddings,
     }
+    return processed_batch

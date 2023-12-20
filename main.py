@@ -1,5 +1,4 @@
 from src.utils.data import (
-    load_model,
     seed_everything,
     log_gpu_memory_usage
 )
@@ -9,7 +8,7 @@ from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
 from src.models.protein_encoders import ProteInfer
 from src.utils.evaluation import EvalMetrics
-from src.utils.models import count_parameters_by_layer, sigmoid_bias_from_prob,load_checkpoint
+from src.utils.models import count_parameters_by_layer, sigmoid_bias_from_prob,load_model
 from src.utils.configs import get_setup
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
@@ -179,6 +178,7 @@ def train_validate_test(gpu, args):
         paths_list=config['dataset_paths_list'],
         config=config,
         logger=logger,
+        require_train_label_idxs=params['GRID_SAMPLER'],
         label_tokenizer=label_tokenizer,
         label_encoder=label_encoder,
         vocabularies=vocabularies,
@@ -211,6 +211,7 @@ def train_validate_test(gpu, args):
         label_sample_sizes=label_sample_sizes,
         shuffle_labels=params['SHUFFLE_LABELS'],
         in_batch_sampling=params['IN_BATCH_SAMPLING'],
+        grid_sampler=params['GRID_SAMPLER'],
         num_workers=params["NUM_WORKERS"],
         world_size=args.world_size,
         rank=rank,
@@ -257,6 +258,7 @@ def train_validate_test(gpu, args):
         protein_embedding_dim=params["PROTEIN_EMBEDDING_DIM"],
         label_embedding_dim=params["LABEL_EMBEDDING_DIM"],
         latent_dim=params["LATENT_EMBEDDING_DIM"],
+        label_embedding_pooling_method=params["LABEL_EMBEDDING_POOLING_METHOD"],
 
         # Encoders
         label_encoder=label_encoder,
@@ -268,6 +270,7 @@ def train_validate_test(gpu, args):
         output_neuron_bias=sigmoid_bias_from_prob(params["OUTPUT_NEURON_PROBABILITY_BIAS"]) if params["OUTPUT_NEURON_PROBABILITY_BIAS"] is not None else None,
         outout_mlp_add_batchnorm=params["OUTPUT_MLP_BATCHNORM"],
         projection_head_num_layers=params["PROJECTION_HEAD_NUM_LAYERS"],
+        projection_head_hidden_dim_scale_factor=params["PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR"],
 
         # Training options
         label_encoder_num_trainable_layers=params["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"],
@@ -378,7 +381,7 @@ def train_validate_test(gpu, args):
             val_loader=loaders["validation"][0],
             train_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*",
                                                                              threshold=0.5,
-                                                                        num_labels=label_sample_sizes["train"] if params['IN_BATCH_SAMPLING'] is False else None
+                                                                        num_labels=label_sample_sizes["train"] if (params['IN_BATCH_SAMPLING'] or params['GRID_SAMPLER']) is False else None
                                                                         ),
             val_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*", threshold=0.5,
                                                                 num_labels=label_sample_sizes["validation"]

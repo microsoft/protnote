@@ -5,28 +5,35 @@ params:
   ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET VS. SANDBOX A100 ##############
   ## A100 ###
   # Batch sizes
-  TRAIN_BATCH_SIZE: 32 # 256 for A100
-  VALIDATION_BATCH_SIZE: 64 # 256 for A100
-  TEST_BATCH_SIZE: 64 # 16 for A100
-  # Sampling
-  IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
-  TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. If training label encoder, must be 100. Set to Null to turn off sampling
-  VALIDATION_LABEL_SAMPLE_SIZE: null # 15K for both. Set to Null to turn off sampling
-  # Inference
-  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 100 # 1500 for A100
-  SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 128 # 128 for A100 (TO BE VERIFIED)
+  # TRAIN_BATCH_SIZE: 4 # 256 for A100
+  # VALIDATION_BATCH_SIZE: 4 # 256 for A100
+  # TEST_BATCH_SIZE: 4 # 16 for A100
+  # # Label Sampling: can only use one of grid sampler, in batch sampling or normal label sampling
+  # GRID_SAMPLER: False
+  
+  # IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
+  
+  # TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. If training label encoder, must be 100. Set to Null to turn off sampling
+  # VALIDATION_LABEL_SAMPLE_SIZE: null # 15K for both. Set to Null to turn off sampling
+  # # Inference
+  # LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 1500 # 1500 for A100
+  # SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 128 # 128 for A100 (TO BE VERIFIED)
 
   ### V100 ###
   # Batch sizes
-  # TRAIN_BATCH_SIZE: 64 # 64 for V100
-  # VALIDATION_BATCH_SIZE: 4 # 64 for V100
-  # TEST_BATCH_SIZE: 4 # 4 for V100
-  # # Sampling
-  # TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both
-  # VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
-  # # Inference
-  # LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 750 # 1K for V100
-  # SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 
+  TRAIN_BATCH_SIZE: 4 # 64 for V100
+  VALIDATION_BATCH_SIZE: 64 # 64 for V100
+  TEST_BATCH_SIZE: 64 # 4 for V100
+  # Sampling
+  GRID_SAMPLER: False
+
+  IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
+
+  TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both
+  VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
+  # Inference
+  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 500 # 1K for V100
+  SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 
 
   ############## PARAMS DO NOT NEED TO VARY BETWEEN VIRTUAL MACHINES ##############
   # General
@@ -35,22 +42,23 @@ params:
   PROTEIN_EMBEDDING_DIM: 1100
   LABEL_EMBEDDING_DIM: 1024
   LATENT_EMBEDDING_DIM: 1024
-  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 1 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
+  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 2 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
   OUTPUT_MLP_NUM_LAYERS: 2
   OUTPUT_NEURON_PROBABILITY_BIAS: null
   OUTPUT_MLP_BATCHNORM: True
-  PROJECTION_HEAD_NUM_LAYERS: 1
-  FEATURE_FUSION: concatenation
-  LABEL_EMBEDDING_POOLING_METHOD: 'last_token' #select from mean, last_token, all
+  PROJECTION_HEAD_NUM_LAYERS: 2
+  PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 1
+  FEATURE_FUSION: concatenation #concatenation or similarity
+  LABEL_EMBEDDING_POOLING_METHOD: 'mean' #select from mean, last_token, all
   OPTIMIZATION_METRIC_NAME: map_micro # Only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
-  NUM_EPOCHS: 15
+  NUM_EPOCHS: 50
 
   # Memory optimizations
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
   GRADIENT_CHECKPOINTING: False # True = gradient checkpointing
-  LORA: True # True = use LORA
-  LORA_RANK: 8
+  LORA: False # True = use LORA
+  LORA_RANK: 4
   CLIP_VALUE: 1 # Gradient clipping, set to "null" to turn off
 
   # Losses. Only the parameters for selected loss will be used
@@ -63,7 +71,7 @@ params:
 
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False
-  LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 1
+  LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 0
   DISTRIBUTE_LABELS: False
   TRAIN_PROJECTION_HEAD: True
   LABEL_ENCODER_CHECKPOINT: microsoft/biogpt
@@ -82,7 +90,7 @@ params:
   TRAIN_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
   VALIDATION_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
   TEST_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
-  SHUFFLE_LABELS: True # Only has an effect if sample sizes are set. If False, simply select same labels in order
+  SHUFFLE_LABELS: False # Only has an effect if sample sizes are set and not using grid sampler. If False, simply select same labels in order
 
 # Constants for protein encoder model (e.g. ProteInfer). Not really params since 
 # we are not going to change these.
