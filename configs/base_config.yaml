@@ -22,13 +22,13 @@ params:
   ### V100 ###
   # Batch sizes
   TRAIN_BATCH_SIZE: 4 # 64 for V100
-  VALIDATION_BATCH_SIZE: 64 # 64 for V100
-  TEST_BATCH_SIZE: 64 # 4 for V100
+  VALIDATION_BATCH_SIZE: 4 # 64 for V100
+  TEST_BATCH_SIZE: 4 # 4 for V100
   # Sampling
   GRID_SAMPLER: False
   IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
   WEIGHTED_SAMPLING: False #Sample rare sequences more often as dictaded by inverse frequency of labels
-  TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both
+  TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. IS ALSO USED WITH GRID SAMPLER
   VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
   # Inference
   LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 500 # 1K for V100
@@ -70,7 +70,6 @@ params:
 
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False
-  LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 0
   LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 0
   DISTRIBUTE_LABELS: False
   TRAIN_PROJECTION_HEAD: True

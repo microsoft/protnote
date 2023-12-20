@@ -2,12 +2,14 @@ import random
 from itertools import product
 import numpy as np
 from torch.utils.data import BatchSampler
-
-from torch.utils.data import Sampler
+from torch.utils.data import Sampler, WeightedRandomSampler
 from typing import Optional
 import math
 import torch
 from torch.utils.data.distributed import DistributedSampler
+import torch.distributed as dist
+import math
+from torch.utils.data import Dataset
 
 class GeneralDistributedSampler(DistributedSampler):
 
@@ -50,7 +52,54 @@ class GeneralDistributedSampler(DistributedSampler):
         indices = indices[self.rank:self.total_size:self.num_replicas]
         assert len(indices) == self.num_samples
         return iter(indices)
+    
+class DistributedWeightedSampler(Sampler):
+    def __init__(self, weights, world_size=None, rank=None, replacement=True):
+        # Get the world size and rank if not provided
+        if world_size is None:
+            if not dist.is_available():
+                raise RuntimeError("Requires distributed package to be available")
+            world_size = dist.get_world_size()
+        if rank is None:
+            rank = dist.get_rank()
+
+        self.weights = weights
+        self.world_size = world_size
+        self.rank = rank
+        self.epoch = 0
+        self.replacement = replacement
+
+        # Determine the number of samples for each GPU, rounding down to ensure it is evenly divisible
+        self.num_samples = int(math.floor(len(self.weights) * 1.0 / self.world_size))
         
+        # Determine the total number of samples
+        self.total_size = self.num_samples * self.world_size
+
+    def __iter__(self):
+        # Shuffle based on the epoch
+        g = torch.Generator()
+        g.manual_seed(self.epoch)
+        
+        # Create a weighted sample for the entire dataset
+        if self.replacement:
+            indices = torch.multinomial(self.weights, self.total_size, replacement=True, generator=g)
+        else:
+            assert len(self.weights) > self.total_size, "When sampling without replacement, number of samples to draw must be less than the number of elements in the dataset"
+            indices = torch.multinomial(self.weights, self.total_size, replacement=False, generator=g)
+
+        # Subsample for the current process
+        indices_for_one_gpu = indices[self.rank:self.total_size:self.world_size]
+        
+        # Shuffle each epoch
+        indices_for_one_gpu = indices_for_one_gpu[torch.randperm(len(indices_for_one_gpu), generator=g)].tolist()
+            
+        return iter(indices_for_one_gpu)
+
+    def __len__(self):
+        return self.num_samples
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
 
 class GridBatchSampler(BatchSampler):
 
@@ -140,3 +189,46 @@ class GridBatchSampler(BatchSampler):
                 batches.append(batch[:idx_in_batch])
         return batches
 
+def observation_sampler_factory(
+    distribute_labels:bool,
+    weighted_sampling:bool,
+    dataset: Dataset = None,
+    world_size: int = 1,
+    rank: int = 0,
+    sequence_weights: torch.Tensor = None
+
+    ):
+
+    if not distribute_labels and world_size == 1 and weighted_sampling:
+        # If NOT distributing labels, and not training on multiple GPU's, create a non-distributed weighted sampler with replacement
+        assert sequence_weights is not None, "Weighted RandomSampler requires weights"
+
+        sampler = WeightedRandomSampler(
+            sequence_weights, 
+            len(sequence_weights), 
+            replacement=True
+        )
+    elif not distribute_labels and world_size > 1 and weighted_sampling:
+        # If distributing sequences across multiple GPUs with a weighted sampler, create custom DistributedWeightedSampler
+        sampler = DistributedWeightedSampler(
+            sequence_weights,
+            world_size=world_size,
+            rank=rank,
+            replacement=True,
+        )
+    elif not distribute_labels and not weighted_sampling:
+        # If simply distributing sequences across GPU's without weighted sampling, use a distributed sampler
+
+        assert dataset is not None, "DistributeSampler requires dataset"
+
+        sampler = DistributedSampler(
+            dataset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=True
+        )
+    else:
+        # Raise error
+        raise ValueError("Invalid combination of WEIGHTED_SAMPLING, WORLD_SIZE, and DISTRIBUTE_LABELS parameters")
+    
+    return sampler

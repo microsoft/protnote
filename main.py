@@ -208,10 +208,12 @@ def train_validate_test(gpu, args):
     sequence_weights = None
     if params["WEIGHTED_SAMPLING"]:
         logger.info("Calculating sequence weights for weighted sampling...")
-        sequence_weights = calculate_sequence_weights(datasets["train"][0].data, calculate_label_weights(datasets["train"][0].data))
+        sequence_weights = calculate_sequence_weights(datasets["train"][0].data,
+                                                      calculate_label_weights(datasets["train"][0].data))
+        
         # Set all weights below 0.5 to 0.5 and all weights above 50 to 50
         # TODO: Make this clamping scheme a hyperparameter we can tune
-        sequence_weights = [min(max(x, 0.5), 50) for x in sequence_weights]
+        sequence_weights = torch.tensor([min(max(x, 0.5), 50) for x in sequence_weights])
 
     # Define data loaders
     loaders = create_multiple_loaders(
