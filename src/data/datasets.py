@@ -397,23 +397,26 @@ def create_multiple_loaders(
 
         for dataset in dataset_list:
             if dataset_type == "train":
-                if not params["DISTRIBUTE_LABELS"] and params["WEIGHTED_SAMPLING"]:
-                    # If NOT distributing labels, but using weighted sampling, create a non-distributed weighted sampler
+                if params["DISTRIBUTE_LABELS"] and not params["WEIGHTED_SAMPLING"]:
+                    # If distributing labels across GPU's (vs. distributing sequences across GPU's), then do not use a sequence sampler
+                    sampler = None
+                elif not params["DISTRIBUTE_LABELS"] and world_size == 1 and params["WEIGHTED_SAMPLING"]:
+                    # If NOT distributing labels, and not training on multiple GPU's, create a non-distributed weighted sampler with replacement
                     sampler = WeightedRandomSampler(
                         sequence_weights, 
                         len(sequence_weights), 
                         replacement=True
                     )
-                elif params["DISTRIBUTE_LABELS"] and params["WEIGHTED_SAMPLING"]:
-                    # If distributing labels and using weighted sampling, create a distributed weighted sampler
+                elif not params["DISTRIBUTE_LABELS"] and world_size > 1 and params["WEIGHTED_SAMPLING"]:
+                    # If distributing sequences across multiple GPUs with a weighted sampler, create custom DistributedWeightedSampler
                     sampler = DistributedWeightedSampler(
-                        dataset,
                         sequence_weights,
-                        num_replicas=world_size,
+                        world_size=world_size,
                         rank=rank,
                         replacement=True,
                     )
-                elif params["DISTRIBUTE_LABELS"] and not params["WEIGHTED_SAMPLING"]:
+                elif not params["DISTRIBUTE_LABELS"] and not params["WEIGHTED_SAMPLING"]:
+                    # If simply distributing sequences across GPU's without weighted sampling, use a distributed sampler
                     sampler = DistributedSampler(
                         dataset,
                         num_replicas=world_size,
@@ -422,8 +425,9 @@ def create_multiple_loaders(
                     )
                 else:
                     # Raise error
-                    raise ValueError("Invalid combination of WEIGHTED_SAMPLING and DISTRIBUTE_LABELS parameters")
+                    raise ValueError("Invalid combination of WEIGHTED_SAMPLING, WORLD_SIZE, and DISTRIBUTE_LABELS parameters")
             else:
+                # No sampling in validation and test sets
                 sampler = None
                 
             loader = DataLoader(
@@ -449,23 +453,26 @@ def create_multiple_loaders(
     return loaders
 
 class DistributedWeightedSampler(Sampler):
-    def __init__(self, dataset, weights, num_replicas=None, rank=None, replacement=True):
-        if num_replicas is None:
+    def __init__(self, weights, world_size=None, rank=None, replacement=True):
+        # Get the world size and rank if not provided
+        if world_size is None:
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
-            num_replicas = dist.get_world_size()
+            world_size = dist.get_world_size()
         if rank is None:
             rank = dist.get_rank()
 
-        self.dataset = dataset
         self.weights = weights
-        self.num_replicas = num_replicas
+        self.world_size = world_size
         self.rank = rank
         self.epoch = 0
         self.replacement = replacement
 
-        self.num_samples = int(math.ceil(len(self.dataset) * 1.0 / self.num_replicas))
-        self.total_size = self.num_samples * self.num_replicas
+        # Determine the number of samples for each GPU, rounding down to ensure it is evenly divisible
+        self.num_samples = int(math.floor(len(self.weights) * 1.0 / self.world_size))
+        
+        # Determine the total number of samples
+        self.total_size = self.num_samples * self.world_size
 
     def __iter__(self):
         # Shuffle based on the epoch
@@ -474,17 +481,18 @@ class DistributedWeightedSampler(Sampler):
         
         # Create a weighted sample for the entire dataset
         if self.replacement:
-            indices = torch.multinomial(self.weights, self.total_size, replacement=True)
+            indices = torch.multinomial(self.weights, self.total_size, replacement=True, generator=g)
         else:
-            indices = torch.multinomial(self.weights, len(self.weights), replacement=False)
+            assert len(self.weights) > self.total_size, "When sampling without replacement, number of samples to draw must be less than the number of elements in the dataset"
+            indices = torch.multinomial(self.weights, self.total_size, replacement=False, generator=g)
 
         # Subsample for the current process
-        indices = indices[self.rank:self.total_size:self.num_replicas]
+        indices_for_one_gpu = indices[self.rank:self.total_size:self.world_size]
         
         # Shuffle each epoch
-        indices = torch.randperm(len(indices), generator=g).tolist()
+        indices_for_one_gpu = indices_for_one_gpu[torch.randperm(len(indices_for_one_gpu), generator=g)].tolist()
             
-        return iter(indices.tolist())
+        return iter(indices_for_one_gpu)
 
     def __len__(self):
         return self.num_samples

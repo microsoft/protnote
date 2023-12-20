@@ -187,15 +187,12 @@ def get_label_embeddings(tokenized_labels, model, method, batch_size_limit=1000,
 
         all_label_embeddings = []
         for idx,batch in enumerate(dataloader):
-            print(idx)
             input_ids, attention_mask = batch
             with autocast():
                 last_hidden_states = model(
                     input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
             sequence_embeddings = pool_embeddings(
                 last_hidden_states, attention_mask,method)
-            
-            print(sequence_embeddings.shape)
             
             all_label_embeddings.append(sequence_embeddings.cpu() if append_in_cpu else sequence_embeddings)
 

@@ -14,7 +14,7 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from transformers import BatchEncoding
 from src.utils.models import generate_label_embeddings_from_text, biogpt_train_last_n_layers
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC
 from torch.utils.tensorboard import SummaryWriter
 
@@ -385,7 +385,7 @@ class ProTCLTrainer:
         mAP_macro = MultilabelAUPRC(device='cpu',num_labels=len(self.vocabularies["GO_label_vocab"]))
 
         with torch.no_grad():
-            for batch in tqdm(data_loader,total=len(data_loader)):
+            for batch in tqdm(data_loader,total=len(data_loader), position=0, leave=True):
                 loss, logits, labels, sequence_ids = self.evaluation_step(
                     batch=batch)
                 if eval_metrics is not None:
@@ -459,8 +459,7 @@ class ProTCLTrainer:
         eval_metrics.reset()
         
         ####### TRAINING LOOP #######
-        for batch_idx, batch in enumerate(train_loader):
-            
+        for batch_idx, batch in tqdm(enumerate(train_loader), total=len(train_loader), position=0, leave=True):
             self.training_step += 1
 
             # Unpack the training batch
@@ -496,7 +495,6 @@ class ProTCLTrainer:
         
             # Backward pass with mixed precision
             self.scaler.scale(loss).backward()
-        
 
             # Gradient accumulation every GRADIENT_ACCUMULATION_STEPS
             if (self.training_step % self.gradient_accumulation_steps == 0) or (batch_idx + 1 == len(train_loader)):     
@@ -511,7 +509,7 @@ class ProTCLTrainer:
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
 
-                #Log at this point to TB to have weights and gradients after a full epoch
+                # Log at this point to TB to have weights and gradients after a full epoch
                 if (batch_idx + 1 == len(train_loader)) & self.is_master:
                     for name, weight in self.model.module.named_parameters():
                         if weight.requires_grad:

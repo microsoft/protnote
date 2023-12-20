@@ -5,15 +5,18 @@ params:
   ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET V100 VS. SANDBOX A100 VS. T4 ##############
   ## A100 ###
   # Batch sizes
-  TRAIN_BATCH_SIZE: 32 # 256 for A100
-  VALIDATION_BATCH_SIZE: 64 # 256 for A100
-  TEST_BATCH_SIZE: 64 # 16 for A100
+  TRAIN_BATCH_SIZE: 4 # 32 for A100, 4 for V100
+  VALIDATION_BATCH_SIZE: 8 # 64 for A100, 8 for V100
+  TEST_BATCH_SIZE: 8 # 64 for A100, 8 for V100
+
   # Sampling
-  IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
+  IN_BATCH_SAMPLING: False # Use either in batch sampling or label samples, not both.
+  WEIGHTED_SAMPLING: False
   TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. If training label encoder, must be 100. Set to Null to turn off sampling
   VALIDATION_LABEL_SAMPLE_SIZE: null # 15K for both. Set to Null to turn off sampling
+
   # Inference
-  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 100 # 1500 for A100
+  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 128 # 1500 for A100
   SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 128 # 128 for A100 (TO BE VERIFIED)
 
   ### V100 ###
@@ -35,21 +38,21 @@ params:
   PROTEIN_EMBEDDING_DIM: 1100
   LABEL_EMBEDDING_DIM: 1024
   LATENT_EMBEDDING_DIM: 1024
-  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 1 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
+  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 2 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
   OUTPUT_MLP_NUM_LAYERS: 2
   OUTPUT_NEURON_PROBABILITY_BIAS: null
   OUTPUT_MLP_BATCHNORM: True
-  PROJECTION_HEAD_NUM_LAYERS: 1
+  PROJECTION_HEAD_NUM_LAYERS: 2
   FEATURE_FUSION: concatenation
-  LABEL_EMBEDDING_POOLING_METHOD: 'last_token' #select from mean, last_token, all
+  LABEL_EMBEDDING_POOLING_METHOD: 'mean' # select from mean, last_token, all
   OPTIMIZATION_METRIC_NAME: map_micro # Only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
-  NUM_EPOCHS: 15
+  NUM_EPOCHS: 32
 
   # Memory optimizations
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
   GRADIENT_CHECKPOINTING: False # True = gradient checkpointing
-  LORA: True # True = use LORA
+  LORA: False # True = use LORA
   LORA_RANK: 8
   CLIP_VALUE: 1 # Gradient clipping, set to "null" to turn off
 
@@ -63,7 +66,7 @@ params:
 
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False
-  LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 1
+  LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 0
   DISTRIBUTE_LABELS: False
   TRAIN_PROJECTION_HEAD: True
   LABEL_ENCODER_CHECKPOINT: microsoft/biogpt
@@ -71,12 +74,11 @@ params:
   # Data processing and metrics
   DEDUPLICATE: True
   NORMALIZE_PROBABILITIES: False
-  WEIGHTED_SAMPLING: True
 
   # Constants
   SEED: 42
   VALIDATIONS_PER_EPOCH: 1 #TODO: This really is epochs per validation
-  NUM_WORKERS: 4
+  NUM_WORKERS: 3
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
 
   # Subset fractions (for rapid prototyping; set to 1 for final model)

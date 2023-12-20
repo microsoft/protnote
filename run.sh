@@ -5,13 +5,12 @@
 
 # Load previous best model to continue training
 python main.py \
-    --name 'Train Label Encoder A100 LORA' \
+    --name 'Weighted Sampling 100 Epochs' \
     --full-path-name FULL_DATA_PATH \
     --train-path-name TRAIN_DATA_PATH \
     --validation-path-name VAL_DATA_PATH \
     --test-paths-names TEST_DATA_PATH \
-    --use-wandb 
-
+    --use-wandb
 
 # Optimize gradient clipping norm
 # python main.py \

@@ -207,7 +207,11 @@ def train_validate_test(gpu, args):
     # Calculate the weighting for the train dataset
     sequence_weights = None
     if params["WEIGHTED_SAMPLING"]:
+        logger.info("Calculating sequence weights for weighted sampling...")
         sequence_weights = calculate_sequence_weights(datasets["train"][0].data, calculate_label_weights(datasets["train"][0].data))
+        # Set all weights below 0.5 to 0.5 and all weights above 50 to 50
+        # TODO: Make this clamping scheme a hyperparameter we can tune
+        sequence_weights = [min(max(x, 0.5), 50) for x in sequence_weights]
 
     # Define data loaders
     loaders = create_multiple_loaders(
@@ -250,6 +254,8 @@ def train_validate_test(gpu, args):
             logger,
         )
         sequence_encoder = sequence_encoder.to('cpu')
+        
+    # Generate all label embeddings upfront, if not training the label encoder
 
     # Loop through all the datasets and set the sequence embedding df
     for dataset in datasets.values():
@@ -468,14 +474,14 @@ def train_validate_test(gpu, args):
         f"\n{'='*100}\nTraining, validating, and testing COMPLETE\n{'='*100}\n")
     # W&B and MLFlow
     if is_master:
-        #Log test metrics
+        # Log test metrics
         if args.test_paths_names:
             if args.use_wandb:
                 wandb.log(all_test_metrics)
             if args.amlt:
                 mlflow.log_metrics(all_test_metrics)
         
-        #Log val metrics
+        # Log val metrics
         if args.validation_path_name:
             if args.use_wandb:
                 wandb.log(validation_metrics)
