@@ -12,10 +12,13 @@ def apply_lora_biogpt_attention(layer,rank,device,in_features= 1024, out_feature
         in_features, out_features, r=rank)  
     layer.self_attn.v_proj = lora.Linear(
         in_features, out_features, r=rank)
+    '''
     layer.self_attn.k_proj = lora.Linear(
         in_features, out_features, r=rank)
     layer.self_attn.out_proj = lora.Linear(
         in_features, out_features, r=rank)
+    '''
+
     layer=layer.to(device)
     
 def biogpt_train_last_n_layers(model,n,lora_params=None):
@@ -164,16 +167,18 @@ def get_label_embeddings(tokenized_labels, model, method, batch_size_limit=1000,
     Assumes that tokenized_labels and model are on the same device, ideally GPU.
     """
     total_labels = tokenized_labels["input_ids"].shape[0]
+    
 
     if total_labels <= batch_size_limit:
         with autocast():
-            last_hidden_states = model(
+            sequence_embeddings = model(
                 input_ids=tokenized_labels["input_ids"],
                 attention_mask=tokenized_labels["attention_mask"]
             ).last_hidden_state
         sequence_embeddings = pool_embeddings(
-            last_hidden_states, tokenized_labels["attention_mask"],method)
-        del last_hidden_states
+            sequence_embeddings, tokenized_labels["attention_mask"],method)
+        
+        
         return sequence_embeddings
 
     else:
@@ -189,16 +194,14 @@ def get_label_embeddings(tokenized_labels, model, method, batch_size_limit=1000,
         for idx,batch in enumerate(dataloader):
             input_ids, attention_mask = batch
             with autocast():
-                last_hidden_states = model(
+                sequence_embeddings = model(
                     input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
             sequence_embeddings = pool_embeddings(
-                last_hidden_states, attention_mask,method)
-            
+                sequence_embeddings, attention_mask,method)
+                        
             all_label_embeddings.append(sequence_embeddings.cpu() if append_in_cpu else sequence_embeddings)
 
-            del last_hidden_states, sequence_embeddings
-
-        
+            del sequence_embeddings
         # Concatenate all the label embeddings
         return torch.cat(all_label_embeddings, dim=0)
 
@@ -221,6 +224,19 @@ def sigmoid_bias_from_prob(prior_prob):
     return -np.log((1 - prior_prob) / prior_prob)
 
 
+def print_checkpoint(checkpoint):
+    '''
+    For debugging
+    '''
+    
+    print("weights_sum",sum([i.sum() for i in checkpoint['model_state_dict'].values()]))
+    print('epoch',checkpoint['epoch'])
+    print('best_val_metric',checkpoint['best_val_metric'])
+
+    max_step = max(checkpoint['optimizer_state_dict']['state'].keys())
+    print('optimizer param groups',checkpoint['optimizer_state_dict']['param_groups'])
+    print('optimizer max step',checkpoint['optimizer_state_dict']['state'][max_step])
+
 def save_checkpoint(model, optimizer, epoch, best_val_metric, model_path):
     """
     Save model and optimizer states as a checkpoint.
@@ -238,8 +254,56 @@ def save_checkpoint(model, optimizer, epoch, best_val_metric, model_path):
         'best_val_metric': best_val_metric,
     }
 
+
     torch.save(checkpoint, model_path)
 
+def load_model(trainer, checkpoint_path, from_checkpoint=False):
+    """
+    Load the model's state from a given checkpoint.
+
+    This function is designed to handle checkpoints from both Data Distributed Parallel (DDP) wrapped 
+    and non-DDP models. If the checkpoint originates from a DDP-wrapped model, the function will adjust 
+    the state dictionary keys accordingly before loading.
+
+    Parameters:
+    - trainer (object): An instance of the trainer containing the model, optimizer, and other training attributes.
+    - checkpoint_path (str): The path to the checkpoint file to be loaded.
+    - from_checkpoint (bool, optional): If True, the function will also load the optimizer's state, 
+      epoch number, and best validation metric from the checkpoint. Defaults to False.
+
+    Note:
+    The function assumes that the model in the trainer object is DDP-wrapped.
+    """
+
+    # Load the entire checkpoint
+    checkpoint = torch.load(checkpoint_path)
+    
+    # Extract the state_dict from the checkpoint
+    state_dict = checkpoint['model_state_dict']
+
+    # Check if the state_dict is from a DDP-wrapped model
+    if list(state_dict.keys())[0].startswith('module.'):
+        # Remove the "module." prefix
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            name = k[7:]  # remove 'module.' prefix
+            new_state_dict[name] = v
+        state_dict = new_state_dict
+
+    # Load the state_dict into the model
+    trainer.model.module.load_state_dict(state_dict)
+
+    # Load the optimizer state and epoch number if they exist in the checkpoint
+    if 'optimizer_state_dict' in checkpoint and from_checkpoint:
+        trainer.optimizer.load_state_dict(
+            checkpoint['optimizer_state_dict'])
+    if 'epoch' in checkpoint and from_checkpoint:
+        trainer.epoch = checkpoint['epoch']
+    if 'best_val_metric' in checkpoint and from_checkpoint:
+        trainer.best_val_metric = checkpoint['best_val_metric']
+
+    # Delete the checkpoint to save memory
+    del checkpoint
 
 def load_checkpoint(trainer, checkpoint_path):
     """
@@ -277,3 +341,5 @@ def load_checkpoint(trainer, checkpoint_path):
         trainer.epoch = checkpoint['epoch']
     if 'best_val_metric' in checkpoint:
         trainer.best_val_metric = checkpoint['best_val_metric']
+
+

@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import Dataset, DataLoader, Sampler, WeightedRandomSampler
+from torch.utils.data import Dataset, DataLoader
 from src.utils.data import read_fasta, read_json, get_vocab_mappings, read_pickle
 from src.utils.models import tokenize_labels, get_label_embeddings
 from typing import Dict
@@ -11,11 +11,8 @@ from collections import defaultdict
 from joblib import Parallel, delayed, cpu_count
 from functools import partial
 from collections import Counter
-from torch.utils.data.distributed import DistributedSampler
 from src.utils.main_utils import get_or_generate_label_embeddings
-import torch.distributed as dist
-import math
-
+from src.data.samplers import GridBatchSampler,observation_sampler_factory
 class ProteinDataset(Dataset):
     """
     Dataset class for protein sequences with GO annotations.
@@ -28,6 +25,7 @@ class ProteinDataset(Dataset):
         label_tokenizer=None,
         label_encoder=None,
         logger=None,
+        require_label_idxs=False,
         subset_fraction: float = 1.0,
         deduplicate: bool = False,
         is_master: bool = True,
@@ -65,6 +63,9 @@ class ProteinDataset(Dataset):
         # Initialize class variables
         self.data = read_fasta(data_paths["data_path"])
         self.label_embedding_matrix = self.sequence_embedding_df = None
+        
+        #Flag to know how Dataset indexing will be handle.
+        self.require_label_idxs = require_label_idxs
 
         # Subset the data if subset_fraction is provided
         if subset_fraction < 1.0:
@@ -163,8 +164,10 @@ class ProteinDataset(Dataset):
     def __len__(self) -> int:
         return len(self.data)
 
-    def process_example(self, sequence: str, labels: list[str]) -> dict:
+    def process_example(self, sequence: str, labels: list[str], label_idxs:list[int] = None) -> dict:
         sequence_id_alphanumeric, labels = labels[0], labels[1:]
+
+        
 
         # Convert the sequence and labels to integers for one-hot encoding
         amino_acid_ints = torch.tensor(
@@ -185,6 +188,9 @@ class ProteinDataset(Dataset):
         label_multihots = torch.nn.functional.one_hot(
             labels_ints, num_classes=len(self.label_vocabulary)
         ).sum(dim=0)
+
+        if label_idxs is not None:
+            label_idxs = torch.tensor(label_idxs)
 
         # Set the label embeddings, if provided
         label_embeddings = self.label_embedding_matrix if self.label_embedding_matrix is not None else None
@@ -208,11 +214,21 @@ class ProteinDataset(Dataset):
             "label_multihots": label_multihots,
             "tokenized_labels": tokenized_labels,
             "label_embeddings": label_embeddings,
+            "label_idxs":label_idxs
         }
 
     def __getitem__(self, idx) -> tuple:
-        sequence, labels = self.data[idx]
-        return self.process_example(sequence, labels)
+        
+        if self.require_label_idxs:
+            sequence_idx,label_idxs = idx[0],idx[1]
+            sequence = self.data[sequence_idx][0]
+            labels = self.data[sequence_idx][1]
+        else:
+            label_idxs=None
+            sequence, labels = self.data[idx]
+        
+
+        return self.process_example(sequence, labels,label_idxs)
 
     @classmethod
     def create_multiple_datasets(
@@ -220,6 +236,7 @@ class ProteinDataset(Dataset):
         paths_list: List[Dict[str, str]],
         config: dict,
         vocabularies: dict,
+        require_train_label_idxs:bool,
         subset_fractions: dict = None,
         label_tokenizer=None,
         label_encoder=None,
@@ -241,13 +258,13 @@ class ProteinDataset(Dataset):
                     label_tokenizer=label_tokenizer,
                     label_encoder=label_encoder,
                     logger=logger,
+                    require_label_idxs=require_train_label_idxs if data_paths["dataset_type"]=='train' else False,
                     subset_fraction=subset_fractions.get(
                         data_paths["dataset_type"], 1.0),
                     deduplicate=deduplicate
                 )
             )
         return datasets
-
 
 def calculate_pos_weight(data: list, num_labels: int):
     def count_labels(chunk):
@@ -372,17 +389,21 @@ def set_padding_to_sentinel(
     return padded_representations
 
 
+
+
+
 def create_multiple_loaders(
     datasets: dict,
     params: dict,
     label_sample_sizes: dict = None,
+    grid_sampler: bool = False,
     shuffle_labels: bool = False,
     in_batch_sampling: bool = False,
     num_workers: int = 2,
     pin_memory: bool = True,
     world_size: int = 1,
     rank: int = 0,
-    sequence_weights: torch.Tensor = None,
+    sequence_weights: torch.Tensor = None
 ) -> List[DataLoader]:
     loaders = defaultdict(list)
     for dataset_type, dataset_list in datasets.items():
@@ -394,42 +415,37 @@ def create_multiple_loaders(
             label_sample_size = label_sample_sizes.get(dataset_type)
 
         in_batch_sampling = in_batch_sampling if dataset_type == 'train' else False
+        grid_sampler = grid_sampler if dataset_type == 'train' else False
 
         for dataset in dataset_list:
+                            
+            batch_sampler = None
+            drop_last = True
+
             if dataset_type == "train":
-                if params["DISTRIBUTE_LABELS"] and not params["WEIGHTED_SAMPLING"]:
-                    # If distributing labels across GPU's (vs. distributing sequences across GPU's), then do not use a sequence sampler
-                    sampler = None
-                elif not params["DISTRIBUTE_LABELS"] and world_size == 1 and params["WEIGHTED_SAMPLING"]:
-                    # If NOT distributing labels, and not training on multiple GPU's, create a non-distributed weighted sampler with replacement
-                    sampler = WeightedRandomSampler(
-                        sequence_weights, 
-                        len(sequence_weights), 
-                        replacement=True
+                sequence_sampler = observation_sampler_factory(
+                    distribute_labels = params["DISTRIBUTE_LABELS"],
+                    weighted_sampling = params["WEIGHTED_SAMPLING"],
+                    dataset = dataset,
+                    world_size = world_size,
+                    rank = rank,
+                    sequence_weights=sequence_weights)
+
+            if grid_sampler:
+                assert label_sample_size is not None,"Provide label_sample_size when using grid sampler"
+                batch_sampler=GridBatchSampler(observation_sampler=sequence_sampler,
+                    observations_batch_size=batch_size_for_type,
+                    drop_last_observation_batch=True,
+                    num_labels=len(dataset.label_vocabulary),
+                    labels_batch_size=label_sample_size,
+                    shuffle_grid=True
                     )
-                elif not params["DISTRIBUTE_LABELS"] and world_size > 1 and params["WEIGHTED_SAMPLING"]:
-                    # If distributing sequences across multiple GPUs with a weighted sampler, create custom DistributedWeightedSampler
-                    sampler = DistributedWeightedSampler(
-                        sequence_weights,
-                        world_size=world_size,
-                        rank=rank,
-                        replacement=True,
-                    )
-                elif not params["DISTRIBUTE_LABELS"] and not params["WEIGHTED_SAMPLING"]:
-                    # If simply distributing sequences across GPU's without weighted sampling, use a distributed sampler
-                    sampler = DistributedSampler(
-                        dataset,
-                        num_replicas=world_size,
-                        rank=rank,
-                        shuffle=True
-                    )
-                else:
-                    # Raise error
-                    raise ValueError("Invalid combination of WEIGHTED_SAMPLING, WORLD_SIZE, and DISTRIBUTE_LABELS parameters")
-            else:
-                # No sampling in validation and test sets
-                sampler = None
-                
+                #When defining a BatchSampler, these paramters are ignored in the Dataloader. Must be set 
+                #To these values to avoid pytorch error.
+                batch_size_for_type = 1
+                sequence_sampler = None
+                drop_last = False
+
             loader = DataLoader(
                 dataset,
                 batch_size=batch_size_for_type,
@@ -437,6 +453,7 @@ def create_multiple_loaders(
                 collate_fn=partial(
                     collate_variable_sequence_length,
                     label_sample_size=label_sample_size,
+                    grid_sampler = grid_sampler,
                     shuffle_labels=shuffle_labels,
                     in_batch_sampling=in_batch_sampling,
                     distribute_labels=params["DISTRIBUTE_LABELS"],
@@ -445,8 +462,9 @@ def create_multiple_loaders(
 
                 num_workers=num_workers,
                 pin_memory=pin_memory,
-                drop_last=True,
-                sampler=sampler,
+                drop_last=drop_last,
+                sampler=sequence_sampler,
+                batch_sampler=batch_sampler
             )
             loaders[dataset_type].append(loader)
 

@@ -1,5 +1,5 @@
 import logging
-from src.utils.data import load_gz_json, log_gpu_memory_usage, save_checkpoint, load_model
+from src.utils.data import load_gz_json, log_gpu_memory_usage
 from src.utils.evaluation import EvalMetrics,metric_collection_to_dict_float,save_evaluation_results
 from src.utils.losses import BatchWeightedBCE, FocalLoss, RGDBCE, WeightedBCE,SupCon, CBLoss
 from torchmetrics import MetricCollection, Metric
@@ -13,7 +13,7 @@ from collections import defaultdict
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from transformers import BatchEncoding
-from src.utils.models import generate_label_embeddings_from_text, biogpt_train_last_n_layers
+from src.utils.models import generate_label_embeddings_from_text, biogpt_train_last_n_layers, save_checkpoint, load_model
 from tqdm.auto import tqdm
 from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC
 from torch.utils.tensorboard import SummaryWriter
@@ -32,7 +32,7 @@ class ProTCLTrainer:
         bce_pos_weight: torch.Tensor = None,
         label_weights: torch.Tensor = None,
         is_master: bool = True,
-        starting_epoch: int = 0,
+        starting_epoch: int = 1,
     ):
         """
         Args:
@@ -44,7 +44,7 @@ class ProTCLTrainer:
             use_wandb (bool, optional): Whether to use Weights & Biases for logging. Defaults to False.
             bce_pos_weight (torch.Tensor, optional): The positive weight for binary cross-entropy loss. Defaults to None.
             is_master (bool, optional): Whether the current process is the master process. Defaults to True.
-            starting_epoch (int, optional): The starting epoch number. Defaults to 0. Used for resuming training.
+            starting_epoch (int, optional): The starting epoch number. Defaults to 1. Used for resuming training.
         """
 
         self.model = model
@@ -484,7 +484,6 @@ class ProTCLTrainer:
                 "label_embeddings": label_embeddings
             }
 
-
             with autocast():
                 logits = self.model(**inputs)
 
@@ -587,7 +586,7 @@ class ProTCLTrainer:
 
         for epoch in range(self.starting_epoch, self.starting_epoch + self.num_epochs):
             self.logger.info(
-                f"Starting epoch {epoch+1}/{self.starting_epoch + self.num_epochs}...")
+                f"Starting epoch {epoch}/{self.starting_epoch + self.num_epochs - 1}...")
             self.epoch = epoch
 
             # Set distributed loader epoch to shuffle data
@@ -598,7 +597,7 @@ class ProTCLTrainer:
                                                  eval_metrics=train_eval_metrics)
                 
 
-            if ((epoch - self.starting_epoch + 1) % self.validations_per_epoch == 0):
+            if (epoch % self.validations_per_epoch == 0):
                 ####### VALIDATION LOOP #######
                 torch.cuda.empty_cache()
 
@@ -613,7 +612,7 @@ class ProTCLTrainer:
                     val_loader.dataset.set_label_embedding_matrix(None)
 
                 self.logger.info(
-                    f"Epoch {epoch+1}/{self.starting_epoch + self.num_epochs}, Batch {self.training_step}, Training Loss: {train_metrics['train_loss']}"
+                    f"Epoch {epoch}/{self.starting_epoch + self.num_epochs - 1}, Batch {self.training_step}, Training Loss: {train_metrics['train_loss']}"
                 )
 
         if self.is_master:
