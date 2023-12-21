@@ -14,7 +14,6 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from transformers import BatchEncoding
 from src.utils.models import generate_label_embeddings_from_text, biogpt_train_last_n_layers, save_checkpoint, load_model
-from tqdm.auto import tqdm
 from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC
 from torch.utils.tensorboard import SummaryWriter
 
@@ -60,7 +59,7 @@ class ProTCLTrainer:
         self.train_projection_head = config["params"]["TRAIN_PROJECTION_HEAD"]
 
         self.normalize_probabilities = config["params"]["NORMALIZE_PROBABILITIES"]
-        self.validations_per_epoch = config["params"]["VALIDATIONS_PER_EPOCH"]
+        self.EPOCHS_PER_VALIDATION = config["params"]["EPOCHS_PER_VALIDATION"]
         self.gradient_accumulation_steps = config["params"]["GRADIENT_ACCUMULATION_STEPS"]
         self.clip_value = config["params"]["CLIP_VALUE"]
         self.vocabularies = vocabularies
@@ -458,7 +457,7 @@ class ProTCLTrainer:
         eval_metrics.reset()
         
         ####### TRAINING LOOP #######
-        for batch_idx, batch in tqdm(enumerate(train_loader), total=len(train_loader), position=0, leave=True):
+        for batch_idx, batch in enumerate(train_loader):
             self.training_step += 1
 
             # Unpack the training batch
@@ -597,7 +596,7 @@ class ProTCLTrainer:
                                                  eval_metrics=train_eval_metrics)
                 
 
-            if (epoch % self.validations_per_epoch == 0):
+            if (epoch % self.EPOCHS_PER_VALIDATION == 0):
                 ####### VALIDATION LOOP #######
                 torch.cuda.empty_cache()
 

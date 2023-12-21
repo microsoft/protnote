@@ -27,7 +27,7 @@ params:
   # Sampling
   GRID_SAMPLER: False
   IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
-  WEIGHTED_SAMPLING: False #Sample rare sequences more often as dictaded by inverse frequency of labels
+  WEIGHTED_SAMPLING: True # Sample rare sequences more often as dictaded by inverse frequency of labels
   TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. IS ALSO USED WITH GRID SAMPLER
   VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
   # Inference
@@ -41,13 +41,13 @@ params:
   PROTEIN_EMBEDDING_DIM: 1100
   LABEL_EMBEDDING_DIM: 1024
   LATENT_EMBEDDING_DIM: 1024
-  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 3 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
-  OUTPUT_MLP_NUM_LAYERS: 4
+  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 2 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
+  OUTPUT_MLP_NUM_LAYERS: 2
   OUTPUT_NEURON_PROBABILITY_BIAS: null
   OUTPUT_MLP_BATCHNORM: True
   OUTPUT_MLP_DROPOUT: 0.0
-  PROJECTION_HEAD_NUM_LAYERS: 4
-  PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 2
+  PROJECTION_HEAD_NUM_LAYERS: 2
+  PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 1
   FEATURE_FUSION: concatenation #concatenation or similarity
   LABEL_EMBEDDING_POOLING_METHOD: 'mean' #select from mean, last_token, all
   OPTIMIZATION_METRIC_NAME: map_micro # Only micro metrics are supported if sampling labels in validation
@@ -83,7 +83,7 @@ params:
 
   # Constants
   SEED: 42
-  VALIDATIONS_PER_EPOCH: 1 #TODO: This really is epochs per validation
+  EPOCHS_PER_VALIDATION: 1 # Must be >= 1
   NUM_WORKERS: 3
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
 
