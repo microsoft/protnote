@@ -5,7 +5,7 @@
 
 # Load previous best model to continue training
 python main.py \
-    --name 'Weighted Sampling 100 Epochs' \
+    --name 'Bigger MLP Weighted Sampling 100 Epochs' \
     --full-path-name FULL_DATA_PATH \
     --train-path-name TRAIN_DATA_PATH \
     --validation-path-name VAL_DATA_PATH \

@@ -453,6 +453,14 @@ def create_multiple_loaders(
     return loaders
 
 class DistributedWeightedSampler(Sampler):
+    """
+    A distributed weighted sampler that samples indices from a dataset based on weights.
+    Args:
+        weights (list): A list of weights for each sample in the dataset.
+        world_size (int, optional): The total number of processes in the distributed environment. If not provided, it will be determined automatically using `dist.get_world_size()`. Defaults to None.
+        rank (int, optional): The rank of the current process in the distributed environment. If not provided, it will be determined automatically using `dist.get_rank()`. Defaults to None.
+        replacement (bool, optional): Whether to sample with replacement or without replacement. Defaults to True.
+    """
     def __init__(self, weights, world_size=None, rank=None, replacement=True):
         # Get the world size and rank if not provided
         if world_size is None:
@@ -461,8 +469,8 @@ class DistributedWeightedSampler(Sampler):
             world_size = dist.get_world_size()
         if rank is None:
             rank = dist.get_rank()
-
-        self.weights = weights
+        # Convert weights to a tensor from a list to prepare for torch.multinomial
+        self.weights = torch.tensor(weights)
         self.world_size = world_size
         self.rank = rank
         self.epoch = 0
@@ -491,6 +499,7 @@ class DistributedWeightedSampler(Sampler):
         
         # Shuffle each epoch
         indices_for_one_gpu = indices_for_one_gpu[torch.randperm(len(indices_for_one_gpu), generator=g)].tolist()
+        print(f"Rank {self.rank}. Indices: {indices_for_one_gpu[:20]}")
             
         return iter(indices_for_one_gpu)
 

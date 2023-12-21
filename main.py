@@ -279,6 +279,7 @@ def train_validate_test(gpu, args):
         output_neuron_bias=sigmoid_bias_from_prob(params["OUTPUT_NEURON_PROBABILITY_BIAS"]) if params["OUTPUT_NEURON_PROBABILITY_BIAS"] is not None else None,
         outout_mlp_add_batchnorm=params["OUTPUT_MLP_BATCHNORM"],
         projection_head_num_layers=params["PROJECTION_HEAD_NUM_LAYERS"],
+        output_mlp_dropout=params["OUTPUT_MLP_DROPOUT"],
 
         # Training options
         label_encoder_num_trainable_layers=params["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"],

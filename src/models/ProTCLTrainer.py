@@ -116,7 +116,7 @@ class ProTCLTrainer:
         elif config["params"]["LOSS_FN"] == "FocalLoss":
             assert (config["params"]["FOCAL_LOSS_GAMMA"] is not None)\
                 & (config["params"]["FOCAL_LOSS_ALPHA"] is not None), "gamma and gamma must be provided for FocalLoss"
-            return FocalLoss(gamma=config["params"]["FOCAL_LOSS_GAMMA"], alpha=config["params"]["FOCAL_LOSS_ALPHA"])
+            return FocalLoss(gamma=config["params"]["FOCAL_LOSS_GAMMA"], alpha=config["params"]["FOCAL_LOSS_ALPHA"], label_smoothing=config["params"]["LABEL_SMOOTHING"])
         elif config["params"]["LOSS_FN"] == "RGDBCE":
             return RGDBCE(temp=config["params"]["RGDBCE_TEMP"])
         elif config["params"]["LOSS_FN"] == "SupCon":
@@ -385,9 +385,8 @@ class ProTCLTrainer:
         mAP_macro = MultilabelAUPRC(device='cpu',num_labels=len(self.vocabularies["GO_label_vocab"]))
 
         with torch.no_grad():
-            for batch in tqdm(data_loader,total=len(data_loader), position=0, leave=True):
-                loss, logits, labels, sequence_ids = self.evaluation_step(
-                    batch=batch)
+            for batch in data_loader:
+                loss, logits, labels, sequence_ids = self.evaluation_step(batch=batch)
                 if eval_metrics is not None:
                     # Apply sigmoid to get the probabilities for multi-label classification
                     probabilities = torch.sigmoid(logits)
@@ -534,6 +533,10 @@ class ProTCLTrainer:
                 self.logger.info("+----------------- Train GPU Memory Usage -----------------+")
                 log_gpu_memory_usage(self.logger, 0)
                 self.logger.info("+----------------------------------------------------------+")
+                
+            # Print progress every 10%
+            if batch_idx % (len(train_loader) // 10) == 0:
+                self.logger.info(f"Epoch {self.epoch}: Processed {batch_idx} out of {len(train_loader)} batches ({batch_idx / len(train_loader) * 100:.2f}%).")  
 
         avg_loss = avg_loss/len(train_loader) if len(train_loader)> 0 else avg_loss
         avg_probs_gt_ration = avg_probs/avg_gt

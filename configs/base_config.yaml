@@ -2,7 +2,7 @@
 # Parameters for model training
 # TODO: Optimizer can also be a hyperparameter
 params:
-  ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET V100 VS. SANDBOX A100 VS. T4 ##############
+  ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET V100 VS. SANDBOX A100 ##############
   ## A100 ###
   # Batch sizes
   TRAIN_BATCH_SIZE: 4 # 32 for A100, 4 for V100
@@ -11,7 +11,7 @@ params:
 
   # Sampling
   IN_BATCH_SAMPLING: False # Use either in batch sampling or label samples, not both.
-  WEIGHTED_SAMPLING: False
+  WEIGHTED_SAMPLING: True
   TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. If training label encoder, must be 100. Set to Null to turn off sampling
   VALIDATION_LABEL_SAMPLE_SIZE: null # 15K for both. Set to Null to turn off sampling
 
@@ -42,12 +42,13 @@ params:
   OUTPUT_MLP_NUM_LAYERS: 2
   OUTPUT_NEURON_PROBABILITY_BIAS: null
   OUTPUT_MLP_BATCHNORM: True
+  OUTPUT_MLP_DROPOUT: 0.0
   PROJECTION_HEAD_NUM_LAYERS: 2
   FEATURE_FUSION: concatenation
   LABEL_EMBEDDING_POOLING_METHOD: 'mean' # select from mean, last_token, all
   OPTIMIZATION_METRIC_NAME: map_micro # Only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
-  NUM_EPOCHS: 32
+  NUM_EPOCHS: 15
 
   # Memory optimizations
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
@@ -63,6 +64,7 @@ params:
   BCE_POS_WEIGHT: 1 # 671.7130737304688
   SUPCON_TEMP: 0.07
   RGDBCE_TEMP: 0.12 # search from [1,1/3,1/5,1/7,1/9] according to paper
+  LABEL_SMOOTHING: 0.0 # Currently only implemented for FocalLoss
 
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False

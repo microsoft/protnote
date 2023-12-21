@@ -175,13 +175,22 @@ class BatchLabelWeightedBCE(torch.nn.Module):
         return torch.nn.functional.binary_cross_entropy_with_logits(input, target, weight=weights.unsqueeze(0))
 
 class FocalLoss(torch.nn.Module):
-    def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
+    def __init__(self, alpha=0.25, gamma=2.0, reduction='mean', label_smoothing=0.0):
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
         self.reduction = reduction
+        self.label_smoothing = label_smoothing
+        print("Focal Loss with alpha: {}, gamma: {}, reduction: {}, label_smoothing: {}".format(alpha, gamma, reduction, label_smoothing))
 
     def forward(self, input, target):
+        # Apply label smoothing, if applicable
+        if self.label_smoothing > 0:
+            positive_smoothed_labels = 1.0 - self.label_smoothing
+            negative_smoothed_labels = self.label_smoothing
+            target = target * positive_smoothed_labels + \
+                (1 - target) * negative_smoothed_labels
+
         BCE_loss = torch.nn.BCEWithLogitsLoss(reduction='none')(input, target)
         pt = torch.exp(-BCE_loss)
         loss = ((1-pt)**self.gamma) * BCE_loss
