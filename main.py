@@ -7,6 +7,7 @@ from src.data.datasets import ProteinDataset, calculate_pos_weight, create_multi
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
 from src.models.protein_encoders import ProteInfer
+from src.utils.losses import get_loss
 from src.utils.evaluation import EvalMetrics
 from src.utils.models import count_parameters_by_layer, sigmoid_bias_from_prob,load_model
 from src.utils.configs import get_setup
@@ -345,8 +346,11 @@ def train_validate_test(gpu, args):
             raise ValueError("Must provde training set")
     else:
         label_weights = None
-    
 
+    loss_fn = get_loss(config=config,
+                       bce_pos_weight=bce_pos_weight,
+                       label_weights=label_weights)
+    
     # Initialize trainer class to handle model training, validation, and testing
     Trainer = ProTCLTrainer(
         model=model,
@@ -357,9 +361,8 @@ def train_validate_test(gpu, args):
         timestamp=timestamp,
         run_name=args.name,
         use_wandb=args.use_wandb and is_master,
-        bce_pos_weight=bce_pos_weight,
-        label_weights=label_weights,
-        is_master=is_master,
+        loss_fn=loss_fn,
+        is_master=is_master
     )
 
     # Log the number of parameters by layer

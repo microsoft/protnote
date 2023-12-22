@@ -28,6 +28,7 @@ params:
   GRID_SAMPLER: False
   IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
   WEIGHTED_SAMPLING: False #Sample rare sequences more often as dictaded by inverse frequency of labels
+  INV_FREQUENCY_POWER: #Used for weighted sampling AND relevant losses with weighting
   TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. IS ALSO USED WITH GRID SAMPLER
   VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
   # Inference

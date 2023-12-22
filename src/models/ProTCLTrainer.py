@@ -28,11 +28,10 @@ class ProTCLTrainer:
         logger: logging.Logger,
         timestamp: str,
         run_name: str,
+        loss_fn: torch.nn.Module,
         use_wandb: bool = False,
-        bce_pos_weight: torch.Tensor = None,
-        label_weights: torch.Tensor = None,
         is_master: bool = True,
-        starting_epoch: int = 1,
+        starting_epoch: int = 1
     ):
         """
         Args:
@@ -77,9 +76,7 @@ class ProTCLTrainer:
         self._set_optimizer(opt_name = config["params"]["OPTIMIZER"],
                             lr = config["params"]["LEARNING_RATE"])
         
-        self.bce_pos_weight = bce_pos_weight
-        self.label_weights=label_weights
-        self.loss_fn = self._get_loss_fn(config)
+        self.loss_fn = loss_fn
         self.model_path = self._get_saved_model_path()
         self.best_val_metric = 0.0
         self.scaler = GradScaler()
@@ -100,30 +97,6 @@ class ProTCLTrainer:
             self.output_model_dir, f"{self.timestamp}_{model_name}.pt"
         )
         return model_path
-
-    def _get_loss_fn(self, config):
-        if config["params"]["LOSS_FN"] == "BCE":
-            assert self.bce_pos_weight is not None, "bce_pos_weight must be provided for BCE loss"
-            return torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self.bce_pos_weight)
-        elif (config["params"]["LOSS_FN"] == "WeightedBCE"):
-            assert self.label_weights is not None, "label_weights must be provided for WeightedBCE Loss"
-            return WeightedBCE(label_weights = self.label_weights)
-        elif (config["params"]["LOSS_FN"] == "CBLoss"):
-            assert self.label_weights is not None, "label_weights must be provided for CBLoss"
-            return CBLoss(label_weights = self.label_weights)
-        elif config["params"]["LOSS_FN"] == "BatchWeightedBCE":
-            return BatchWeightedBCE()
-        elif config["params"]["LOSS_FN"] == "FocalLoss":
-            assert (config["params"]["FOCAL_LOSS_GAMMA"] is not None)\
-                & (config["params"]["FOCAL_LOSS_ALPHA"] is not None), "gamma and gamma must be provided for FocalLoss"
-            return FocalLoss(gamma=config["params"]["FOCAL_LOSS_GAMMA"], alpha=config["params"]["FOCAL_LOSS_ALPHA"])
-        elif config["params"]["LOSS_FN"] == "RGDBCE":
-            return RGDBCE(temp=config["params"]["RGDBCE_TEMP"])
-        elif config["params"]["LOSS_FN"] == "SupCon":
-            return SupCon(temperature=config["params"]["SUPCON_TEMP"])
-        else:
-            raise ValueError(
-                f"Unknown loss function {config['params']['LOSS_FN']}")
 
     def _to_device(self, *args):
         processed_args = []

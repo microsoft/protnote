@@ -266,6 +266,7 @@ class ProteinDataset(Dataset):
             )
         return datasets
 
+
 def calculate_pos_weight(data: list, num_labels: int):
     def count_labels(chunk):
         num_positive_labels_chunk = 0
