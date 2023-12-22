@@ -21,15 +21,15 @@ params:
 
   ### V100 ###
   # Batch sizes
-  TRAIN_BATCH_SIZE: 4 # 64 for V100
-  VALIDATION_BATCH_SIZE: 4 # 64 for V100
-  TEST_BATCH_SIZE: 4 # 4 for V100
+  TRAIN_BATCH_SIZE: 32 # 64 for V100
+  VALIDATION_BATCH_SIZE: 32 # 64 for V100
+  TEST_BATCH_SIZE: 32 # 4 for V100
   # Sampling
-  GRID_SAMPLER: False
+  GRID_SAMPLER: True
   IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
   WEIGHTED_SAMPLING: False #Sample rare sequences more often as dictaded by inverse frequency of labels
-  INV_FREQUENCY_POWER: #Used for weighted sampling AND relevant losses with weighting
-  TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. IS ALSO USED WITH GRID SAMPLER
+  INV_FREQUENCY_POWER: 0.3 #Used for weighted sampling AND relevant losses with weighting
+  TRAIN_LABEL_SAMPLE_SIZE: 1000 # 15K for both. IS ALSO USED WITH GRID SAMPLER
   VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
   # Inference
   LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 500 # 1K for V100
@@ -58,12 +58,12 @@ params:
   # Memory optimizations
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
   GRADIENT_CHECKPOINTING: False # True = gradient checkpointing
-  LORA: False # True = use LORA
+  LORA: True # True = use LORA
   LORA_RANK: 4
   CLIP_VALUE: 1 # Gradient clipping, set to "null" to turn off
 
   # Losses. Only the parameters for selected loss will be used
-  LOSS_FN: FocalLoss # Currently supported: BCE, FocalLoss, BatchWeightedBCE, RGDBCE
+  LOSS_FN: FocalLoss # Currently supported: BCE, FocalLoss, BatchWeightedBCE, RGDBCE, WeightedBCE
   FOCAL_LOSS_GAMMA: 2
   FOCAL_LOSS_ALPHA: -1
   BCE_POS_WEIGHT: 1 # 671.7130737304688
@@ -73,7 +73,7 @@ params:
 
   # Sequence and label encoders
   TRAIN_SEQUENCE_ENCODER: False
-  LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 0
+  LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 1
   DISTRIBUTE_LABELS: False
   TRAIN_PROJECTION_HEAD: True
   LABEL_ENCODER_CHECKPOINT: microsoft/biogpt

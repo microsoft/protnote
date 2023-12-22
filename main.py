@@ -3,7 +3,7 @@ from src.utils.data import (
     log_gpu_memory_usage
 )
 from src.utils.main_utils import get_or_generate_vocabularies,  get_or_generate_label_embeddings, get_or_generate_sequence_embeddings, validate_arguments
-from src.data.datasets import ProteinDataset, calculate_pos_weight, create_multiple_loaders, calculate_label_weights, calculate_sequence_weights
+from src.data.datasets import ProteinDataset, create_multiple_loaders, calculate_sequence_weights
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
 from src.models.protein_encoders import ProteInfer
@@ -210,7 +210,8 @@ def train_validate_test(gpu, args):
     if params["WEIGHTED_SAMPLING"]:
         logger.info("Calculating sequence weights for weighted sampling...")
         sequence_weights = calculate_sequence_weights(datasets["train"][0].data,
-                                                      calculate_label_weights(datasets["train"][0].data))
+                                                      datasets["train"][0].calculate_label_weights(power = params["INV_FREQUENCY_POWER"])
+                                                      )
         
         # Set all weights below 0.5 to 0.5 and all weights above 50 to 50
         # TODO: Make this clamping scheme a hyperparameter we can tune
@@ -305,15 +306,9 @@ def train_validate_test(gpu, args):
     # Wrap the model in DDP for distributed computing
     model = DDP(model, device_ids=[gpu], find_unused_parameters=True)
 
-
-
     # Calculate bce_pos_weight based on the training set
     if (params["BCE_POS_WEIGHT"] is None) & (args.train_path_name is not None):
-        logger.info("Calculating bce_pos_weight...")
-        bce_pos_weight = calculate_pos_weight(datasets["train"][0].data,
-                                              len(vocabularies["GO_label_vocab"])
-                                              ).to(device)
-        logger.info(f"Calculated bce_pos_weight= {bce_pos_weight.item()}")
+        bce_pos_weight = datasets["train"][0].calculate_pos_weight().to(device)
     elif (params["BCE_POS_WEIGHT"] is not None):
         bce_pos_weight = torch.tensor(params["BCE_POS_WEIGHT"]).to(device)
     else:
@@ -322,27 +317,20 @@ def train_validate_test(gpu, args):
 
     if (params["LOSS_FN"]=='WeightedBCE'):
         if (args.train_path_name is not None):
-            logger.info("Calculating label weights...")
-            label_weights = calculate_label_weights(datasets["train"][0].data,inv_freq=True)
-            label_weights = {datasets["train"][0].label2int[k]:v for k,v in label_weights.items()}
-            missing_label_weights = {v:0 for v in datasets["train"][0].label2int.values() if v not in label_weights} #needed in case of sampling or labels that don't show up
-            print("# always negative labels:",len(missing_label_weights))
-            label_weights.update(missing_label_weights)
-            label_weights = torch.tensor([value for _, value in sorted(label_weights.items())]).float().to(device)
+            logger.info('calculating WEIGHTED BCE WEIGHTS')
+            label_weights = datasets["train"][0].calculate_label_weights(inv_freq=True,
+                                                                         normalize = True, 
+                                                                         return_list=True,
+                                                                         power = params["INV_FREQUENCY_POWER"]).to(device)
         else:
             raise ValueError("Must provde training set")
-    else:
-        label_weights = None
-
-    if (params["LOSS_FN"]=='CBLoss'):
+        
+    elif (params["LOSS_FN"]=='CBLoss'):
         if (args.train_path_name is not None):
-            logger.info("Calculating label weights...")
-            label_weights = calculate_label_weights(datasets["train"][0].data,inv_freq=False)
-            label_weights = {datasets["train"][0].label2int[k]:v for k,v in label_weights.items()}
-            missing_label_weights = {v:0 for v in datasets["train"][0].label2int.values() if v not in label_weights} #TODO: This should be done by calculate_label_weights. needed in case of sampling or labels that don't show up
-            print("# always negative labels:",len(missing_label_weights))
-            label_weights.update(missing_label_weights)
-            label_weights = torch.tensor([value for _, value in sorted(label_weights.items())]).float().to(device)
+            label_weights = datasets["train"][0].calculate_label_weights(inv_freq=False,
+                                                                         normalize = False,
+                                                                         return_list=True,
+                                                                         power = params["INV_FREQUENCY_POWER"]).to(device)
         else:
             raise ValueError("Must provde training set")
     else:

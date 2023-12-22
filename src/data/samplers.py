@@ -199,7 +199,10 @@ def observation_sampler_factory(
 
     ):
 
-    if not distribute_labels and world_size == 1 and weighted_sampling:
+    if distribute_labels and not weighted_sampling:
+        print("WARNING: No Sampler used for distribute labels")
+        sampler = None
+    elif not distribute_labels and world_size == 1 and weighted_sampling:
         # If NOT distributing labels, and not training on multiple GPU's, create a non-distributed weighted sampler with replacement
         assert sequence_weights is not None, "Weighted RandomSampler requires weights"
 

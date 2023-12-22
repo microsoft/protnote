@@ -357,7 +357,8 @@ class ProTCLTrainer:
         mAP_macro = MultilabelAUPRC(device='cpu',num_labels=len(self.vocabularies["GO_label_vocab"]))
 
         with torch.no_grad():
-            for batch in data_loader:
+            
+            for batch_idx, batch in enumerate(data_loader):
                 loss, logits, labels, sequence_ids = self.evaluation_step(batch=batch)
                 if eval_metrics is not None:
                     # Apply sigmoid to get the probabilities for multi-label classification
@@ -377,6 +378,11 @@ class ProTCLTrainer:
                         test_results["sequence_ids"].append(sequence_ids)
                         test_results["logits"].append(logits.cpu())
                         test_results["labels"].append(labels.cpu())
+
+                # Print progress every 10%
+                if batch_idx % (len(data_loader) // 10) == 0:
+                    self.logger.info(f"Epoch {self.epoch}: Processed {batch_idx} out of {len(data_loader)} batches ({batch_idx / len(data_loader) * 100:.2f}%).")  
+
 
                 # Accumulate loss
                 total_loss += loss
@@ -401,6 +407,7 @@ class ProTCLTrainer:
                                             output_dir=self.config["paths"]["RESULTS_DIR"],
                                             data_split_name=metrics_prefix
                                             )
+                
 
             # Compute average validation loss
             avg_loss = total_loss / len(data_loader)

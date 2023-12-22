@@ -37,6 +37,7 @@ class ProteinDataset(Dataset):
             go_descriptions_path (str): Path to the pickled file containing the GO term descriptions mapped to GO term IDs
         deduplicate (bool): Whether to remove duplicate sequences (default: False)
         """
+        self.logger = logger
         # Error handling: check for missing keys and invalid dataset types
         required_keys = ["data_path", "dataset_type"]
         for key in required_keys:
@@ -265,63 +266,80 @@ class ProteinDataset(Dataset):
                 )
             )
         return datasets
-
-
-def calculate_pos_weight(data: list, num_labels: int):
-    def count_labels(chunk):
-        num_positive_labels_chunk = 0
-        num_negative_labels_chunk = 0
-        for _, labels in chunk:
-            labels = labels[1:]
-            num_positive = len(labels)
-            num_positive_labels_chunk += num_positive
-            num_negative_labels_chunk += num_labels - num_positive
-        return num_positive_labels_chunk, num_negative_labels_chunk
-
-    chunk_size = len(data) // cpu_count()  # Adjust chunk size if necessary.
-
-    results = Parallel(n_jobs=-1)(
-        delayed(count_labels)(data[i:i+chunk_size]) for i in range(0, len(data), chunk_size)
-    )
-
-    num_positive_labels = sum(res[0] for res in results)
-    num_negative_labels = sum(res[1] for res in results)
-    pos_weight = torch.tensor((num_negative_labels / num_positive_labels))
-    return pos_weight
-
-
-def calculate_label_weights(data: list, inv_freq= True,power=0.3, normalize = True):
-    def count_labels(chunk):
-        label_freq = Counter()
-        for _, labels in chunk:
-            labels = labels[1:]
-            label_freq.update(labels)
-        return label_freq
-
-    # Adjust chunk size if necessary.
-    chunk_size = max(len(data) // cpu_count(), 1)
-
-    results = Parallel(n_jobs=-1)(
-        delayed(count_labels)(data[i:i+chunk_size]) for i in range(0, len(data), chunk_size)
-    )
-
-    label_freq = Counter()
-    for result in results:
-        label_freq.update(result)
     
-    if not inv_freq:
-        return label_freq
-    
-    # Inverse frequency
-    total = sum(label_freq.values())
-    num_labels = len(label_freq.keys())
-    label_inv_freq = {k: (total/v)**power for k, v in label_freq.items()}
-    
-    if normalize:
-        sum_raw_weights = sum(label_inv_freq.values())
-        label_inv_freq = {k:v*num_labels/sum_raw_weights for k,v in label_inv_freq.items()}
+    def calculate_pos_weight(self):
+        self.logger.info("Calculating bce_pos_weight...")
+        def count_labels(chunk):
+            num_positive_labels_chunk = 0
+            num_negative_labels_chunk = 0
+            for _, labels in chunk:
+                labels = labels[1:]
+                num_positive = len(labels)
+                num_positive_labels_chunk += num_positive
+                num_negative_labels_chunk += len(self.label_vocabulary) - num_positive
+            return num_positive_labels_chunk, num_negative_labels_chunk
 
-    return label_inv_freq
+        chunk_size = len(self.data) // cpu_count()  # Adjust chunk size if necessary.
+
+        results = Parallel(n_jobs=-1)(
+            delayed(count_labels)(self.data[i:i+chunk_size]) for i in range(0, len(self.data), chunk_size)
+        )
+
+        num_positive_labels = sum(res[0] for res in results)
+        num_negative_labels = sum(res[1] for res in results)
+        pos_weight = torch.tensor((num_negative_labels / num_positive_labels))
+        self.logger.info(f"Calculated bce_pos_weight= {pos_weight.item()}")
+        return pos_weight
+
+
+    def calculate_label_weights(self, inv_freq= True, power=0.3, normalize = True,return_list=False):
+        self.logger.info("Calculating label weights...")
+        def count_labels(chunk):
+            label_freq = Counter()
+            for _, labels in chunk:
+                labels = labels[1:]
+                label_freq.update(labels)
+            return label_freq
+
+        # Adjust chunk size if necessary.
+        chunk_size = max(len(self.data) // cpu_count(), 1)
+
+        results = Parallel(n_jobs=-1)(
+            delayed(count_labels)(self.data[i:i+chunk_size]) for i in range(0, len(self.data), chunk_size)
+        )
+
+        #Label frequency
+        label_weights = Counter()
+        for result in results:
+            label_weights.update(result)
+        
+        if inv_freq:
+            # Inverse frequency
+            total = sum(label_weights.values())
+            num_labels = len(label_weights.keys())
+            label_weights = {k: (total/v)**power for k, v in label_weights.items()}
+            
+        if normalize:
+            sum_raw_weights = sum(label_weights.values())
+            label_weights = {k:v*num_labels/sum_raw_weights for k,v in label_weights.items()}
+        
+        #Complete weights with labels not seen in training set but in vocab
+        label_weights = {self.label2int[k]:v for k,v in label_weights.items()}
+        missing_label_weights = {v:0 for v in self.label2int.values() if v not in label_weights}
+        label_weights.update(missing_label_weights)
+
+        self.logger.info(f"# always negative labels: {len(missing_label_weights)}")
+
+        if return_list:
+            #Sort weights by vocabulary order
+            label_weights = torch.tensor([value for _, value in sorted(label_weights.items())]).float()
+        else:
+            label_weights = {self.int2label[k]:v for k,v in label_weights.items()}
+
+        return label_weights
+
+
+
 
 def calculate_sequence_weights(data: list, label_inv_freq: dict):
     """
@@ -415,9 +433,6 @@ def create_multiple_loaders(
         if label_sample_sizes:
             label_sample_size = label_sample_sizes.get(dataset_type)
 
-        in_batch_sampling = in_batch_sampling if dataset_type == 'train' else False
-        grid_sampler = grid_sampler if dataset_type == 'train' else False
-
         for dataset in dataset_list:
                             
             batch_sampler = None
@@ -431,21 +446,24 @@ def create_multiple_loaders(
                     world_size = world_size,
                     rank = rank,
                     sequence_weights=sequence_weights)
-
-            if grid_sampler:
-                assert label_sample_size is not None,"Provide label_sample_size when using grid sampler"
-                batch_sampler=GridBatchSampler(observation_sampler=sequence_sampler,
-                    observations_batch_size=batch_size_for_type,
-                    drop_last_observation_batch=True,
-                    num_labels=len(dataset.label_vocabulary),
-                    labels_batch_size=label_sample_size,
-                    shuffle_grid=True
-                    )
-                #When defining a BatchSampler, these paramters are ignored in the Dataloader. Must be set 
-                #To these values to avoid pytorch error.
-                batch_size_for_type = 1
+                
+                if grid_sampler:
+                    assert label_sample_size is not None,"Provide label_sample_size when using grid sampler"
+                    batch_sampler=GridBatchSampler(observation_sampler=sequence_sampler,
+                        observations_batch_size=batch_size_for_type,
+                        drop_last_observation_batch=True,
+                        num_labels=len(dataset.label_vocabulary),
+                        labels_batch_size=label_sample_size,
+                        shuffle_grid=True
+                        )
+                    #When defining a BatchSampler, these paramters are ignored in the Dataloader. Must be set 
+                    #To these values to avoid pytorch error.
+                    batch_size_for_type = 1
+                    sequence_sampler = None
+                    drop_last = False
+            else:
+                # No sampling in validation and test sets
                 sequence_sampler = None
-                drop_last = False
 
             loader = DataLoader(
                 dataset,
@@ -454,9 +472,9 @@ def create_multiple_loaders(
                 collate_fn=partial(
                     collate_variable_sequence_length,
                     label_sample_size=label_sample_size,
-                    grid_sampler = grid_sampler,
+                    grid_sampler = grid_sampler & (dataset_type == "train"),
                     shuffle_labels=shuffle_labels,
-                    in_batch_sampling=in_batch_sampling,
+                    in_batch_sampling = in_batch_sampling & (dataset_type == "train"),
                     distribute_labels=params["DISTRIBUTE_LABELS"],
                     world_size=world_size,
                     rank=rank),
