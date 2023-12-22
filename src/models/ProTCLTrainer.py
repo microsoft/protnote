@@ -14,7 +14,6 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from transformers import BatchEncoding
 from src.utils.models import generate_label_embeddings_from_text, biogpt_train_last_n_layers, save_checkpoint, load_model
-from tqdm.auto import tqdm
 from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC
 from torch.utils.tensorboard import SummaryWriter
 
@@ -59,7 +58,7 @@ class ProTCLTrainer:
         self.train_projection_head = config["params"]["TRAIN_PROJECTION_HEAD"]
 
         self.normalize_probabilities = config["params"]["NORMALIZE_PROBABILITIES"]
-        self.validations_per_epoch = config["params"]["VALIDATIONS_PER_EPOCH"]
+        self.EPOCHS_PER_VALIDATION = config["params"]["EPOCHS_PER_VALIDATION"]
         self.gradient_accumulation_steps = config["params"]["GRADIENT_ACCUMULATION_STEPS"]
         self.clip_value = config["params"]["CLIP_VALUE"]
         self.vocabularies = vocabularies
@@ -358,9 +357,8 @@ class ProTCLTrainer:
         mAP_macro = MultilabelAUPRC(device='cpu',num_labels=len(self.vocabularies["GO_label_vocab"]))
 
         with torch.no_grad():
-            for batch in tqdm(data_loader,total=len(data_loader), position=0, leave=True):
-                loss, logits, labels, sequence_ids = self.evaluation_step(
-                    batch=batch)
+            for batch in data_loader:
+                loss, logits, labels, sequence_ids = self.evaluation_step(batch=batch)
                 if eval_metrics is not None:
                     # Apply sigmoid to get the probabilities for multi-label classification
                     probabilities = torch.sigmoid(logits)
@@ -432,7 +430,7 @@ class ProTCLTrainer:
         eval_metrics.reset()
         
         ####### TRAINING LOOP #######
-        for batch_idx, batch in tqdm(enumerate(train_loader), total=len(train_loader), position=0, leave=True):
+        for batch_idx, batch in enumerate(train_loader):
             self.training_step += 1
 
             # Unpack the training batch
@@ -506,6 +504,10 @@ class ProTCLTrainer:
                 self.logger.info("+----------------- Train GPU Memory Usage -----------------+")
                 log_gpu_memory_usage(self.logger, 0)
                 self.logger.info("+----------------------------------------------------------+")
+                
+            # Print progress every 10%
+            if batch_idx % (len(train_loader) // 10) == 0:
+                self.logger.info(f"Epoch {self.epoch}: Processed {batch_idx} out of {len(train_loader)} batches ({batch_idx / len(train_loader) * 100:.2f}%).")  
 
         avg_loss = avg_loss/len(train_loader) if len(train_loader)> 0 else avg_loss
         avg_probs_gt_ration = avg_probs/avg_gt
@@ -567,7 +569,7 @@ class ProTCLTrainer:
                                                  eval_metrics=train_eval_metrics)
                 
 
-            if (epoch % self.validations_per_epoch == 0):
+            if (epoch % self.EPOCHS_PER_VALIDATION == 0):
                 ####### VALIDATION LOOP #######
                 torch.cuda.empty_cache()
 

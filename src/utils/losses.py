@@ -178,14 +178,24 @@ class BatchLabelWeightedBCE(torch.nn.Module):
         return torch.nn.functional.binary_cross_entropy_with_logits(input, target, weight=weights.unsqueeze(0))
 
 class FocalLoss(torch.nn.Module):
-    def __init__(self, alpha:float, gamma:float, reduction='mean'):
+    def __init__(self, alpha:float, gamma:float, reduction='mean',label_smoothing=0.0):
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
         self.reduction = reduction
+        self.label_smoothing = label_smoothing
+
         assert (alpha is not None)&(gamma is not None),"Both gamma and alpha must be provided and neither should be None"
+        print("Focal Loss with alpha: {}, gamma: {}, reduction: {}, label_smoothing: {}".format(alpha, gamma, reduction, label_smoothing))
 
     def forward(self, input, target):
+        # Apply label smoothing, if applicable
+        if self.label_smoothing > 0:
+            positive_smoothed_labels = 1.0 - self.label_smoothing
+            negative_smoothed_labels = self.label_smoothing
+            target = target * positive_smoothed_labels + \
+                (1 - target) * negative_smoothed_labels
+
         BCE_loss = torch.nn.BCEWithLogitsLoss(reduction='none')(input, target)
         pt = torch.exp(-BCE_loss)
         loss = ((1-pt)**self.gamma) * BCE_loss
@@ -269,7 +279,7 @@ def get_loss(config:dict,
     elif config["params"]["LOSS_FN"] == "BatchWeightedBCE":
         return BatchWeightedBCE()
     elif config["params"]["LOSS_FN"] == "FocalLoss":
-        return FocalLoss(gamma=config["params"]["FOCAL_LOSS_GAMMA"], alpha=config["params"]["FOCAL_LOSS_ALPHA"])
+        return FocalLoss(gamma=config["params"]["FOCAL_LOSS_GAMMA"], alpha=config["params"]["FOCAL_LOSS_ALPHA"], label_smoothing=config["params"]["LABEL_SMOOTHING"])
     elif config["params"]["LOSS_FN"] == "RGDBCE":
         return RGDBCE(temperature=config["params"]["RGDBCE_TEMP"])
     elif config["params"]["LOSS_FN"] == "SupCon":

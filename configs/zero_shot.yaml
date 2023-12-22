@@ -35,7 +35,7 @@ params:
 
   # Constants
   SEED: 42
-  VALIDATIONS_PER_EPOCH: 3
+  EPOCHS_PER_VALIDATION: 3
   NUM_WORKERS: 3
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
   LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 300 # Maximum number of labels that can be passed to the label encoder at once (to avoid OOM errors)
