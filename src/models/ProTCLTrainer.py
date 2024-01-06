@@ -14,8 +14,8 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from transformers import BatchEncoding
 from src.utils.models import generate_label_embeddings_from_text, biogpt_train_last_n_layers, save_checkpoint, load_model
-from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC
-from torch.utils.tensorboard import SummaryWriter
+from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC, BinaryBinnedAUPRC, MultilabelBinnedAUPRC
+#from torch.utils.tensorboard import SummaryWriter
 
 class ProTCLTrainer:
     def __init__(
@@ -29,6 +29,7 @@ class ProTCLTrainer:
         run_name: str,
         loss_fn: torch.nn.Module,
         use_wandb: bool = False,
+        use_amlt: bool = False,
         is_master: bool = True,
         starting_epoch: int = 1
     ):
@@ -52,11 +53,16 @@ class ProTCLTrainer:
         self.logger = logger
         self.timestamp = timestamp
         self.use_wandb = use_wandb
+        self.use_amlt = use_amlt
+        self.loss_fn = loss_fn
+        self.best_val_metric = 0.0
+        self.starting_epoch = starting_epoch
+        self.epoch = starting_epoch
+        self.config = config
         self.num_epochs = config["params"]["NUM_EPOCHS"]
         self.train_sequence_encoder = config["params"]["TRAIN_SEQUENCE_ENCODER"]
         self.label_encoder_num_trainable_layers = config["params"]["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"]
         self.train_projection_head = config["params"]["TRAIN_PROJECTION_HEAD"]
-
         self.normalize_probabilities = config["params"]["NORMALIZE_PROBABILITIES"]
         self.EPOCHS_PER_VALIDATION = config["params"]["EPOCHS_PER_VALIDATION"]
         self.gradient_accumulation_steps = config["params"]["GRADIENT_ACCUMULATION_STEPS"]
@@ -67,6 +73,7 @@ class ProTCLTrainer:
         )
         self.output_model_dir = config["paths"]["OUTPUT_MODEL_DIR"]
         self.lora_params = {'rank':config["params"]["LORA_RANK"],
+                            'alpha':config["params"]["LORA_ALPHA"],
                             'in_features':config["params"]["LABEL_EMBEDDING_DIM"],
                             'out_features':config["params"]["LABEL_EMBEDDING_DIM"],
                             'device':self.device
@@ -75,14 +82,10 @@ class ProTCLTrainer:
         self._set_optimizer(opt_name = config["params"]["OPTIMIZER"],
                             lr = config["params"]["LEARNING_RATE"])
         
-        self.loss_fn = loss_fn
-        self.model_path = self._get_saved_model_path()
-        self.best_val_metric = 0.0
         self.scaler = GradScaler()
-        self.starting_epoch = starting_epoch
-        self.epoch = starting_epoch
-        self.config = config
-        self.tb = SummaryWriter(f"runs/{self.run_name}_{self.timestamp}") if self.is_master else None
+        self.model_path = self._get_saved_model_path()
+
+        #self.tb = SummaryWriter(f"runs/{self.run_name}_{self.timestamp}") if self.is_master else None
 
     def _get_saved_model_path(self):
         # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
@@ -137,15 +140,13 @@ class ProTCLTrainer:
         self.trainable_params_names = trainable_params_names
 
         if opt_name == 'Adam':
-            opt = torch.optim.Adam
+            self.optimizer = torch.optim.Adam(trainable_params, lr=lr)
+        elif opt_name == 'AdamW':
+            self.optimizer = torch.optim.AdamW(trainable_params, lr=lr,weight_decay=self.config["params"]['WEIGHT_DECAY'])
         elif opt_name == 'SGD':
-            opt = torch.optim.SGD
+            self.optimizer = torch.optim.SGD(trainable_params, lr=lr,weight_decay=self.config["params"]['WEIGHT_DECAY'])
         else:
             raise ValueError("Unsupported optimizer name")
-
-        self.optimizer = opt(
-            trainable_params, lr=lr
-        )
 
     def evaluation_step(self, batch) -> tuple:
         """Perform a single evaluation step.
@@ -338,11 +339,14 @@ class ProTCLTrainer:
                 "Computing label embeddings for evaluation...")
             with torch.no_grad():
                 label_embedding_matrix = generate_label_embeddings_from_text(
-                    data_loader.dataset.label_text_list,
-                    data_loader.dataset.label_tokenizer,
-                    self.model.module.label_encoder,
-                    self.config["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
+                    label_annotations = data_loader.dataset.label_text_list,
+                    label_tokenizer = data_loader.dataset.label_tokenizer,
+                    label_encoder = self.model.module.label_encoder,
+                    batch_size_limit = self.config["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
+                    pooling_method = self.config["params"]["LABEL_EMBEDDING_POOLING_METHOD"]
                 ).cpu()
+
+                
             data_loader.dataset.set_label_embedding_matrix(
                 label_embedding_matrix)
             logging.info("Done computing label embeddings.")
@@ -353,8 +357,15 @@ class ProTCLTrainer:
         if eval_metrics is not None:
             eval_metrics.reset()
 
-        mAP_micro = BinaryAUPRC(device='cpu')
-        mAP_macro = MultilabelAUPRC(device='cpu',num_labels=len(self.vocabularies["GO_label_vocab"]))
+        if False:#not self.use_amlt:
+            mAP_micro = BinaryAUPRC(device='cpu')
+            mAP_macro = MultilabelAUPRC(device='cpu',
+                                        num_labels=len(self.vocabularies["GO_label_vocab"]))
+        else:
+            mAP_micro = BinaryBinnedAUPRC(device='cpu',threshold=50)
+            mAP_macro = MultilabelBinnedAUPRC(device='cpu',
+                                            num_labels=len(self.vocabularies["GO_label_vocab"]),
+                                            threshold=50)
 
         with torch.no_grad():
             
@@ -486,12 +497,14 @@ class ProTCLTrainer:
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
 
+                '''
                 # Log at this point to TB to have weights and gradients after a full epoch
                 if (batch_idx + 1 == len(train_loader)) & self.is_master:
                     for name, weight in self.model.module.named_parameters():
                         if weight.requires_grad:
                             self.tb.add_histogram(name,weight, self.epoch)
                             self.tb.add_histogram(f'{name}.grad',weight.grad, self.epoch)
+                '''
 
                 self.optimizer.zero_grad()
             
@@ -608,4 +621,4 @@ class ProTCLTrainer:
             for param in self.model.module.parameters():
                 torch.distributed.broadcast(param.data, src=0)
         
-        self.tb.close()
+        #self.tb.close()

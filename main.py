@@ -24,7 +24,6 @@ import json
 import pandas as pd
 from transformers import AutoTokenizer, AutoModel
 from src.data.collators import collate_variable_sequence_length
-import mlflow
 import loralib as lora
 import random
 
@@ -63,6 +62,9 @@ def main():
 
     parser.add_argument("--amlt", action="store_true", default=False,
                         help="Run job on Amulet. Default is False.")
+
+    parser.add_argument("--mlflow", action="store_true", default=False,
+                        help="Use MLFlow. Default is False.")
 
     parser.add_argument("--override", nargs="*",
                         help="Override config parameters in key-value pairs.")
@@ -143,7 +145,9 @@ def train_validate_test(gpu, args):
             entity="microsoft-research-incubation"
         )
 
-        if args.amlt:
+        if args.amlt & args.mlflow:
+            import mlflow
+
             #MLFlow logging for Hyperdrive
             mlflow.autolog()
             mlflow.start_run()
@@ -215,7 +219,7 @@ def train_validate_test(gpu, args):
         
         # Set all weights below 0.5 to 0.5 and all weights above 50 to 50
         # TODO: Make this clamping scheme a hyperparameter we can tune
-        sequence_weights = torch.tensor([min(max(x, 0.5), 50) for x in sequence_weights])
+        sequence_weights = torch.tensor(sequence_weights)
 
     # Define data loaders
     loaders = create_multiple_loaders(
@@ -350,6 +354,7 @@ def train_validate_test(gpu, args):
         timestamp=timestamp,
         run_name=args.name,
         use_wandb=args.use_wandb and is_master,
+        use_amlt=args.amlt,
         loss_fn=loss_fn,
         is_master=is_master
     )
@@ -473,14 +478,14 @@ def train_validate_test(gpu, args):
         if args.test_paths_names:
             if args.use_wandb:
                 wandb.log(all_test_metrics)
-            if args.amlt:
+            if args.amlt & args.mlflow:
                 mlflow.log_metrics(all_test_metrics)
         
         # Log val metrics
         if args.validation_path_name:
             if args.use_wandb:
                 wandb.log(validation_metrics)
-            if args.amlt:
+            if args.amlt & args.mlflow:
                 mlflow.log_metrics(validation_metrics)
     
         '''
@@ -492,7 +497,7 @@ def train_validate_test(gpu, args):
         #Close metric loggers
         if args.use_wandb:
             wandb.finish()
-        if args.amlt:
+        if args.amlt & args.mlflow:
             mlflow.end_run()
         
     # Loggers

@@ -7,18 +7,20 @@ from torch.cuda.amp import autocast
 from collections import OrderedDict
 import loralib as lora
 
-def apply_lora_biogpt_attention(layer,rank,device,in_features= 1024, out_features= 1024):
+def apply_lora_biogpt_attention(layer,rank,alpha,device,in_features= 1024, out_features= 1024):
     layer.self_attn.q_proj = lora.Linear(
-        in_features, out_features, r=rank)  
+        in_features, out_features, r=rank,lora_alpha=alpha)  
     layer.self_attn.v_proj = lora.Linear(
-        in_features, out_features, r=rank)
-    '''
+        in_features, out_features, r=rank,lora_alpha=alpha)
     layer.self_attn.k_proj = lora.Linear(
-        in_features, out_features, r=rank)
+        in_features, out_features, r=rank,lora_alpha=alpha)
     layer.self_attn.out_proj = lora.Linear(
-        in_features, out_features, r=rank)
-    '''
-
+        in_features, out_features, r=rank,lora_alpha=alpha)
+    layer.fc1 = lora.Linear(
+        in_features, out_features*4, r=rank,lora_alpha=alpha)
+    layer.fc2 = lora.Linear(
+        in_features*4, out_features, r=rank,lora_alpha=alpha)
+    
     layer=layer.to(device)
     
 def biogpt_train_last_n_layers(model,n,lora_params=None):
@@ -42,10 +44,6 @@ def biogpt_train_last_n_layers(model,n,lora_params=None):
         if lora_params is not None:
             lora.mark_only_lora_as_trainable(model)
         
-        #Always train last layer norm.
-        for param in model.layer_norm.parameters():
-            param.requires_grad = True
-
 def count_parameters_by_layer(model):
     """
     Logs the number of total and trainable parameters for each major category of a PyTorch model,

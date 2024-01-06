@@ -19,7 +19,7 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-- name: V2_amlt_weighted_sampling_baseline
+- name: FL_WeighteSampling_05_LargeMLP_last_token_adamw001 #grid_sampler_seq_bs_128_lab_bs_350_2_layers_v1
   sku: G8
   priority: high
   preemptible: False
@@ -30,8 +30,8 @@ jobs:
     --train-path-name TRAIN_DATA_PATH 
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
-    --full-path-name FULL_DATA_PATH 
-    --name "V2 Amulet Bigger MLP Weighted Sampling Baseline"
+    --full-path-name FULL_DATA_PATH
+    --name FL_WeighteSampling_05_LargeMLP_last_token_adamw001
     --amlt
     --use-wandb
   submit_args:

@@ -152,6 +152,8 @@ class GridBatchSampler(BatchSampler):
         print('Done...')
 
         self.total_num_batches = int(num_label_batches*num_observation_batches)
+        print(f"num label batches = {num_label_batches}, num observation batches = {num_observation_batches}")
+        print(f"total batches = {self.total_num_batches}")
 
     def __len__(self):
         return self.total_num_batches
