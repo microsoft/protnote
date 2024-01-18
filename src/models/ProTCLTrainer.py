@@ -357,7 +357,7 @@ class ProTCLTrainer:
         if eval_metrics is not None:
             eval_metrics.reset()
 
-        if False:#not self.use_amlt:
+        if not self.use_amlt:
             mAP_micro = BinaryAUPRC(device='cpu')
             mAP_macro = MultilabelAUPRC(device='cpu',
                                         num_labels=len(self.vocabularies["GO_label_vocab"]))
@@ -518,6 +518,7 @@ class ProTCLTrainer:
                 wandb.log({"per_batch_train_loss": loss.item()},
                           step=self.training_step
                           )
+            
 
             # Print memory consumption after first batch (to get the max memory consumption during training)
             if batch_idx == 1 and self.is_master:

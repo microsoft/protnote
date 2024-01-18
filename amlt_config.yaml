@@ -19,7 +19,7 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-- name: FL_WeighteSampling_05_LargeMLP_last_token_adamw001 #grid_sampler_seq_bs_128_lab_bs_350_2_layers_v1
+- name: FL_Sampling_05_MediumMLP_last_token_bs64_frozen_seq_encoder #grid_sampler_seq_bs_128_lab_bs_350_2_layers_v1
   sku: G8
   priority: high
   preemptible: False
@@ -31,7 +31,7 @@ jobs:
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
     --full-path-name FULL_DATA_PATH
-    --name FL_WeighteSampling_05_LargeMLP_last_token_adamw001
+    --name FL_Sampling_05_MediumMLP_last_token_bs64_frozen_seq_encoder
     --amlt
     --use-wandb
   submit_args:

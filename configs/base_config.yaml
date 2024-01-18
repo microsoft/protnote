@@ -5,26 +5,10 @@ params:
   ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET V100 VS. SANDBOX A100 ##############
   ## A100 ###
   # Batch sizes
-  # TRAIN_BATCH_SIZE: 256 # 256 for A100
-  # VALIDATION_BATCH_SIZE: 64 # 256 for A100
-  # TEST_BATCH_SIZE: 64 # 16 for A100
-  # # Label Sampling: can only use one of grid sampler, in batch sampling or normal label sampling
-  # GRID_SAMPLER: True
-  # IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
-  # WEIGHTED_SAMPLING: False #Sample rare sequences more often as dictaded by inverse frequency of labels
-  # INV_FREQUENCY_POWER: 0.3 #Used for weighted sampling AND relevant losses with weighting
-  # TRAIN_LABEL_SAMPLE_SIZE: 2000 # 15K for both. IS ALSO USED WITH GRID SAMPLER
-  # VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
-  # # Inference
-  # LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 1000 # 1500 for A100
-  # SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 128 # 128 for A100 (TO BE VERIFIED)
-
-  ### V100 ###
-  # Batch sizes
-  TRAIN_BATCH_SIZE: 8 # 64 for V100
-  VALIDATION_BATCH_SIZE: 32 # 64 for V100
-  TEST_BATCH_SIZE: 32 # 4 for V100
-  # Sampling
+  TRAIN_BATCH_SIZE: 32 # 256 for A100
+  VALIDATION_BATCH_SIZE: 32 # 256 for A100
+  TEST_BATCH_SIZE: 32 # 16 for A100
+  # Label Sampling: can only use one of grid sampler, in batch sampling or normal label sampling
   GRID_SAMPLER: False
   IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
   WEIGHTED_SAMPLING: True #Sample rare sequences more often as dictaded by inverse frequency of labels
@@ -32,27 +16,44 @@ params:
   TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. IS ALSO USED WITH GRID SAMPLER
   VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
   # Inference
-  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 500 # 1K for V100
-  SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 
+  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 2000 # 1500 for A100
+  SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 128 # 128 for A100 (TO BE VERIFIED)
+
+  ### V100 ###
+  # Batch sizes
+  # TRAIN_BATCH_SIZE: 8 # 64 for V100
+  # VALIDATION_BATCH_SIZE: 16 # 64 for V100
+  # TEST_BATCH_SIZE: 16 # 4 for V100
+  # # Sampling
+  # GRID_SAMPLER: False
+  # IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
+  # WEIGHTED_SAMPLING: True #Sample rare sequences more often as dictaded by inverse frequency of labels
+  # INV_FREQUENCY_POWER: 0.5 #Used for weighted sampling AND relevant losses with weighting
+  # TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. IS ALSO USED WITH GRID SAMPLER
+  # VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
+  # # Inference
+  # LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 500 # 1K for V100
+  # SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 
 
   ############## PARAMS THAT DO NOT NEED TO VARY BETWEEN VIRTUAL MACHINES ##############
   # General
   LEARNING_RATE: 0.0003
-  OPTIMIZER: AdamW
+  OPTIMIZER: Adam
   WEIGHT_DECAY: 0.01 #Only used for ADAM W or SGD
   PROTEIN_EMBEDDING_DIM: 1100
   LABEL_EMBEDDING_DIM: 1024
   LATENT_EMBEDDING_DIM: 1024
-  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 3 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
-  OUTPUT_MLP_NUM_LAYERS: 3
+  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 2 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
+  OUTPUT_MLP_NUM_LAYERS: 2
   OUTPUT_NEURON_PROBABILITY_BIAS: null
   OUTPUT_MLP_BATCHNORM: True
+  SYNC_BN: False
   OUTPUT_MLP_DROPOUT: 0.0
-  PROJECTION_HEAD_NUM_LAYERS: 4
-  PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 3
+  PROJECTION_HEAD_NUM_LAYERS: 2
+  PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 1
   FEATURE_FUSION: concatenation #concatenation or similarity
   LABEL_EMBEDDING_POOLING_METHOD: 'last_token' #select from mean, last_token, all
-  OPTIMIZATION_METRIC_NAME: map_micro # Only micro metrics are supported if sampling labels in validation
+  OPTIMIZATION_METRIC_NAME: f1_micro # Only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
   NUM_EPOCHS: 50
 
@@ -74,7 +75,7 @@ params:
   LABEL_SMOOTHING: 0.0 # Currently only implemented for FocalLoss
 
   # Sequence and label encoders
-  TRAIN_SEQUENCE_ENCODER: False
+  TRAIN_SEQUENCE_ENCODER: True
   LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 0
   DISTRIBUTE_LABELS: False
   TRAIN_PROJECTION_HEAD: True
@@ -82,6 +83,7 @@ params:
 
   # Data processing and metrics
   DEDUPLICATE: True
+  MAX_SEQUENCE_LENGTH: 10000 #Only affects training set. Just 8 seqs with 10K+ length
   NORMALIZE_PROBABILITIES: False
 
   # Constants

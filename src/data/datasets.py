@@ -76,8 +76,8 @@ class ProteinDataset(Dataset):
             self.data = self.data[:int(subset_fraction * len(self.data))]
 
         # Deduplicate the data if deduplicate is True
-        if deduplicate:
-            self._remove_duplicates()
+        self._clean_data(deduplicate=deduplicate,
+                         max_sequence_length=config["params"]["MAX_SEQUENCE_LENGTH"])
 
         # Load the map from alphanumeric label id to text label
         self.label_annotation_map = {key: value['label'] for key, value in read_pickle(
@@ -122,22 +122,31 @@ class ProteinDataset(Dataset):
     def set_label_embedding_matrix(self, embedding_matrix: torch.Tensor):
         self.label_embedding_matrix = embedding_matrix
 
-    def _remove_duplicates(self):
+    def _clean_data(self,deduplicate,max_sequence_length):
         """
         Remove duplicate sequences from self.data, keeping only the first instance of each sequence
         Use pandas to improve performance
         """
-
+        
         # Convert self.data to a DataFrame
         df = pd.DataFrame(self.data, columns=["sequence", "labels"])
 
-        # Drop duplicate rows based on the 'sequence' column, keeping the first instance
-        df = df.drop_duplicates(subset="sequence", keep="first")
+        if deduplicate:
+            # Drop duplicate rows based on the 'sequence' column, keeping the first instance
+            df = df.drop_duplicates(subset="sequence", keep="first")
 
-        # Log the number of duplicate sequences removed
-        num_duplicates = len(self.data) - len(df)
-        logging.info(
-            f"Removing {num_duplicates} duplicate sequences from {self.data_path}...")
+            # Log the number of duplicate sequences removed
+            num_duplicates = len(self.data) - len(df)
+            logging.info(
+                f"Removing {num_duplicates} duplicate sequences from {self.data_path}...")
+        
+        if (max_sequence_length is not None) & (self.dataset_type == "train"):
+            
+            seq_length_mask = df["sequence"].apply(len)<=max_sequence_length
+            num_long_sequences = (~seq_length_mask).sum()
+            df = df[seq_length_mask]
+            logging.info(
+                f"Removing {num_long_sequences} sequences longer than {max_sequence_length} from {self.data_path}...")
 
         # Convert the DataFrame back to the list of tuples format
         self.data = list(df.itertuples(index=False, name=None))

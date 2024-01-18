@@ -308,7 +308,12 @@ def train_validate_test(gpu, args):
 
 
     # Wrap the model in DDP for distributed computing
-    model = DDP(model, device_ids=[gpu], find_unused_parameters=True)
+    if config["params"]["SYNC_BN"]:
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+
+    model = DDP(model,
+                device_ids=[gpu],
+                find_unused_parameters=True)
 
     # Calculate bce_pos_weight based on the training set
     if (params["BCE_POS_WEIGHT"] is None) & (args.train_path_name is not None):
