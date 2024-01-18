@@ -458,15 +458,17 @@ def create_multiple_loaders(
                 
                 if grid_sampler:
                     assert label_sample_size is not None,"Provide label_sample_size when using grid sampler"
-                    batch_sampler=GridBatchSampler(observation_sampler=sequence_sampler,
+                    batch_sampler=GridBatchSampler(
+                        observation_sampler=sequence_sampler,
                         observations_batch_size=batch_size_for_type,
                         drop_last_observation_batch=True,
                         num_labels=len(dataset.label_vocabulary),
                         labels_batch_size=label_sample_size,
                         shuffle_grid=True
-                        )
-                    #When defining a BatchSampler, these paramters are ignored in the Dataloader. Must be set 
-                    #To these values to avoid pytorch error.
+                    )
+                    
+                    # When defining a BatchSampler, these paramters are ignored in the Dataloader. Must be set 
+                    # To these values to avoid pytorch error.
                     batch_size_for_type = 1
                     sequence_sampler = None
                     drop_last = False

@@ -217,9 +217,11 @@ def train_validate_test(gpu, args):
                                                       datasets["train"][0].calculate_label_weights(power = params["INV_FREQUENCY_POWER"])
                                                       )
         
-        # Set all weights below 0.5 to 0.5 and all weights above 50 to 50
-        # TODO: Make this clamping scheme a hyperparameter we can tune
-        sequence_weights = torch.tensor(sequence_weights)
+        # If using clamping, clamp the weights based on the hyperparameters
+        if params["SAMPLING_LOWER_CLAMP_BOUND"] is not None:
+            sequence_weights = [max(x, params["SAMPLING_LOWER_CLAMP_BOUND"]) for x in sequence_weights]
+        if params["SAMPLING_UPPER_CLAMP_BOUND"] is not None:
+            sequence_weights = [min(x, params["SAMPLING_UPPER_CLAMP_BOUND"]) for x in sequence_weights]
 
     # Define data loaders
     loaders = create_multiple_loaders(
@@ -290,7 +292,7 @@ def train_validate_test(gpu, args):
         output_neuron_bias=sigmoid_bias_from_prob(params["OUTPUT_NEURON_PROBABILITY_BIAS"]) if params["OUTPUT_NEURON_PROBABILITY_BIAS"] is not None else None,
         outout_mlp_add_batchnorm=params["OUTPUT_MLP_BATCHNORM"],
         projection_head_num_layers=params["PROJECTION_HEAD_NUM_LAYERS"],
-        output_mlp_dropout=params["OUTPUT_MLP_DROPOUT"],
+        dropout=params["DROPOUT"],
         projection_head_hidden_dim_scale_factor=params["PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR"],
 
         # Training options

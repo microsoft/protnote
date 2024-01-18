@@ -36,6 +36,17 @@ params:
   # SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 
 
   ############## PARAMS THAT DO NOT NEED TO VARY BETWEEN VIRTUAL MACHINES ##############
+
+  # Sampling
+  GRID_SAMPLER: False
+  IN_BATCH_SAMPLING: False # Use either in batch sampling or label samples, not both.
+  WEIGHTED_SAMPLING: True # Sample rare sequences more often as dictaded by inverse frequency of labels
+  INV_FREQUENCY_POWER: 0.5 # Used for weighted sampling AND relevant losses with weighting
+  SAMPLING_LOWER_CLAMP_BOUND: null # Lower bound for when clamping sampling weights
+  SAMPLING_UPPER_CLAMP_BOUND: null # Upper bound for when clamping sampling weights
+  TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. IS ALSO USED WITH GRID SAMPLER
+  VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
+
   # General
   LEARNING_RATE: 0.0003
   OPTIMIZER: Adam
@@ -48,7 +59,7 @@ params:
   OUTPUT_NEURON_PROBABILITY_BIAS: null
   OUTPUT_MLP_BATCHNORM: True
   SYNC_BN: False
-  OUTPUT_MLP_DROPOUT: 0.0
+  DROPOUT: 0.0
   PROJECTION_HEAD_NUM_LAYERS: 2
   PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 1
   FEATURE_FUSION: concatenation #concatenation or similarity
@@ -75,7 +86,7 @@ params:
   LABEL_SMOOTHING: 0.0 # Currently only implemented for FocalLoss
 
   # Sequence and label encoders
-  TRAIN_SEQUENCE_ENCODER: True
+  TRAIN_SEQUENCE_ENCODER: False
   LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 0
   DISTRIBUTE_LABELS: False
   TRAIN_PROJECTION_HEAD: True
@@ -88,7 +99,7 @@ params:
 
   # Constants
   SEED: 42
-  EPOCHS_PER_VALIDATION: 1 # Must be >= 1
+  EPOCHS_PER_VALIDATION: 2 # Must be >= 1
   NUM_WORKERS: 3
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
 
@@ -124,10 +135,10 @@ paths:
 
     # Vocabulary paths
     VOCABULARIES_DIR: vocabularies/proteinfer
-    GO_ANNOTATIONS_PATH: annotations/go_annotations_2019_07_01.pkl
+    GO_ANNOTATIONS_PATH: annotations/go_annotations_2019_07_01_condensed.pkl # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
 
     # Embeddings paths (if using frozen pre-trained models)
-    LABEL_EMBEDDING_PATH: embeddings/frozen_BioGPT_label_embeddings.pkl #this is the base path which is modified by POOLING_METHOD
+    LABEL_EMBEDDING_PATH: embeddings/frozen_BioGPT_label_embeddings_condensed.pkl # this is the base path which is modified by POOLING_METHOD
     SEQUENCE_EMBEDDING_PATH: embeddings/frozen_proteinfer_sequence_embeddings.pkl
 
     PARENTHOOD_LIB_PATH: vocabularies/parenthood.json.gz

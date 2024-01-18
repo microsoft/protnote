@@ -1,5 +1,5 @@
 # For field details: https://amulet-docs.azurewebsites.net/config_file.html
-description: Protein Functions Experiment
+description: Big MLP Dropoout Experiments
 
 target:
   service: amlk8s
@@ -19,7 +19,7 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-- name: FL_Sampling_05_MediumMLP_last_token_bs64_frozen_seq_encoder #grid_sampler_seq_bs_128_lab_bs_350_2_layers_v1
+- name: '{amlt}{big mlp}{dropout 0.0}{condensed labels}{weighted sampling 0.5}{last token}'
   sku: G8
   priority: high
   preemptible: False
@@ -30,10 +30,69 @@ jobs:
     --train-path-name TRAIN_DATA_PATH 
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
-    --full-path-name FULL_DATA_PATH
-    --name FL_Sampling_05_MediumMLP_last_token_bs64_frozen_seq_encoder
+    --full-path-name FULL_DATA_PATH 
+    --name "{amlt}{big mlp}{dropout 0.0}{condensed labels}{weighted sampling 0.5}{last token}"
+    --override DROPOUT 0.0
     --amlt
     --use-wandb
   submit_args:
     env:
       WANDB_API_KEY: "$WANDB_API_KEY"
+- name: '{amlt}{big mlp}{dropout 0.2}{condensed labels}{weighted sampling 0.5}{last token}'
+  sku: G8
+  priority: high
+  preemptible: False
+  command:
+  - python main.py 
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH 
+    --validation-path-name VAL_DATA_PATH 
+    --test-paths-names TEST_DATA_PATH 
+    --full-path-name FULL_DATA_PATH 
+    --name "{amlt}{big mlp}{dropout 0.2}{condensed labels}{weighted sampling 0.5}{last token}"
+    --override DROPOUT 0.2
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: '{amlt}{big mlp}{dropout 0.5}{condensed labels}{weighted sampling 0.5}{last token}'
+  sku: G8
+  priority: high
+  preemptible: False
+  command:
+  - python main.py 
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH 
+    --validation-path-name VAL_DATA_PATH 
+    --test-paths-names TEST_DATA_PATH 
+    --full-path-name FULL_DATA_PATH 
+    --name "{amlt}{big mlp}{dropout 0.5}{condensed labels}{weighted sampling 0.5}{last token}"
+    --override DROPOUT 0.5
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: '{amlt}{big mlp}{dropout 0.8}{condensed labels}{weighted sampling 0.5}{last token}'
+  sku: G8
+  priority: high
+  preemptible: False
+  command:
+  - python main.py 
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH 
+    --validation-path-name VAL_DATA_PATH 
+    --test-paths-names TEST_DATA_PATH 
+    --full-path-name FULL_DATA_PATH 
+    --name "{amlt}{big mlp}{dropout 0.8}{condensed labels}{weighted sampling 0.5}{last token}"
+    --override DROPOUT 0.8
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_API_KEY: "$WANDB_API_KEY"
+

@@ -20,7 +20,7 @@ class ProTCL(nn.Module):
         output_mlp_num_layers=2,
         output_neuron_bias=None,
         outout_mlp_add_batchnorm=True,
-        output_mlp_dropout=0.0,
+        dropout=0.0,
         projection_head_num_layers=1,
         projection_head_hidden_dim_scale_factor = 1,
         label_batch_size_limit=float("inf"),
@@ -47,13 +47,15 @@ class ProTCL(nn.Module):
         self.W_p = MLP(protein_embedding_dim,
                        [latent_dim*projection_head_hidden_dim_scale_factor]*(projection_head_num_layers-1) + [latent_dim],
                        bias=False,
-                       norm_layer=torch.nn.BatchNorm1d
+                       norm_layer=torch.nn.BatchNorm1d,
+                       dropout=dropout
                        )
         
         self.W_l = MLP(label_embedding_dim,
                        [latent_dim*projection_head_hidden_dim_scale_factor]*(projection_head_num_layers-1) + [latent_dim],
                        bias=False,
-                       norm_layer=torch.nn.BatchNorm1d
+                       norm_layer=torch.nn.BatchNorm1d,
+                       dropout=dropout
                        )
         
         #MLP For raw attention score in case label embedding pooling method = all
@@ -70,7 +72,7 @@ class ProTCL(nn.Module):
                 num_layers=output_mlp_num_layers,
                 output_neuron_bias=output_neuron_bias,
                 batch_norm=outout_mlp_add_batchnorm,
-                dropout=output_mlp_dropout,
+                dropout=dropout,
             )
 
     def _get_joint_embeddings(self, P_e, L_e, num_sequences,num_labels):
