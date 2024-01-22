@@ -24,9 +24,8 @@ def process_descriptions(description, client):
                 "content":
                     "I'm providing you with five separate GO protein annotation descriptions from SwissProt. Your task is to condense these descriptions in a way that, when embedded with a pretrained language model, they will create a meaningful representation in the embedding latent space. " +
                     "This condensed forms should retain the core essence and meaning of each original description and any unique identifying details. " +
-                    "The condensed form should be a sentence that describes the function of the protein. " +
+                    "The most important information (e.g., the most unique) should come at the END of the sentence."
                     "You do not need to include the word 'protein,' or unecessary words like 'pivotal,' or 'essential' in your condensed form. " +
-                    "Focus on keeping relevant detail that is specific to the protein. " +
                     "I will give you batches of sentences, with each sentence terminated by a delimiter </END>. Return a corresponding batch of condensed forms, with each form started with <OUTPUT_i> and terminated by the delimiter </END>." +
                     "Even if two sentences are similar, you should still return two different condensed forms, focused on any differences." +
                     "\n\nHere is an example:\n\n" +
@@ -37,11 +36,11 @@ def process_descriptions(description, client):
                     "<INPUT_3> Catalysis of the transfer of a phosphate group, usually from ATP, to a substrate molecule.</END>\n" +
                     "<INPUT_4> The process in which the anatomical structures of embryonic epithelia are generated and organized.</END>\n\n" +
                     "### Response (with corresponding outputs terminated with </END>):\n" +
-                    "<OUTPUT_0>AIM2 inflammasome complex assembly activator or accelerator.</END>" +
-                    "<OUTPUT_1>Phytosteroid breakdown pathway executor in plants, involving C24 substitutions and C22 double bond.</END>" +
-                    "<OUTPUT_2>Starvation-induced metabolic shift in bacteria: downregulates nucleic acid and protein synthesis, upregulates protein degradation and amino acid synthesis.</END>" +
-                    "<OUTPUT_3>Phosphate group transfer catalyst.</END>" +
-                    "<OUTPUT_4>Generation and organization of embryonic epithelia structures.</END>\n\n" +
+                    "<OUTPUT_0>Activator or accelerator of AIM2 inflammasome complex assembly </END>" +
+                    "<OUTPUT_1>Breakdown pathway executor in plants, involving C24 substitutions and C22 double bond, of Phytosteroid .</END>" +
+                    "<OUTPUT_2>Downregulates nucleic acid and protein synthesis, upregulates protein degradation and amino acid synthesis during starvation-induced metabolic shift in bacteria.</END>" +
+                    "<OUTPUT_3>Transfer catalyst of phosphate group.</END>" +
+                    "<OUTPUT_4>Generation and organization of structures of embryonic epithelia.</END>\n\n" +
                     "### And here are a batch of inputs. Ensure that the number of responses is the same as the number of inputs. There must be the same number of </END> in the input and output.`.\n" +
                     description_text
             }
@@ -49,7 +48,8 @@ def process_descriptions(description, client):
 
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=messages
+            messages=messages,
+            temperature=0.7,
         )
         
         return response.choices[0].message.content
@@ -134,7 +134,7 @@ def main(start_from_pickle=None):
         df.iloc[start_idx:end_idx, df.columns.get_loc('processed_label')] = processed_labels
 
         # Save the progress after each batch
-        df.to_pickle(f'/home/ncorley/proteins/ProteinFunctions/data/annotations/processed_labels/updated_dataframe_2019_v4_batch_{batch_num}.pkl')
+        df.to_pickle(f'/home/ncorley/proteins/ProteinFunctions/data/annotations/processed_labels/updated_dataframe_2019_augmented_v1_batch_{batch_num}.pkl')
 
 if __name__ == "__main__":
     start_from = None

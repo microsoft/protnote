@@ -3,37 +3,15 @@
 # TODO: Optimizer can also be a hyperparameter
 params:
   ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET V100 VS. SANDBOX A100 ##############
-  ## A100 ###
-  # Batch sizes
-  TRAIN_BATCH_SIZE: 32 # 256 for A100
-  VALIDATION_BATCH_SIZE: 32 # 256 for A100
-  TEST_BATCH_SIZE: 32 # 16 for A100
-  # Label Sampling: can only use one of grid sampler, in batch sampling or normal label sampling
-  GRID_SAMPLER: False
-  IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
-  WEIGHTED_SAMPLING: True #Sample rare sequences more often as dictaded by inverse frequency of labels
-  INV_FREQUENCY_POWER: 0.5 #Used for weighted sampling AND relevant losses with weighting
-  TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. IS ALSO USED WITH GRID SAMPLER
-  VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
-  # Inference
-  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 2000 # 1500 for A100
-  SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 128 # 128 for A100 (TO BE VERIFIED)
 
-  ### V100 ###
   # Batch sizes
-  # TRAIN_BATCH_SIZE: 8 # 64 for V100
-  # VALIDATION_BATCH_SIZE: 16 # 64 for V100
-  # TEST_BATCH_SIZE: 16 # 4 for V100
-  # # Sampling
-  # GRID_SAMPLER: False
-  # IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
-  # WEIGHTED_SAMPLING: True #Sample rare sequences more often as dictaded by inverse frequency of labels
-  # INV_FREQUENCY_POWER: 0.5 #Used for weighted sampling AND relevant losses with weighting
-  # TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. IS ALSO USED WITH GRID SAMPLER
-  # VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
-  # # Inference
-  # LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 500 # 1K for V100
-  # SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 
+  TRAIN_BATCH_SIZE: 64 # 256 for A100
+  VALIDATION_BATCH_SIZE: 64 # 256 for A100
+  TEST_BATCH_SIZE: 64 # 16 for A100
+  
+  # Inference
+  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 500 # 2000 for A100, 500 for V100
+  SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 128 for A100, 64 for V100
 
   ############## PARAMS THAT DO NOT NEED TO VARY BETWEEN VIRTUAL MACHINES ##############
 
@@ -50,30 +28,30 @@ params:
   # General
   LEARNING_RATE: 0.0003
   OPTIMIZER: Adam
-  WEIGHT_DECAY: 0.01 #Only used for ADAM W or SGD
+  WEIGHT_DECAY: 0.001 # Only used for ADAM W or SGD
   PROTEIN_EMBEDDING_DIM: 1100
   LABEL_EMBEDDING_DIM: 1024
   LATENT_EMBEDDING_DIM: 1024
-  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 2 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
+  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 1 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
   OUTPUT_MLP_NUM_LAYERS: 2
   OUTPUT_NEURON_PROBABILITY_BIAS: null
   OUTPUT_MLP_BATCHNORM: True
   SYNC_BN: False
   DROPOUT: 0.0
-  PROJECTION_HEAD_NUM_LAYERS: 2
+  PROJECTION_HEAD_NUM_LAYERS: 1
   PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 1
-  FEATURE_FUSION: concatenation #concatenation or similarity
+  FEATURE_FUSION: concatenation # concatenation or similarity
   LABEL_EMBEDDING_POOLING_METHOD: 'last_token' #select from mean, last_token, all
   OPTIMIZATION_METRIC_NAME: f1_micro # Only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
-  NUM_EPOCHS: 50
+  NUM_EPOCHS: 15
 
   # Memory optimizations
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
   GRADIENT_CHECKPOINTING: False # True = gradient checkpointing
   LORA: True # True = use LORA
   LORA_RANK: 4
-  LORA_ALPHA: 8 #typically = 2 * Rank
+  LORA_ALPHA: 8 # Typically = 2 * Rank
   CLIP_VALUE: 1 # Gradient clipping, set to "null" to turn off
 
   # Losses. Only the parameters for selected loss will be used
@@ -94,12 +72,17 @@ params:
 
   # Data processing and metrics
   DEDUPLICATE: True
-  MAX_SEQUENCE_LENGTH: 10000 #Only affects training set. Just 8 seqs with 10K+ length
+  MAX_SEQUENCE_LENGTH: 10000 # Only affects training set. Just 8 seqs with 10K+ length
   NORMALIZE_PROBABILITIES: False
+
+  # Augmentation
+  AUGMENT_SEQUENCE_PROBABILITY: 0.15 # 0.0 = no augmentation. The probability that any given residue will be augmented. AlphaFold uses 0.15 (15% of residues are augmented)
+  USE_RESIDUE_MASKING: False # If True, also use masking to augment sequences. Must then also set AUGMENT_SEQUENCE_PROBABILITY > 0, and TRAIN_SEQUENCE_ENCODER = True
+  AUGMENT_LABEL_PROBABILITY: 0.0 # 0.0 = no augmentation. The probability that any given label will be augmented.
 
   # Constants
   SEED: 42
-  EPOCHS_PER_VALIDATION: 2 # Must be >= 1
+  EPOCHS_PER_VALIDATION: 1 # Must be >= 1
   NUM_WORKERS: 3
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
 
@@ -135,12 +118,13 @@ paths:
 
     # Vocabulary paths
     VOCABULARIES_DIR: vocabularies/proteinfer
-    GO_ANNOTATIONS_PATH: annotations/go_annotations_2019_07_01_condensed.pkl # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
+    GO_ANNOTATIONS_PATH: annotations/go_annotations_2019_07_01.pkl # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
 
     # Embeddings paths (if using frozen pre-trained models)
-    LABEL_EMBEDDING_PATH: embeddings/frozen_BioGPT_label_embeddings_condensed.pkl # this is the base path which is modified by POOLING_METHOD
+    LABEL_EMBEDDING_PATH: embeddings/frozen_BioGPT_label_embeddings.pkl # this is the base path which is modified by POOLING_METHOD
     SEQUENCE_EMBEDDING_PATH: embeddings/frozen_proteinfer_sequence_embeddings.pkl
 
+    # ProteInfer paths
     PARENTHOOD_LIB_PATH: vocabularies/parenthood.json.gz
     PROTEINFER_WEIGHTS_PATH: models/proteinfer/GO_model_weights.pkl
     

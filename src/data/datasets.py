@@ -11,8 +11,10 @@ from collections import defaultdict
 from joblib import Parallel, delayed, cpu_count
 from functools import partial
 from collections import Counter
-from src.utils.main_utils import get_or_generate_label_embeddings
 from src.data.samplers import GridBatchSampler,observation_sampler_factory
+import random
+import blosum as bl
+
 class ProteinDataset(Dataset):
     """
     Dataset class for protein sequences with GO annotations.
@@ -22,16 +24,14 @@ class ProteinDataset(Dataset):
         data_paths: dict,
         config: dict,
         vocabularies: dict,
-        label_tokenizer=None,
-        label_encoder=None,
         logger=None,
         require_label_idxs=False,
         subset_fraction: float = 1.0,
         deduplicate: bool = False,
-        is_master: bool = True,
+        label_tokenizer=None,
     ):
         """
-        paths (dict): Dictionary containing paths to the data and vocabularies.
+        data_paths (dict): Dictionary containing paths to the data and vocabularies.
             data_path (str): Path to the FASTA file containing the protein sequences and corresponding GO annotations
             dataset_type (str): One of 'train', 'validation', or 'test'
             go_descriptions_path (str): Path to the pickled file containing the GO term descriptions mapped to GO term IDs
@@ -50,6 +50,9 @@ class ProteinDataset(Dataset):
             "validation",
             "test",
         ], "dataset_type must be one of 'train', 'val', or 'test'"
+        
+        # Tokenizer
+        self.label_tokenizer = label_tokenizer
 
         # Set the dataset type and data path
         self.dataset_type = data_paths["dataset_type"]
@@ -60,12 +63,22 @@ class ProteinDataset(Dataset):
         self.label_vocabulary = vocabularies["GO_label_vocab"]
         self.sequence_id_vocabulary = vocabularies["sequence_id_vocab"]
         self._process_vocab()
-
-        # Initialize class variables
+        
+        # Initialize data augmentation parameters
+        self.masked_msa_token = "<MASK>"
+        self.augment_sequence_probability = config["params"]["AUGMENT_SEQUENCE_PROBABILITY"]
+        self.use_residue_masking = config["params"]["USE_RESIDUE_MASKING"]
+        self.augment_label_probability = config["params"]["AUGMENT_LABEL_PROBABILITY"]
+        
+        # Load the BLOSUM62 matrix and convert to defaultdict using dictionary comprehension
+        blosum62 = bl.BLOSUM(62)
+        self.blosum62 = defaultdict(dict, {aa1: {aa2: blosum62[aa1][aa2] for aa2 in blosum62.keys()} for aa1 in blosum62.keys()})
+        
+        # Initialize class variables and pre-computed embedding matrices
         self.data = read_fasta(data_paths["data_path"])
         self.label_embedding_matrix = self.sequence_embedding_df = None
         
-        #Flag to know how Dataset indexing will be handle.
+        # Flag to know how Dataset indexing will be handled
         self.require_label_idxs = require_label_idxs
 
         # Subset the data if subset_fraction is provided
@@ -77,43 +90,11 @@ class ProteinDataset(Dataset):
 
         # Deduplicate the data if deduplicate is True
         self._clean_data(deduplicate=deduplicate,
-                         max_sequence_length=config["params"]["MAX_SEQUENCE_LENGTH"])
+            max_sequence_length=config["params"]["MAX_SEQUENCE_LENGTH"])
 
         # Load the map from alphanumeric label id to text label
         self.label_annotation_map = {key: value['label'] for key, value in read_pickle(
             data_paths["go_annotations_path"]).to_dict(orient='index').items()}
-
-        # Create ordered list of labels
-        label_text_list = []
-        for label_id in self.label_vocabulary:
-            label_text_list.append(self.label_annotation_map[label_id])
-        self.label_text_list = label_text_list
-
-        # Loop through the label IDs and tokenize the labels if a label tokenizer is provided
-        self.tokenized_labels = None
-        self.label_tokenizer = None
-        if label_tokenizer is not None:
-            self.label_tokenizer = label_tokenizer
-            self.tokenized_labels = tokenize_labels(
-                label_text_list, label_tokenizer)
-
-        # If a label encoder is provided, encode the labels
-        # TODO: Move back to main to remove warning
-        self.label_embedding_matrix = None
-        self.label_encoder = None
-        if label_encoder is not None and config["params"]["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"]==0:
-            self.label_encoder = label_encoder
-            label_embedding_matrix = get_or_generate_label_embeddings(
-                label_annotations=self.label_text_list,
-                label_tokenizer=label_tokenizer,
-                label_encoder=label_encoder,
-                label_embedding_path=config["paths"]["LABEL_EMBEDDING_PATH"],
-                logger=logger,
-                batch_size_limit=config["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
-                is_master=is_master,
-                pooling_method=config["params"]["LABEL_EMBEDDING_POOLING_METHOD"]
-            )
-            self.label_embedding_matrix = label_embedding_matrix
 
     # Helper functions for setting embedding dictionaries
     def set_sequence_embedding_df(self, embedding_df: pd.DataFrame):
@@ -173,19 +154,109 @@ class ProteinDataset(Dataset):
 
     def __len__(self) -> int:
         return len(self.data)
+    
+    def _sample_based_on_blosum62(self, amino_acid: str) -> str:
+        """
+        Sample an amino acid based on the BLOSUM62 substitution matrix, favoring likely silent mutations. 
+        In most cases, the amino acid will be unchanged.
+        Args:
+            amino_acid (str): The amino acid to find a substitution for.
+        Returns:
+            str: The substituted amino acid.
+        """
+        # Get the substitutions for the amino acid, ensuring only amino acids within the vocabulary are considered
+        substitutions = self.blosum62[amino_acid]
+        substitutions = {aa: score for aa, score in substitutions.items() if aa in self.amino_acid_vocabulary}
+        amino_acids, scores = zip(*substitutions.items())
+        
+        # Use only non-negative scodes
+        probabilities = [max(0, score) for score in scores]
+        total = sum(probabilities)
+        
+        # If all scores are negative, do not change the amino acid
+        if total == 0:
+            return amino_acid
+        else:
+            # Normalize the scores to sum to 1 and sample from the distribution
+            probabilities = [p / total for p in probabilities]
+            return random.choices(amino_acids, weights=probabilities, k=1)[0]
+    
+    def _augment_sequence(self, sequence: str) -> str:
+        """
+        Augment the sequence by randomly masking amino acids.
+        Each position has a probability of being masked based on self.augment_sequence_probability.
+        If self.use_residue_masking is True, the masked positions are replaced with a special token. Otherwise, the masked positions are replaced with an amino acid sampled from BLOSUM62.
+        Args:
+            sequence (str): The amino acid sequence to augment.
+
+        Returns:
+            str: The augmented amino acid sequence.
+        """
+        augmented_sequence = ""
+        for amino_acid in sequence:
+            if random.random() < self.augment_sequence_probability:
+                rand_choice = random.random()
+                if rand_choice < 0.10:
+                    # Replace with a uniformly sampled random amino acid
+                    augmented_sequence += random.choice(self.amino_acid_vocabulary)
+                elif rand_choice < 0.20:
+                    # Replace with a residue sampled from BLOSUM62
+                    augmented_sequence += self._sample_based_on_blosum62(amino_acid)
+                elif rand_choice < 0.30:
+                    # Leave the amino acid as it is
+                    augmented_sequence += amino_acid
+                else:
+                    # Replace with a special token, if using residue masking
+                    if self.use_residue_masking:
+                        augmented_sequence += self.masked_msa_token
+                    # Otherwise, replace with an amino acid sampled from BLOSUM62
+                    else:
+                        augmented_sequence += self._sample_based_on_blosum62(amino_acid)
+            else:
+                # No replacement, keep the original amino acid
+                augmented_sequence += amino_acid
+        
+        return augmented_sequence
+    
+    def _augment_labels(self, labels: list[str]) -> list[str]:
+        """
+        Augment label text by randomly selecting additional GPT summarizations for some labels.
+        Each label has a probability of being augmented based on self.augment_label_probability.
+        Args:
+            labels (list[str]): The labels to augment.
+
+        Returns:
+            list[str]: The augmented labels.
+        """
+        augmented_labels = []
+        # for label in labels:
+        #     if random.random() < self.augment_label_probability:
+        #         augmented_labels.append(self.masked_msa_token)
+        #     else:
+        #         augmented_labels.append(label)
+        return augmented_labels
 
     def process_example(self, sequence: str, labels: list[str], label_idxs:list[int] = None) -> dict:
         sequence_id_alphanumeric, labels = labels[0], labels[1:]
-
         
-
-        # Convert the sequence and labels to integers for one-hot encoding
-        amino_acid_ints = torch.tensor(
-            [self.aminoacid2int[aa] for aa in sequence], dtype=torch.long
-        )
-
+        # One-hot encode the labels for use in the loss function (not a model input, so should not be impacted by augmentation)
         labels_ints = torch.tensor(
             [self.label2int[label] for label in labels], dtype=torch.long
+        )
+        
+        # If training, augment the sequence with probability defined in the config
+        if self.dataset_type == "train":
+            # If self.augment_sequence_probability > 0, augment the sequence
+            if self.augment_sequence_probability > 0:
+                sequence = self._augment_sequence(sequence)
+            
+            # If augmenting labels, augment the labels
+            if self.augment_label_probability > 0:
+                labels = self._augment_labels(labels)
+
+        # Convert the sequence and labels to integers for one-hot encoding (impacted by augmentation)
+        amino_acid_ints = torch.tensor(
+            [self.aminoacid2int[aa] for aa in sequence], dtype=torch.long
         )
 
         # Get the length of the sequence
@@ -202,18 +273,20 @@ class ProteinDataset(Dataset):
         if label_idxs is not None:
             label_idxs = torch.tensor(label_idxs)
 
-        # Set the label embeddings, if provided
-        label_embeddings = self.label_embedding_matrix if self.label_embedding_matrix is not None else None
+        tokenized_labels = None
+        label_embeddings = None
+        if self.label_embedding_matrix is not None:
+            # Set the label embeddings, if provided
+            label_embeddings = self.label_embedding_matrix
+        else:
+            # Tokenize the labels if we don't have label embedding
+            tokenized_labels = tokenize_labels(labels, self.label_tokenizer)
 
         # Get the sequence embedding, if provided
         sequence_embedding = None
-        # TODO: Remove this check
         if self.sequence_embedding_df is not None:
             sequence_embedding = torch.tensor(
                 self.sequence_embedding_df.loc[sequence_id_alphanumeric].values)
-
-        # Get the tokenized labels, if provided
-        tokenized_labels = self.tokenized_labels if self.tokenized_labels is not None else None
 
         # Return a dict containing the processed example
         return {
@@ -224,7 +297,7 @@ class ProteinDataset(Dataset):
             "label_multihots": label_multihots,
             "tokenized_labels": tokenized_labels,
             "label_embeddings": label_embeddings,
-            "label_idxs":label_idxs
+            "label_idxs": label_idxs
         }
 
     def __getitem__(self, idx) -> tuple:
@@ -239,42 +312,6 @@ class ProteinDataset(Dataset):
         
 
         return self.process_example(sequence, labels,label_idxs)
-
-    @classmethod
-    def create_multiple_datasets(
-        cls,
-        paths_list: List[Dict[str, str]],
-        config: dict,
-        vocabularies: dict,
-        require_train_label_idxs:bool,
-        subset_fractions: dict = None,
-        label_tokenizer=None,
-        label_encoder=None,
-        logger=None,
-        deduplicate: bool = False,
-    ) -> List[Dataset]:
-        """
-        paths_list (List[Dict[str, str]]): List of dictionaries, each containing paths to the data and vocabularies.
-        subset_fractions (dict): Dictionary containing the subset fraction for each dataset type (default: None)
-        """
-        datasets = defaultdict(list)
-        subset_fractions = subset_fractions or {}
-        for data_paths in paths_list:
-            datasets[data_paths["dataset_type"]].append(
-                cls(
-                    data_paths,
-                    config,
-                    vocabularies,
-                    label_tokenizer=label_tokenizer,
-                    label_encoder=label_encoder,
-                    logger=logger,
-                    require_label_idxs=require_train_label_idxs if data_paths["dataset_type"]=='train' else False,
-                    subset_fraction=subset_fractions.get(
-                        data_paths["dataset_type"], 1.0),
-                    deduplicate=deduplicate
-                )
-            )
-        return datasets
     
     def calculate_pos_weight(self):
         self.logger.info("Calculating bce_pos_weight...")

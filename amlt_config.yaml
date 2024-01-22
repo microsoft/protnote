@@ -19,7 +19,7 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-- name: '{amlt}{big mlp}{dropout 0.0}{condensed labels}{weighted sampling 0.5}{last token}'
+- name: '{amlt}{medium mlp}{weighted sampling 0.5}{mean}'
   sku: G8
   priority: high
   preemptible: False
@@ -31,14 +31,14 @@ jobs:
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
     --full-path-name FULL_DATA_PATH 
-    --name "{amlt}{big mlp}{dropout 0.0}{condensed labels}{weighted sampling 0.5}{last token}"
-    --override DROPOUT 0.0
+    --name "{amlt}{medium mlp}{weighted sampling 0.5}{mean}"
+    --override LABEL_EMBEDDING_POOLING_METHOD "mean"
     --amlt
     --use-wandb
   submit_args:
     env:
       WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{amlt}{big mlp}{dropout 0.2}{condensed labels}{weighted sampling 0.5}{last token}'
+- name: '{amlt}{medium mlp}{weighted sampling 0.5}{last token}'
   sku: G8
   priority: high
   preemptible: False
@@ -50,14 +50,14 @@ jobs:
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
     --full-path-name FULL_DATA_PATH 
-    --name "{amlt}{big mlp}{dropout 0.2}{condensed labels}{weighted sampling 0.5}{last token}"
-    --override DROPOUT 0.2
+    --name "{amlt}{medium mlp}{weighted sampling 0.5}{last token}"
+    --override LABEL_EMBEDDING_POOLING_METHOD "last_token"
     --amlt
     --use-wandb
   submit_args:
     env:
       WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{amlt}{big mlp}{dropout 0.5}{condensed labels}{weighted sampling 0.5}{last token}'
+- name: '{amlt}{medium mlp}{weighted sampling 0.6}{mean}'
   sku: G8
   priority: high
   preemptible: False
@@ -69,14 +69,14 @@ jobs:
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
     --full-path-name FULL_DATA_PATH 
-    --name "{amlt}{big mlp}{dropout 0.5}{condensed labels}{weighted sampling 0.5}{last token}"
-    --override DROPOUT 0.5
+    --name "{amlt}{medium mlp}{weighted sampling 0.6}{mean}"
+    --override LABEL_EMBEDDING_POOLING_METHOD "mean" INV_FREQUENCY_POWER 0.6
     --amlt
     --use-wandb
   submit_args:
     env:
       WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{amlt}{big mlp}{dropout 0.8}{condensed labels}{weighted sampling 0.5}{last token}'
+- name: '{amlt}{medium mlp}{weighted sampling 0.6}{last token}'
   sku: G8
   priority: high
   preemptible: False
@@ -88,8 +88,8 @@ jobs:
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
     --full-path-name FULL_DATA_PATH 
-    --name "{amlt}{big mlp}{dropout 0.8}{condensed labels}{weighted sampling 0.5}{last token}"
-    --override DROPOUT 0.8
+    --name "{amlt}{medium mlp}{weighted sampling 0.6}{last token}"
+    --override LABEL_EMBEDDING_POOLING_METHOD "last_token" INV_FREQUENCY_POWER 0.6
     --amlt
     --use-wandb
   submit_args:

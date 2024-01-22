@@ -26,7 +26,7 @@ class ProTCL(nn.Module):
         label_batch_size_limit=float("inf"),
         sequence_batch_size_limit=float("inf"),
         feature_fusion='concatenation',
-        temperature=0.07
+        temperature=0.07,
     ):
         super().__init__()
 
@@ -121,30 +121,47 @@ class ProTCL(nn.Module):
             label_embeddings (optional): Tensor of pre-trained label embeddings.
         """
 
-        # If label embeddings are provided and we're not training the laebel encoder, use them. Otherwise, compute them.
-        
-        if label_embeddings is not None and (self.label_encoder_num_trainable_layers==0 or (self.label_encoder_num_trainable_layers>0 and not self.training)):
+      
+        #---------------------- LABEL EMBEDDING ----------------------# 
+        if label_embeddings is not None and (self.label_encoder_num_trainable_layers == 0 or not self.training):
+            # If label embeddings are provided and we don't need to propagate gradients (either because we aren't in training, or we didn't freeze the weights), use them.
             L_f = label_embeddings
-        elif (tokenized_labels is not None)&(self.label_encoder_num_trainable_layers>0)&(self.training):
-            # Get label embeddings from tokens
-            L_f = get_label_embeddings(
-                tokenized_labels,
-                self.label_encoder,
-                method=self.label_embedding_pooling_method,
-                batch_size_limit=self.label_batch_size_limit
-            )
-
+        elif (tokenized_labels is not None) and self.training:
+            # Otherwise, compute them on the fly (with or without gradients, depending on whether we are training the label encoder).
+            if self.label_encoder_num_trainable_layers > 0:
+                # Get label embeddings from tokens, with gradients
+                L_f = get_label_embeddings(
+                    tokenized_labels,
+                    self.label_encoder,
+                    method=self.label_embedding_pooling_method,
+                    batch_size_limit=self.label_batch_size_limit
+                )
+            else:
+                # Get label embeddings from tokens, without gradients
+                with torch.no_grad():
+                    L_f = get_label_embeddings(
+                        tokenized_labels,
+                        self.label_encoder,
+                        method=self.label_embedding_pooling_method,
+                        batch_size_limit=self.label_batch_size_limit
+                    )
         else:
             raise ValueError(
                 "Incompatible label parameters passed to forward method.")
 
-        # If sequence embeddings are provided and we're not training the sequence encoder, use them. Otherwise, compute them.
-        if sequence_embeddings is not None and not self.train_sequence_encoder:
+        #---------------------- SEQUENCE EMBEDDINGS ----------------------# 
+        if sequence_embeddings is not None and (not self.train_sequence_encoder or not self.training):
+            # If sequence embeddings are provided and we don't need to propagate gradients (either because we aren't in training, or we didn't freeze the weights), use them.
             P_f = sequence_embeddings
-        elif sequence_onehots is not None and sequence_lengths is not None:
-            
-            P_f = self.sequence_encoder.get_embeddings(
-                sequence_onehots, sequence_lengths)
+        elif sequence_onehots is not None and sequence_lengths is not None: 
+            # Otherwise, compute them on the fly (with or without gradients, depending on self.train_sequence_encoder).
+            if self.train_sequence_encoder and self.training:
+                # Compute embeddings with gradient calculations enabled
+                P_f = self.sequence_encoder.get_embeddings(sequence_onehots, sequence_lengths)
+            else:
+                # Compute embeddings with gradient calculations disabled
+                with torch.no_grad():
+                    P_f = self.sequence_encoder.get_embeddings(sequence_onehots, sequence_lengths)
         else:
             raise ValueError(
                 "Incompatible sequence parameters passed to forward method.")

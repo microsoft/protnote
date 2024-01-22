@@ -519,7 +519,6 @@ class ProTCLTrainer:
                           step=self.training_step
                           )
             
-
             # Print memory consumption after first batch (to get the max memory consumption during training)
             if batch_idx == 1 and self.is_master:
                 self.logger.info("+----------------- Train GPU Memory Usage -----------------+")

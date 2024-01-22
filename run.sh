@@ -4,7 +4,7 @@
 # Run script with: ./run.sh
 
 python main.py \
-    --name '{A100}{big mlp}{condensed labels}{weighted sampling 0.5}{last token}' \
+    --name '{A100}{Small MLP}{Sequence Augmentations [0.15, No Masking]}{Frozen Label Encoder}' \
     --full-path-name FULL_DATA_PATH \
     --train-path-name TRAIN_DATA_PATH \
     --validation-path-name VAL_DATA_PATH \
