@@ -68,6 +68,10 @@ class DistributedWeightedSampler(Sampler):
         self.rank = rank
         self.epoch = 0
         self.replacement = replacement
+        
+        # Ensure weights is a tensor
+        if not isinstance(self.weights, torch.Tensor):
+            self.weights = torch.tensor(self.weights, dtype=torch.double)
 
         # Determine the number of samples for each GPU, rounding down to ensure it is evenly divisible
         self.num_samples = int(math.floor(len(self.weights) * 1.0 / self.world_size))

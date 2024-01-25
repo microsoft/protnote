@@ -24,13 +24,12 @@ import json
 import pandas as pd
 from transformers import AutoTokenizer, AutoModel
 from src.data.collators import collate_variable_sequence_length
-import loralib as lora
-import random
 
 ### SETUP ###
 torch.cuda.empty_cache()
 
 def main():
+    #---------------------- HANDLE ARGUMENTS ----------------------# 
     parser = argparse.ArgumentParser(
         description="Train and/or Test the ProTCL model.")
     parser.add_argument("--train-path-name", type=str, default=None,
@@ -134,6 +133,9 @@ def train_validate_test(gpu, args):
     device = torch.device('cuda:' + str(gpu)
                           if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
+    
+    # Seed everything so we don't go crazy
+    seed_everything(params["SEED"], device)
 
     # Initialize W&B, if using
     if is_master and args.use_wandb:
@@ -171,32 +173,56 @@ def train_validate_test(gpu, args):
         raise NotImplementedError(
             "Gradient checkpointing is not yet implemented.")
 
-
     label_encoder = label_encoder.to(device)
 
     # Load or generate the vocabularies
     vocabularies = get_or_generate_vocabularies(
         paths["FULL_DATA_PATH"], paths["VOCABULARIES_DIR"], logger)
 
-    # Create datasets
-    datasets = ProteinDataset.create_multiple_datasets(
-        paths_list=config['dataset_paths_list'],
+    #---------------------- DATASETS ----------------------# 
+    # Create individual datasets
+    train_dataset = ProteinDataset(
+        data_paths=config['dataset_paths_list'][0], # The first dataset path is the training set. TODO: Change to dictionary.
         config=config,
-        logger=logger,
-        require_train_label_idxs=params['GRID_SAMPLER'],
-        label_tokenizer=label_tokenizer,
-        label_encoder=label_encoder,
         vocabularies=vocabularies,
-        subset_fractions={
-            "train": params["TRAIN_SUBSET_FRACTION"],
-            "validation": params["VALIDATION_SUBSET_FRACTION"],
-            "test": params["TEST_SUBSET_FRACTION"],
-        },
+        logger=logger,
+        require_label_idxs=params['GRID_SAMPLER'],
+        subset_fraction=params["TRAIN_SUBSET_FRACTION"],
         deduplicate=params["DEDUPLICATE"],
+        label_tokenizer=label_tokenizer,
     )
 
-    # Seed everything so we don't go crazy
-    seed_everything(params["SEED"], device)
+    validation_dataset = ProteinDataset(
+        data_paths=config['dataset_paths_list'][1], # The second dataset path is the validation set.  TODO: Change to dictionary.
+        config=config,
+        vocabularies=vocabularies,
+        logger=logger,
+        require_label_idxs=False,  # Label indices are not required for validation. 
+        subset_fraction=params["VALIDATION_SUBSET_FRACTION"],
+        deduplicate=params["DEDUPLICATE"],
+        label_tokenizer=label_tokenizer,
+    )
+
+    test_dataset = ProteinDataset(
+        data_paths=config['dataset_paths_list'][2], # The third dataset path is the test set.  TODO: Change to dictionary.
+        config=config,
+        vocabularies=vocabularies,
+        logger=logger,
+        require_label_idxs=False,  # Label indices are not required for testing
+        subset_fraction=params["TEST_SUBSET_FRACTION"],
+        deduplicate=params["DEDUPLICATE"],
+        label_tokenizer=label_tokenizer,
+    )
+
+    # Add datasets to a dictionary
+    # TODO: This does not support multiple datasets. But I think we should remove that support anyway. Too complicated.
+    datasets = {
+        "train": [train_dataset],
+        "validation": [validation_dataset],
+        "test": [test_dataset]
+    }
+    
+    #-----------------------------------------------------# 
 
     # Initialize new run
     logger.info(
@@ -217,9 +243,11 @@ def train_validate_test(gpu, args):
                                                       datasets["train"][0].calculate_label_weights(power = params["INV_FREQUENCY_POWER"])
                                                       )
         
-        # Set all weights below 0.5 to 0.5 and all weights above 50 to 50
-        # TODO: Make this clamping scheme a hyperparameter we can tune
-        sequence_weights = torch.tensor(sequence_weights)
+        # If using clamping, clamp the weights based on the hyperparameters
+        if params["SAMPLING_LOWER_CLAMP_BOUND"] is not None:
+            sequence_weights = [max(x, params["SAMPLING_LOWER_CLAMP_BOUND"]) for x in sequence_weights]
+        if params["SAMPLING_UPPER_CLAMP_BOUND"] is not None:
+            sequence_weights = [min(x, params["SAMPLING_UPPER_CLAMP_BOUND"]) for x in sequence_weights]
 
     # Define data loaders
     loaders = create_multiple_loaders(
@@ -265,9 +293,10 @@ def train_validate_test(gpu, args):
         )
 
 
-    # Generate all sequence embeddings upfront, if not training the sequence encoder
+    # Generate all sequence embeddings upfront, if we can
     sequence_embedding_df = None
     if not params["TRAIN_SEQUENCE_ENCODER"]:
+        logger.info("We are not training the sequence encoder, so generating all sequence embeddings upfront...")
         sequence_embedding_df = get_or_generate_sequence_embeddings(
             paths,
             device,
@@ -277,14 +306,42 @@ def train_validate_test(gpu, args):
             logger,
         )
         sequence_encoder = sequence_encoder.to('cpu')
-        
-    # Generate all label embeddings upfront, if not training the label encoder
 
-    # Loop through all the datasets and set the sequence embedding df
-    for dataset in datasets.values():
-        for subset in dataset:
-            if not params["TRAIN_SEQUENCE_ENCODER"]:
+        # Loop through all the datasets and set the sequence embedding df
+        for key, dataset,  in datasets.items():
+            if key == 'train' and params["AUGMENT_SEQUENCE_PROBABILITY"] > 0:
+                logger.info("Skipping setting sequence embedding df for the training set because we are augmenting it.")
+                # If we are augmenting the training set, we don't want to set the sequence embedding df
+                continue
+            for subset in dataset:
                 subset.set_sequence_embedding_df(sequence_embedding_df)
+                
+    # Generate all label embeddings upfront, if we can
+    if params["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"] == 0:
+        logger.info("We are not training the label encoder, so generating all label embeddings upfront...")
+        for key, dataset in datasets.items():
+            if key == 'train' and params["AUGMENT_LABEL_PROBABILITY"] > 0:
+                logger.info("Skipping setting label embedding matrix for the training set because we are augmenting it.")
+                continue
+            for subset in dataset:
+                # Create ordered list of labels
+                label_text_list = []
+                for label_id in subset.label_vocabulary:
+                    label_text_list.append(subset.label_annotation_map[label_id])
+                
+                # Generate embeddings
+                label_embedding_matrix = get_or_generate_label_embeddings(
+                    label_annotations=label_text_list,
+                    label_tokenizer=label_tokenizer,
+                    label_encoder=label_encoder,
+                    label_embedding_path=config["paths"]["LABEL_EMBEDDING_PATH"],
+                    logger=logger,
+                    batch_size_limit=config["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
+                    is_master=is_master,
+                    pooling_method=config["params"]["LABEL_EMBEDDING_POOLING_METHOD"]
+                )
+                
+                subset.set_label_embedding_matrix(label_embedding_matrix)
 
     model = ProTCL(
         # Parameters
@@ -303,12 +360,12 @@ def train_validate_test(gpu, args):
         output_neuron_bias=sigmoid_bias_from_prob(params["OUTPUT_NEURON_PROBABILITY_BIAS"]) if params["OUTPUT_NEURON_PROBABILITY_BIAS"] is not None else None,
         outout_mlp_add_batchnorm=params["OUTPUT_MLP_BATCHNORM"],
         projection_head_num_layers=params["PROJECTION_HEAD_NUM_LAYERS"],
-        output_mlp_dropout=params["OUTPUT_MLP_DROPOUT"],
+        dropout=params["DROPOUT"],
         projection_head_hidden_dim_scale_factor=params["PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR"],
 
         # Training options
         label_encoder_num_trainable_layers=params["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"],
-        train_sequence_encoder=params["TRAIN_SEQUENCE_ENCODER"],
+        train_sequence_encoder=params["TRAIN_SEQUENCE_ENCODER"], 
 
         # Batch size limits
         label_batch_size_limit=params["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],

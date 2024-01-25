@@ -390,9 +390,9 @@ class ProTCLTrainer:
                         test_results["logits"].append(logits.cpu())
                         test_results["labels"].append(labels.cpu())
 
-                # Print progress every 10%
-                if batch_idx % (len(data_loader) // 10) == 0:
-                    self.logger.info(f"Epoch {self.epoch}: Processed {batch_idx} out of {len(data_loader)} batches ({batch_idx / len(data_loader) * 100:.2f}%).")  
+                # Print progress every 25%
+                if batch_idx % (len(data_loader) // 4) == 0:
+                    self.logger.info(f"[Validation] Epoch {self.epoch}: Processed {batch_idx} out of {len(data_loader)} batches ({batch_idx / len(data_loader) * 100:.2f}%).")  
 
 
                 # Accumulate loss
@@ -519,7 +519,6 @@ class ProTCLTrainer:
                           step=self.training_step
                           )
             
-
             # Print memory consumption after first batch (to get the max memory consumption during training)
             if batch_idx == 1 and self.is_master:
                 self.logger.info("+----------------- Train GPU Memory Usage -----------------+")
@@ -528,7 +527,7 @@ class ProTCLTrainer:
                 
             # Print progress every 10%
             if batch_idx % (len(train_loader) // 10) == 0:
-                self.logger.info(f"Epoch {self.epoch}: Processed {batch_idx} out of {len(train_loader)} batches ({batch_idx / len(train_loader) * 100:.2f}%).")  
+                self.logger.info(f"[Train] Epoch {self.epoch}: Processed {batch_idx} out of {len(train_loader)} batches ({batch_idx / len(train_loader) * 100:.2f}%).")  
 
         avg_loss = avg_loss/len(train_loader) if len(train_loader)> 0 else avg_loss
         avg_probs_gt_ration = avg_probs/avg_gt

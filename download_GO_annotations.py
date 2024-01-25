@@ -19,7 +19,7 @@ def calculate_label(row):
     if definition is not None:
         definition = re.sub(r'\s*\[.*?\]\s*', '', definition)
         definition = definition.strip('"')
-
+        
     return definition
 
 

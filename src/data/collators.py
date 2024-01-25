@@ -12,23 +12,32 @@ def collate_variable_sequence_length(batch: List[Tuple],
                                      world_size=1,
                                      rank=0):
     """
-    Collates batches with variable sequence lengths by padding sequences to the maximum length in the batch.
+    Collates a batch of data with variable sequence lengths. Pads sequences to the maximum length within the batch to handle the variable 
+    lengths.
 
     Args:
-    - batch (list): List of dictionaries containing: {
-        "sequence_onehots": torch.Tensor of shape (sequence_dim, sequence_length) containing the one-hot-encoded sequence,
-        "sequence_embedding": torch.Tensor of shape (sequence_embedding_dim) containing the sequence embedding,
-        "sequence_length": torch.Tensor of shape (1) containing the sequence length,
-        "label_multihots": torch.Tensor of shape (num_labels) containing the multihot-encoded labels,
-        "tokenized_labels": list of strings containing the tokenized labels,
-        "label_embeddings": torch.Tensor of shape (label_embedding_dim) containing the label embedding,
-    }
+        batch (List[Tuple]): A list of tuples, where each tuple represents one data point. 
+                             Each tuple contains a dictionary with keys like 'sequence_onehots', 
+                             'sequence_embedding', 'sequence_length', 'label_multihots', etc.
+        label_sample_size (int, optional): The number of labels to sample for training. 
+                                           Used with grid_sampler or in_batch_sampling.
+        distribute_labels (bool, optional): Whether to distribute labels across different GPUs.
+        shuffle_labels (bool, optional): Whether to shuffle labels during sampling.
+        in_batch_sampling (bool, optional): If True, samples labels that are present within the batch.
+        grid_sampler (bool, optional): If True, uses a grid sampling strategy for labels.
+        world_size (int, optional): The total number of distributed processes or GPUs.
+        rank (int, optional): The rank of the current process in distributed training.
 
     Returns:
-    - processed_sequence_ids (torch.Tensor): Tensor of shape (batch_size,) containing the (numeric) sequence IDs.
-    - processed_sequence_onehots (torch.Tensor): Tensor of shape (batch_size, sequence_dim, max_length) containing the padded sequences.
-    - processed_label_multihots (torch.Tensor): Tensor of shape (batch_size, num_labels) containing the multihot-encoded labels.
-    - processed_sequence_lengths (torch.Tensor): Tensor of shape (batch_size,) containing the sequence lengths.
+        Dict: A dictionary containing the processed batch data. Keys include:
+              - 'sequence_onehots': Tensor, padded one-hot encoded sequences.
+              - 'sequence_ids': List, sequence IDs.
+              - 'sequence_embeddings': Tensor, sequence embeddings if provided. Otherwise None.
+              - 'sequence_lengths': Tensor, lengths of sequences.
+              - 'label_multihots': Tensor, multihot encoded labels (possibly sampled).
+              - 'tokenized_labels': BatchEncoding, processed tokenized labels.
+              - 'label_embeddings': Tensor, label embeddings if provided. Otherwise None.
+
     """
 
     # Determine the maximum sequence length in the batch
@@ -137,9 +146,10 @@ def collate_variable_sequence_length(batch: List[Tuple],
     if len(processed_sequence_embeddings) == len(processed_sequence_onehots):
         processed_sequence_embeddings = torch.stack(
             processed_sequence_embeddings)
-    
-    # if rank < 2:
-    #     print("GPU {}. sequence_ids: {}".format(rank, processed_sequence_ids[:10]))
+        
+    # If sequence embeddings are an empty list, set them to None
+    if len(processed_sequence_embeddings) == 0:
+        processed_sequence_embeddings = None
 
     processed_batch = {
         "sequence_onehots": torch.stack(processed_sequence_onehots),

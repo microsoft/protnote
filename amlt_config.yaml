@@ -1,5 +1,5 @@
 # For field details: https://amulet-docs.azurewebsites.net/config_file.html
-description: Protein Functions Experiment
+description: Big MLP Dropoout Experiments
 
 target:
   service: amlk8s
@@ -38,3 +38,61 @@ jobs:
   submit_args:
     env:
       WANDB_API_KEY: "$WANDB_API_KEY"
+- name: '{amlt}{medium mlp}{weighted sampling 0.5}{last token}'
+  sku: G8
+  priority: high
+  preemptible: False
+  command:
+  - python main.py 
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH 
+    --validation-path-name VAL_DATA_PATH 
+    --test-paths-names TEST_DATA_PATH 
+    --full-path-name FULL_DATA_PATH 
+    --name "{amlt}{medium mlp}{weighted sampling 0.5}{last token}"
+    --override LABEL_EMBEDDING_POOLING_METHOD "last_token"
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: '{amlt}{medium mlp}{weighted sampling 0.6}{mean}'
+  sku: G8
+  priority: high
+  preemptible: False
+  command:
+  - python main.py 
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH 
+    --validation-path-name VAL_DATA_PATH 
+    --test-paths-names TEST_DATA_PATH 
+    --full-path-name FULL_DATA_PATH 
+    --name "{amlt}{medium mlp}{weighted sampling 0.6}{mean}"
+    --override LABEL_EMBEDDING_POOLING_METHOD "mean" INV_FREQUENCY_POWER 0.6
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: '{amlt}{medium mlp}{weighted sampling 0.6}{last token}'
+  sku: G8
+  priority: high
+  preemptible: False
+  command:
+  - python main.py 
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH 
+    --validation-path-name VAL_DATA_PATH 
+    --test-paths-names TEST_DATA_PATH 
+    --full-path-name FULL_DATA_PATH 
+    --name "{amlt}{medium mlp}{weighted sampling 0.6}{last token}"
+    --override LABEL_EMBEDDING_POOLING_METHOD "last_token" INV_FREQUENCY_POWER 0.6
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_API_KEY: "$WANDB_API_KEY"
+

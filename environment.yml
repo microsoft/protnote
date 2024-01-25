@@ -30,4 +30,5 @@ dependencies:
     - torcheval==0.0.7
     - tensorboard==2.15.1
     - obonet==1.0.0
+    - blosum==2.0.2
 prefix: /anaconda/envs/protein_functions_310

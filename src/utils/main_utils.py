@@ -107,7 +107,7 @@ def get_or_generate_label_embeddings(
 
     if os.path.exists(label_embedding_path):
         label_embedding_matrix = torch.load(label_embedding_path)
-        if logger is not None:
+        if logger is not None and is_master:
             logger.info(
                 f"Loaded label embeddings from {label_embedding_path}")
     else:
