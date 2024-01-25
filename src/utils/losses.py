@@ -18,27 +18,21 @@ class SupCon(torch.nn.Module):
         t: Temperature parameter
         target: Batch of "target" GO annotations [batch_size, num_labels]
         """
-
-
         # Compute loss for each direction (protein to label and label to protein)
         overall_loss_p = one_way_supcon(logits=input,
                                         labels_multihot=target,
-                                        dim=1,
-                                        temperature=self.temperature,
-                                        base_temperature=self.base_temperature)
+                                        dim=1)
         '''
         overall_loss_l = one_way_supcon(logits=input,
                                         labels_multihot=target,
-                                        dim=0,
-                                        temperature=self.temperature,
-                                        base_temperature=self.base_temperature)'''
+                                        dim=0)'''
 
         # Return the average of the two losses
         #
         # return (overall_loss_p + overall_loss_l) / 2
         return overall_loss_p
 
-def one_way_supcon(logits,labels_multihot, dim, temperature,base_temperature):
+def one_way_supcon(logits, labels_multihot, dim):
     '''
     dim=1 is traditional entropy of predicting labels
     '''
@@ -55,8 +49,8 @@ def one_way_supcon(logits,labels_multihot, dim, temperature,base_temperature):
     mean_log_prob_pos = (labels_multihot * log_prob).sum(dim) / norm
     mean_log_prob_pos = torch.nan_to_num(mean_log_prob_pos,0) #In case dim = 0 and there are labels always negative
     # loss
-    loss = - (temperature / base_temperature) * mean_log_prob_pos
-    return loss.mean()
+    loss = - mean_log_prob_pos.mean()
+    return loss
 
 
 # def compute_asymmetric_loss(logits, target, dim):

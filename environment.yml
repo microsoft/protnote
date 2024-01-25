@@ -29,4 +29,5 @@ dependencies:
     - loralib==0.1.2
     - torcheval==0.0.7
     - tensorboard==2.15.1
+    - obonet==1.0.0
 prefix: /anaconda/envs/protein_functions_310

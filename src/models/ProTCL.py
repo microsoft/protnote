@@ -42,6 +42,7 @@ class ProTCL(nn.Module):
         self.feature_fusion = feature_fusion
         self.temperature = temperature
         self.label_embedding_pooling_method = label_embedding_pooling_method
+        self.latent_dim = latent_dim
 
         # Projection heads
         self.W_p = MLP(protein_embedding_dim,
@@ -62,10 +63,10 @@ class ProTCL(nn.Module):
             #TODO: this could be a simple mlp using get_mlp because it includes output neuron
             self.raw_attn_scorer = nn.Linear(label_embedding_dim,1, bias=True)
 
-        if self.feature_fusion=='concatenation':
+        if self.feature_fusion.startswith('concatenation'):
             # TODO: This could change. Currently keeping latent dim.
             self.output_layer = get_mlp(
-                input_dim=latent_dim*2,
+                input_dim=self._get_concatenated_features_dim(),
                 hidden_dim=int(round(output_mlp_hidden_dim_scale_factor*latent_dim)),
                 num_layers=output_mlp_num_layers,
                 output_neuron_bias=output_neuron_bias,
@@ -73,18 +74,38 @@ class ProTCL(nn.Module):
                 dropout=output_mlp_dropout,
             )
 
+    def _get_concatenated_features_dim(self):
+        
+        dim = {'concatenation_diff':self.latent_dim*3,
+               'concatenation_prod':self.latent_dim*3,
+               'concatenation':self.latent_dim*2
+               }
+        return dim[self.feature_fusion]
+
+
     def _get_joint_embeddings(self, P_e, L_e, num_sequences,num_labels):
 
         sequence_embedding_dim = P_e.shape[1]
         label_embedding_dim = L_e.shape[1]
 
         # Use broadcasting so we don't have to expand the tensor dimensions
+
         joint_embeddings = torch.cat([
             P_e[:, None, :].expand(
                 num_sequences, num_labels, sequence_embedding_dim),
             L_e[None, :, :].expand(
                 num_sequences, num_labels, label_embedding_dim)
         ], dim=2).reshape(-1, sequence_embedding_dim + label_embedding_dim)
+
+        if self.feature_fusion == 'concatenation_diff':
+            joint_embeddings = torch.cat([joint_embeddings,
+                                          (joint_embeddings[:,:sequence_embedding_dim] - joint_embeddings[:,sequence_embedding_dim:])],
+                                          dim=-1)
+        
+        if self.feature_fusion == 'concatenation_prod':
+            joint_embeddings = torch.cat([joint_embeddings,
+                                          (joint_embeddings[:,:sequence_embedding_dim] * joint_embeddings[:,sequence_embedding_dim:])],
+                                          dim=-1)
 
         return joint_embeddings
     
@@ -164,9 +185,11 @@ class ProTCL(nn.Module):
         # (number proteins * number labels by latent_dim*2)
 
         if self.feature_fusion=='similarity':
+            P_e = F.normalize(P_e,dim=-1,p=2)
+            L_e = F.normalize(L_e,dim=-1,p=2)
             logits = torch.mm(P_e, L_e.t()) / self.temperature
             
-        elif self.feature_fusion=='concatenation':
+        elif self.feature_fusion.startswith('concatenation'):
             joint_embeddings = self._get_joint_embeddings(
                 P_e, L_e, num_sequences, num_labels)
 

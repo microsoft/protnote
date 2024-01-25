@@ -211,7 +211,7 @@ def train_validate_test(gpu, args):
     
     # Calculate the weighting for the train dataset
     sequence_weights = None
-    if params["WEIGHTED_SAMPLING"]:
+    if params["WEIGHTED_SAMPLING"] & (args.train_path_name is not None):
         logger.info("Calculating sequence weights for weighted sampling...")
         sequence_weights = calculate_sequence_weights(datasets["train"][0].data,
                                                       datasets["train"][0].calculate_label_weights(power = params["INV_FREQUENCY_POWER"])
@@ -240,17 +240,30 @@ def train_validate_test(gpu, args):
         label_encoder = label_encoder.cpu()
 
     # Initialize ProteInfer
-    sequence_encoder = ProteInfer.from_pretrained(
-        weights_path=paths["PROTEINFER_WEIGHTS_PATH"],
-        num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"],
-        input_channels=config["embed_sequences_params"]["INPUT_CHANNELS"],
-        output_channels=config["embed_sequences_params"]["OUTPUT_CHANNELS"],
-        kernel_size=config["embed_sequences_params"]["KERNEL_SIZE"],
-        activation=torch.nn.ReLU,
-        dilation_base=config["embed_sequences_params"]["DILATION_BASE"],
-        num_resnet_blocks=config["embed_sequences_params"]["NUM_RESNET_BLOCKS"],
-        bottleneck_factor=config["embed_sequences_params"]["BOTTLENECK_FACTOR"],
-    )
+    if params['PRETRAINED_SEQUENCE_ENCODER']: 
+        sequence_encoder = ProteInfer.from_pretrained(
+            weights_path=paths["PROTEINFER_WEIGHTS_PATH"],
+            num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"],
+            input_channels=config["embed_sequences_params"]["INPUT_CHANNELS"],
+            output_channels=config["embed_sequences_params"]["OUTPUT_CHANNELS"],
+            kernel_size=config["embed_sequences_params"]["KERNEL_SIZE"],
+            activation=torch.nn.ReLU,
+            dilation_base=config["embed_sequences_params"]["DILATION_BASE"],
+            num_resnet_blocks=config["embed_sequences_params"]["NUM_RESNET_BLOCKS"],
+            bottleneck_factor=config["embed_sequences_params"]["BOTTLENECK_FACTOR"],
+        )
+    else:
+        sequence_encoder = ProteInfer(
+            num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"],
+            input_channels=config["embed_sequences_params"]["INPUT_CHANNELS"],
+            output_channels=config["embed_sequences_params"]["OUTPUT_CHANNELS"],
+            kernel_size=config["embed_sequences_params"]["KERNEL_SIZE"],
+            activation=torch.nn.ReLU,
+            dilation_base=config["embed_sequences_params"]["DILATION_BASE"],
+            num_resnet_blocks=config["embed_sequences_params"]["NUM_RESNET_BLOCKS"],
+            bottleneck_factor=config["embed_sequences_params"]["BOTTLENECK_FACTOR"],
+        )
+
 
     # Generate all sequence embeddings upfront, if not training the sequence encoder
     sequence_embedding_df = None
