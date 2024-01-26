@@ -83,7 +83,8 @@ def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
     df = pd.DataFrame(data_list, columns=["ID", "Embedding"]).set_index("ID")
     return df
  
- 
+
+
 def get_or_generate_label_embeddings(
     label_annotations,
     label_tokenizer,
@@ -96,12 +97,6 @@ def get_or_generate_label_embeddings(
     append_in_cpu=True
 ):
     """Load or generate label embeddings based on the provided paths and parameters."""
-    
-
-    label_embedding_path=label_embedding_path.split('/')
-    temp=label_embedding_path[-1].split('.')
-    label_embedding_path[-1] = temp[0] + '_' + pooling_method + '.' + temp[1]
-    label_embedding_path = '/'.join(label_embedding_path)
 
     assert pooling_method in ['mean','last_token','all'], f"pooling_method = {pooling_method} not supported for caching"
 

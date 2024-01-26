@@ -21,13 +21,13 @@ params:
 
   ### V100 ###
   # Batch sizes
-  TRAIN_BATCH_SIZE: 1024 # 64 for V100
+  TRAIN_BATCH_SIZE: 64 # 64 for V100
   VALIDATION_BATCH_SIZE: 32 # 64 for V100
   TEST_BATCH_SIZE: 32 # 4 for V100
   # Sampling
   GRID_SAMPLER: False
   IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
-  WEIGHTED_SAMPLING: False #Sample rare sequences more often as dictaded by inverse frequency of labels
+  WEIGHTED_SAMPLING: True #Sample rare sequences more often as dictaded by inverse frequency of labels
   INV_FREQUENCY_POWER: 0.5 #Used for weighted sampling AND relevant losses with weighting
   SAMPLING_LOWER_CLAMP_BOUND: null # Lower bound for when clamping sampling weights
   SAMPLING_UPPER_CLAMP_BOUND: null # Upper bound for when clamping sampling weights
@@ -52,11 +52,11 @@ params:
   OUTPUT_MLP_DROPOUT: 0.0
   PROJECTION_HEAD_NUM_LAYERS: 4
   PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 3
-  FEATURE_FUSION: similarity #concatenation, concatenation_diff, concatenation_prod, similarity
+  FEATURE_FUSION: concatenation #concatenation, concatenation_diff, concatenation_prod, similarity
   LABEL_EMBEDDING_POOLING_METHOD: 'last_token' #select from mean, last_token, all
   OPTIMIZATION_METRIC_NAME: f1_micro # Only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
-  NUM_EPOCHS: 15
+  NUM_EPOCHS: 50
 
   # Memory optimizations
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
@@ -67,7 +67,7 @@ params:
   CLIP_VALUE: 1 # Gradient clipping, set to "null" to turn off
 
   # Losses. Only the parameters for selected loss will be used
-  LOSS_FN: SupCon # Currently supported: BCE, FocalLoss, BatchWeightedBCE, RGDBCE, WeightedBCE
+  LOSS_FN: FocalLoss # Currently supported: BCE, FocalLoss, BatchWeightedBCE, RGDBCE, WeightedBCE
   FOCAL_LOSS_GAMMA: 2
   FOCAL_LOSS_ALPHA: -1
   BCE_POS_WEIGHT: 1 # 671.7130737304688
@@ -87,9 +87,10 @@ params:
   DEDUPLICATE: True
   MAX_SEQUENCE_LENGTH: 10000 # Only affects training set. Just 8 seqs with 10K+ length
   NORMALIZE_PROBABILITIES: False
+  GO_DESCRIPTION_TYPE: 'label' #label or name
 
   # Augmentation
-  AUGMENT_SEQUENCE_PROBABILITY: 0.15 # 0.0 = no augmentation. The probability that any given residue will be augmented. AlphaFold uses 0.15 (15% of residues are augmented)
+  AUGMENT_SEQUENCE_PROBABILITY: 0.0 # 0.0 = no augmentation. The probability that any given residue will be augmented. AlphaFold uses 0.15 (15% of residues are augmented)
   USE_RESIDUE_MASKING: False # If True, also use masking to augment sequences. Must then also set AUGMENT_SEQUENCE_PROBABILITY > 0, and TRAIN_SEQUENCE_ENCODER = True
   AUGMENT_LABEL_PROBABILITY: 0.0 # 0.0 = no augmentation. The probability that any given label will be augmented.
 
@@ -134,7 +135,7 @@ paths:
     GO_ANNOTATIONS_PATH: annotations/go_annotations_2019_07_01.pkl # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
 
     # Embeddings paths (if using frozen pre-trained models)
-    LABEL_EMBEDDING_PATH: embeddings/frozen_BioGPT_label_embeddings.pkl # this is the base path which is modified by POOLING_METHOD
+    BASE_LABEL_EMBEDDING_PATH: embeddings/frozen_BioGPT_label_embeddings.pkl # this is the base path which is modified by POOLING_METHOD
     SEQUENCE_EMBEDDING_PATH: embeddings/frozen_proteinfer_sequence_embeddings.pkl
 
     # ProteInfer paths

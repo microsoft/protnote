@@ -93,7 +93,7 @@ class ProteinDataset(Dataset):
             max_sequence_length=config["params"]["MAX_SEQUENCE_LENGTH"])
 
         # Load the map from alphanumeric label id to text label
-        self.label_annotation_map = {key: value['label'] for key, value in read_pickle(
+        self.label_annotation_map = {key: value[config["params"]['GO_DESCRIPTION_TYPE']] for key, value in read_pickle(
             data_paths["go_annotations_path"]).to_dict(orient='index').items()}
 
     # Helper functions for setting embedding dictionaries

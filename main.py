@@ -328,13 +328,12 @@ def train_validate_test(gpu, args):
                 label_text_list = []
                 for label_id in subset.label_vocabulary:
                     label_text_list.append(subset.label_annotation_map[label_id])
-                
-                # Generate embeddings
+
                 label_embedding_matrix = get_or_generate_label_embeddings(
                     label_annotations=label_text_list,
                     label_tokenizer=label_tokenizer,
                     label_encoder=label_encoder,
-                    label_embedding_path=config["paths"]["LABEL_EMBEDDING_PATH"],
+                    label_embedding_path=config["LABEL_EMBEDDING_PATH"],
                     logger=logger,
                     batch_size_limit=config["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
                     is_master=is_master,
@@ -360,7 +359,7 @@ def train_validate_test(gpu, args):
         output_neuron_bias=sigmoid_bias_from_prob(params["OUTPUT_NEURON_PROBABILITY_BIAS"]) if params["OUTPUT_NEURON_PROBABILITY_BIAS"] is not None else None,
         outout_mlp_add_batchnorm=params["OUTPUT_MLP_BATCHNORM"],
         projection_head_num_layers=params["PROJECTION_HEAD_NUM_LAYERS"],
-        dropout=params["DROPOUT"],
+        dropout=params["OUTPUT_MLP_DROPOUT"],
         projection_head_hidden_dim_scale_factor=params["PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR"],
 
         # Training options
