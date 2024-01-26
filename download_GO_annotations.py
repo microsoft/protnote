@@ -23,7 +23,14 @@ def calculate_label(row):
         
     return definition
 
-def process_synonyms(row):
+def process_synonyms(row)->dict:
+    """extracts the synonyms of a GO Annotation
+
+    :param row: Row of GO annotation dataset
+    :type row: _type_
+    :return: dict
+    :rtype: lists of synonyms for relevant scopes
+    """    
     if row is np.nan or not row:
         return {"synonym_exact": np.nan, "synonym_narrow": np.nan, "synonym_related": np.nan, "synonym_broad": np.nan}
 

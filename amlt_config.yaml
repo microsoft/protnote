@@ -1,5 +1,5 @@
 # For field details: https://amulet-docs.azurewebsites.net/config_file.html
-description: Big MLP Dropoout Experiments
+description: Experiment with shorter go descriptions 'names'
 
 target:
   service: amlk8s
@@ -19,7 +19,7 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-- name: FL_Sampling_05_LargeMLP_last_token_bs64_concat_prod #grid_sampler_seq_bs_128_lab_bs_350_2_layers_v1
+- name: FL_Sampling_05_LargeMLP_last_token_bs64_GONames #grid_sampler_seq_bs_128_lab_bs_350_2_layers_v1
   sku: G8
   priority: high
   preemptible: False
@@ -31,68 +31,10 @@ jobs:
     --validation-path-name VAL_DATA_PATH 
     --test-paths-names TEST_DATA_PATH 
     --full-path-name FULL_DATA_PATH
-    --name FL_Sampling_05_LargeMLP_last_token_bs64_concat_prod
+    --name FL_Sampling_05_LargeMLP_last_token_bs64_GONames
     --amlt
     --use-wandb
     # --load-model models/ProTCL/2024-01-18_08-08-05_FL_Sampling_05_MediumMLP_last_token_bs64_frozen_seq_encoder.pt
   submit_args:
     env:
       WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{amlt}{medium mlp}{weighted sampling 0.5}{last token}'
-  sku: G8
-  priority: high
-  preemptible: False
-  command:
-  - python main.py 
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH 
-    --validation-path-name VAL_DATA_PATH 
-    --test-paths-names TEST_DATA_PATH 
-    --full-path-name FULL_DATA_PATH 
-    --name "{amlt}{medium mlp}{weighted sampling 0.5}{last token}"
-    --override LABEL_EMBEDDING_POOLING_METHOD "last_token"
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{amlt}{medium mlp}{weighted sampling 0.6}{mean}'
-  sku: G8
-  priority: high
-  preemptible: False
-  command:
-  - python main.py 
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH 
-    --validation-path-name VAL_DATA_PATH 
-    --test-paths-names TEST_DATA_PATH 
-    --full-path-name FULL_DATA_PATH 
-    --name "{amlt}{medium mlp}{weighted sampling 0.6}{mean}"
-    --override LABEL_EMBEDDING_POOLING_METHOD "mean" INV_FREQUENCY_POWER 0.6
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{amlt}{medium mlp}{weighted sampling 0.6}{last token}'
-  sku: G8
-  priority: high
-  preemptible: False
-  command:
-  - python main.py 
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH 
-    --validation-path-name VAL_DATA_PATH 
-    --test-paths-names TEST_DATA_PATH 
-    --full-path-name FULL_DATA_PATH 
-    --name "{amlt}{medium mlp}{weighted sampling 0.6}{last token}"
-    --override LABEL_EMBEDDING_POOLING_METHOD "last_token" INV_FREQUENCY_POWER 0.6
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
-

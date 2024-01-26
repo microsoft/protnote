@@ -21,7 +21,7 @@ params:
 
   ### V100 ###
   # Batch sizes
-  TRAIN_BATCH_SIZE: 64 # 64 for V100
+  TRAIN_BATCH_SIZE: 8 # 64 for V100
   VALIDATION_BATCH_SIZE: 32 # 64 for V100
   TEST_BATCH_SIZE: 32 # 4 for V100
   # Sampling
@@ -87,7 +87,7 @@ params:
   DEDUPLICATE: True
   MAX_SEQUENCE_LENGTH: 10000 # Only affects training set. Just 8 seqs with 10K+ length
   NORMALIZE_PROBABILITIES: False
-  GO_DESCRIPTION_TYPE: 'label' #label or name
+  GO_DESCRIPTION_TYPE: 'name' #label or name
 
   # Augmentation
   AUGMENT_SEQUENCE_PROBABILITY: 0.0 # 0.0 = no augmentation. The probability that any given residue will be augmented. AlphaFold uses 0.15 (15% of residues are augmented)
@@ -132,7 +132,7 @@ paths:
 
     # Vocabulary paths
     VOCABULARIES_DIR: vocabularies/proteinfer
-    GO_ANNOTATIONS_PATH: annotations/go_annotations_2019_07_01.pkl # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
+    GO_ANNOTATIONS_PATH: annotations/go_annotations_2019_07_01_augmented.pkl # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
 
     # Embeddings paths (if using frozen pre-trained models)
     BASE_LABEL_EMBEDDING_PATH: embeddings/frozen_BioGPT_label_embeddings.pkl # this is the base path which is modified by POOLING_METHOD
