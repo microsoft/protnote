@@ -4,6 +4,7 @@ from src.utils.data import read_fasta, read_json, get_vocab_mappings, read_pickl
 from src.utils.models import tokenize_labels, get_label_embeddings
 from typing import Dict
 import pandas as pd
+import numpy as np
 import logging
 from typing import List
 from src.data.collators import collate_variable_sequence_length
@@ -68,7 +69,7 @@ class ProteinDataset(Dataset):
         self.masked_msa_token = "<MASK>"
         self.augment_sequence_probability = config["params"]["AUGMENT_SEQUENCE_PROBABILITY"]
         self.use_residue_masking = config["params"]["USE_RESIDUE_MASKING"]
-        self.augment_label_probability = config["params"]["AUGMENT_LABEL_PROBABILITY"]
+        self.augment_labels = config["params"]["AUGMENT_LABELS"]
         
         # Load the BLOSUM62 matrix and convert to defaultdict using dictionary comprehension
         blosum62 = bl.BLOSUM(62)
@@ -93,16 +94,38 @@ class ProteinDataset(Dataset):
             max_sequence_length=config["params"]["MAX_SEQUENCE_LENGTH"])
 
         # Load the map from alphanumeric label id to text label
-        self.label_annotation_map = {key: value[config["params"]['GO_DESCRIPTION_TYPE']] for key, value in read_pickle(
+        self.temp = {key: value[config["params"]['GO_DESCRIPTION_TYPE']] for key, value in read_pickle(
             data_paths["go_annotations_path"]).to_dict(orient='index').items()}
 
-    # Helper functions for setting embedding dictionaries
-    def set_sequence_embedding_df(self, embedding_df: pd.DataFrame):
-        self.sequence_embedding_df = embedding_df
+        self.label_annotation_map={}
+        for key, value in read_pickle(data_paths["go_annotations_path"]).to_dict(orient='index').items():
+            self.label_annotation_map[key] = [value[config["params"]['GO_DESCRIPTION_TYPE']]] + (value['synonym_exact'] if isinstance(value['synonym_exact'],list) else [])
 
-    def set_label_embedding_matrix(self, embedding_matrix: torch.Tensor):
-        self.label_embedding_matrix = embedding_matrix
+    def set_label_embedding_specs(self,
+                                  label_embedding_matrix: torch.Tensor,
+                                  label_annotation_map_idxs : list,
+                                  base_label_idxs: list):
+        """Sets the embedding matrix (2D Tensor) that store embeddings of all GO descriptions with 
+        their possible variants. If a label has multiple possible descriptions their embeddings
+        are flattened to fit the 2D embedding matrix.
 
+        Separately receives a mapping that stores the range of indexes where the possible descriptions
+        of a go label lie in the flattened array. This is used to recover the dataset from its flattened version
+
+
+        :param label_embedding_matrix: Matrix that stores the embeddings of all possible label descriptions (with synonyms/augmentations)
+        :type label_embedding_matrix: torch.Tensor
+        :param label_annotation_map_idxs:  mapping that stores the range of indexes where the possible descriptions
+        of a go label lie in the flattened array. This is used to recover the dataset from its flattened version
+        :type label_annotation_map_idxs: list
+        :param base_label_idxs: list that stores the indexes from embedding matrix corresponding to the original base label descriptions 
+        :type base_label_idxs: list
+        """        
+        
+        self.label_embedding_matrix = label_embedding_matrix
+        self.label_annotation_map_idxs = label_annotation_map_idxs
+        self.base_label_idxs = base_label_idxs
+        
     def _clean_data(self,deduplicate,max_sequence_length):
         """
         Remove duplicate sequences from self.data, keeping only the first instance of each sequence
@@ -218,7 +241,7 @@ class ProteinDataset(Dataset):
         
         return augmented_sequence
     
-    def _augment_labels(self, labels: list[str]) -> list[str]:
+    def _get_go_descriptions(self) -> list[str]:
         """
         Augment label text by randomly selecting additional GPT summarizations for some labels.
         Each label has a probability of being augmented based on self.augment_label_probability.
@@ -228,13 +251,12 @@ class ProteinDataset(Dataset):
         Returns:
             list[str]: The augmented labels.
         """
-        augmented_labels = []
-        # for label in labels:
-        #     if random.random() < self.augment_label_probability:
-        #         augmented_labels.append(self.masked_msa_token)
-        #     else:
-        #         augmented_labels.append(label)
-        return augmented_labels
+        
+        label_descriptions = []
+        for label in self.label_vocabulary:
+            label_descriptions.append(self.label_annotation_map[label][0]) # index 0 is the default description
+        
+        return label_descriptions
 
     def process_example(self, sequence: str, labels: list[str], label_idxs:list[int] = None) -> dict:
         sequence_id_alphanumeric, labels = labels[0], labels[1:]
@@ -250,10 +272,6 @@ class ProteinDataset(Dataset):
             if self.augment_sequence_probability > 0:
                 sequence = self._augment_sequence(sequence)
             
-            # If augmenting labels, augment the labels
-            if self.augment_label_probability > 0:
-                labels = self._augment_labels(labels)
-
         # Convert the sequence and labels to integers for one-hot encoding (impacted by augmentation)
         amino_acid_ints = torch.tensor(
             [self.aminoacid2int[aa] for aa in sequence], dtype=torch.long
@@ -275,12 +293,26 @@ class ProteinDataset(Dataset):
 
         tokenized_labels = None
         label_embeddings = None
+        # Set the label embeddings, if provided
         if self.label_embedding_matrix is not None:
-            # Set the label embeddings, if provided
-            label_embeddings = self.label_embedding_matrix
+            # Augment label descriptions by sampling from synonyms (if available)
+            #NOTE: WE AUGMENT LABELS PER SEQUENCE, BUT INSIDE COLLATOR ONLY USE THE LABELS FROM FIRST SEQUENCE IN BATCh
+            if self.augment_labels & (self.dataset_type == "train"):
+                sampled_description_idxs = []
+                for l,description_index_range in self.label_annotation_map_idxs.items():
+                    sampled_idx = np.random.randint(description_index_range[0],description_index_range[1]+1) #Add +1 to high b/c randing high range is exclusive
+                    sampled_description_idxs.append(sampled_idx)
+                
+                label_embeddings = self.label_embedding_matrix[sampled_description_idxs]
+
+            else:
+                label_embeddings = self.label_embedding_matrix[self.base_label_idxs]
         else:
             # Tokenize the labels if we don't have label embedding
-            tokenized_labels = tokenize_labels(labels, self.label_tokenizer)
+            # extract label descriptions and optionally augment
+            label_descriptions = self._get_go_descriptions()
+
+            tokenized_labels = tokenize_labels(label_descriptions, self.label_tokenizer)
 
         # Get the sequence embedding, if provided
         sequence_embedding = None

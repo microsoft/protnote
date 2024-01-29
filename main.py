@@ -320,14 +320,19 @@ def train_validate_test(gpu, args):
     if params["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"] == 0:
         logger.info("We are not training the label encoder, so generating all label embeddings upfront...")
         for key, dataset in datasets.items():
-            if key == 'train' and params["AUGMENT_LABEL_PROBABILITY"] > 0:
-                logger.info("Skipping setting label embedding matrix for the training set because we are augmenting it.")
-                continue
             for subset in dataset:
                 # Create ordered list of labels
                 label_text_list = []
+                label_annotation_map_idxs = {}
+                base_label_idxs = []
+                s = 0
                 for label_id in subset.label_vocabulary:
-                    label_text_list.append(subset.label_annotation_map[label_id])
+                    descriptions = subset.label_annotation_map[label_id]
+                    num_descriptions = len(descriptions)
+                    label_text_list.extend(descriptions)
+                    label_annotation_map_idxs[label_id] = [s,s+num_descriptions-1]
+                    base_label_idxs.append(s)
+                    s += num_descriptions
 
                 label_embedding_matrix = get_or_generate_label_embeddings(
                     label_annotations=label_text_list,
@@ -340,7 +345,10 @@ def train_validate_test(gpu, args):
                     pooling_method=config["params"]["LABEL_EMBEDDING_POOLING_METHOD"]
                 )
                 
-                subset.set_label_embedding_matrix(label_embedding_matrix)
+                subset.set_label_embedding_specs(label_embedding_matrix=label_embedding_matrix,
+                                                  label_annotation_map_idxs=label_annotation_map_idxs,
+                                                  base_label_idxs=base_label_idxs
+                                                  )
 
     model = ProTCL(
         # Parameters

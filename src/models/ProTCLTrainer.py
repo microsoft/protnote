@@ -334,6 +334,7 @@ class ProTCLTrainer:
         self.model.eval()
 
         # Compute all label embeddings upfront, since we're not training
+        #TODO: THIS WILL BREAK IF TRAINING LABEL ENCODER
         if data_loader.dataset.label_embedding_matrix is None:
             logging.info(
                 "Computing label embeddings for evaluation...")

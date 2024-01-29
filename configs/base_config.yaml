@@ -54,9 +54,9 @@ params:
   PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 3
   FEATURE_FUSION: concatenation #concatenation, concatenation_diff, concatenation_prod, similarity
   LABEL_EMBEDDING_POOLING_METHOD: 'last_token' #select from mean, last_token, all
-  OPTIMIZATION_METRIC_NAME: f1_micro # Only micro metrics are supported if sampling labels in validation
+  OPTIMIZATION_METRIC_NAME: f1_macro # Only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
-  NUM_EPOCHS: 50
+  NUM_EPOCHS: 100
 
   # Memory optimizations
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
@@ -92,7 +92,7 @@ params:
   # Augmentation
   AUGMENT_SEQUENCE_PROBABILITY: 0.0 # 0.0 = no augmentation. The probability that any given residue will be augmented. AlphaFold uses 0.15 (15% of residues are augmented)
   USE_RESIDUE_MASKING: False # If True, also use masking to augment sequences. Must then also set AUGMENT_SEQUENCE_PROBABILITY > 0, and TRAIN_SEQUENCE_ENCODER = True
-  AUGMENT_LABEL_PROBABILITY: 0.0 # 0.0 = no augmentation. The probability that any given label will be augmented.
+  AUGMENT_LABELS: False #Whether to sample from a predefined set of possible label descriptions
 
   # Constants
   SEED: 42
