@@ -101,6 +101,10 @@ class ProteinDataset(Dataset):
         for key, value in read_pickle(data_paths["go_annotations_path"]).to_dict(orient='index').items():
             self.label_annotation_map[key] = [value[config["params"]['GO_DESCRIPTION_TYPE']]] + (value['synonym_exact'] if isinstance(value['synonym_exact'],list) else [])
 
+    # Helper functions for setting embedding dictionaries
+    def set_sequence_embedding_df(self, embedding_df: pd.DataFrame):
+        self.sequence_embedding_df = embedding_df
+
     def set_label_embedding_specs(self,
                                   label_embedding_matrix: torch.Tensor,
                                   label_annotation_map_idxs : list,
