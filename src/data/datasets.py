@@ -14,6 +14,7 @@ from functools import partial
 from collections import Counter
 from src.data.samplers import GridBatchSampler,observation_sampler_factory
 import random
+import math
 import blosum as bl
 
 class ProteinDataset(Dataset):
@@ -69,7 +70,7 @@ class ProteinDataset(Dataset):
         self.masked_msa_token = "<MASK>"
         self.augment_sequence_probability = config["params"]["AUGMENT_SEQUENCE_PROBABILITY"]
         self.use_residue_masking = config["params"]["USE_RESIDUE_MASKING"]
-        self.augment_labels = config["params"]["AUGMENT_LABELS"]
+        self.augment_labels = not config["params"]["AUGMENT_LABELS_WITH"]==[]
         
         # Load the BLOSUM62 matrix and convert to defaultdict using dictionary comprehension
         blosum62 = bl.BLOSUM(62)
@@ -93,14 +94,56 @@ class ProteinDataset(Dataset):
         self._clean_data(deduplicate=deduplicate,
             max_sequence_length=config["params"]["MAX_SEQUENCE_LENGTH"])
 
+        '''
         # Load the map from alphanumeric label id to text label
         self.temp = {key: value[config["params"]['GO_DESCRIPTION_TYPE']] for key, value in read_pickle(
             data_paths["go_annotations_path"]).to_dict(orient='index').items()}
 
         self.label_annotation_map={}
         for key, value in read_pickle(data_paths["go_annotations_path"]).to_dict(orient='index').items():
-            self.label_annotation_map[key] = [value[config["params"]['GO_DESCRIPTION_TYPE']]] + (value['synonym_exact'] if isinstance(value['synonym_exact'],list) else [])
+            self.label_annotation_map[key] = [value[config["params"]['GO_DESCRIPTION_TYPE']]] + value['synonym_exact'] 
+        '''
 
+        self.label_annotation_map = self.create_label_annotation_map(go_annotations_path = data_paths["go_annotations_path"],
+                                                                     go_description_type = config["params"]['GO_DESCRIPTION_TYPE'],
+                                                                     augment_with = config["params"]['AUGMENT_LABELS_WITH']
+                                                                     )
+    @staticmethod
+    def create_label_annotation_map(go_annotations_path: str,
+                                    go_description_type:str,
+                                    augment_with: list):
+        def ensure_list(value):
+            # Case 1: If the value is already a list
+            if isinstance(value, list):
+                return value
+            # Case 2: If the value is NaN
+            elif value is math.nan or (isinstance(value, float) and math.isnan(value)):
+                return []
+            # Case 3: For all other cases (including strings)
+            else:
+                return [value]
+        
+        assert go_description_type not in augment_with, f'''Can't include {go_description_type} in AUGMENT_LABELS_WITH 
+                                                            because this is already the base description set by GO_DESCRIPTION_TYPE.
+                                                            Doing this would yield to "double counting" of descriptions of type {go_description_type}
+                                                        '''
+        label_annotation_map={}
+        c=1
+        for key, value in read_pickle(go_annotations_path).to_dict(orient='index').items():
+            label_annotation_map[key] = []            
+            
+            #Add descriptionts from main column and augmentation in predictable order.
+            for column in sorted(augment_with+[go_description_type]):
+                label_annotation_map[key]+=ensure_list(value[column] )
+
+            if c<100:
+                print('base col: ',go_description_type, 'augment with: ', augment_with)
+                print('\n')
+                print(key,': ',label_annotation_map[key])
+            c+=1
+        return label_annotation_map
+
+        
     # Helper functions for setting embedding dictionaries
     def set_sequence_embedding_df(self, embedding_df: pd.DataFrame):
         self.sequence_embedding_df = embedding_df

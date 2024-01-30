@@ -50,9 +50,12 @@ def generate_label_embeddeing_path(params:dict,paths:dict):
     label_embedding_path = paths['BASE_LABEL_EMBEDDING_PATH']
     label_embedding_path=label_embedding_path.split('/')
     temp=label_embedding_path[-1].split('.')
+
+    description_types = sorted([params["GO_DESCRIPTION_TYPE"]] + params["AUGMENT_LABELS_WITH"])
+
     label_embedding_path[-1] = \
         temp[0] + '_' \
-        + params["GO_DESCRIPTION_TYPE"] \
+        + '_'.join(description_types) \
         + '_' \
         + params["LABEL_EMBEDDING_POOLING_METHOD"] \
         + '.' + temp[1]

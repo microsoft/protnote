@@ -32,7 +32,7 @@ def process_synonyms(row)->dict:
     :rtype: lists of synonyms for relevant scopes
     """    
     if row is np.nan or not row:
-        return {"synonym_exact": np.nan, "synonym_narrow": np.nan, "synonym_related": np.nan, "synonym_broad": np.nan}
+        return {"synonym_exact": [], "synonym_narrow": [], "synonym_related": [], "synonym_broad": []}
 
     scopes = {"EXACT": [], "NARROW": [], "RELATED": [], "BROAD": []}
     for synonym in row:

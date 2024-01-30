@@ -92,8 +92,8 @@ params:
   # Augmentation
   AUGMENT_SEQUENCE_PROBABILITY: 0.0 # 0.0 = no augmentation. The probability that any given residue will be augmented. AlphaFold uses 0.15 (15% of residues are augmented)
   USE_RESIDUE_MASKING: False # If True, also use masking to augment sequences. Must then also set AUGMENT_SEQUENCE_PROBABILITY > 0, and TRAIN_SEQUENCE_ENCODER = True
-  AUGMENT_LABELS: False #Whether to sample from a predefined set of possible label descriptions
-
+  AUGMENT_LABELS_WITH: [] #Specifies what descriptions to use for augmentation. 
+                                                 #Options are any combination of: ['label','synonym_exact'],['name','synonym_exact'],['synonym_exact'],[]
   # Constants
   SEED: 42
   EPOCHS_PER_VALIDATION: 1 # Must be >= 1
