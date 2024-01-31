@@ -337,7 +337,7 @@ def train_validate_test(gpu, args):
                 label_embedding_matrix = get_or_generate_label_embeddings(
                     label_annotations=label_text_list,
                     label_tokenizer=label_tokenizer,
-                    label_encoder=label_encoder,
+                    label_encoder=label_encoder.to(gpu),
                     label_embedding_path=config["LABEL_EMBEDDING_PATH"],
                     logger=logger,
                     batch_size_limit=config["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],

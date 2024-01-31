@@ -37,45 +37,7 @@ jobs:
 #   submit_args:
 #     env:
 #       WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact}{no seq substitutions}'
-  sku: G8
-  priority: high
-  preemptible: False
-  command:
-  - python main.py 
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH 
-    --validation-path-name VAL_DATA_PATH 
-    --test-paths-names TEST_DATA_PATH 
-    --full-path-name FULL_DATA_PATH
-    --name '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact}{no seq substitutions}'
-    --override AUGMENT_LABELS_WITH ['synonym_exact']
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact and labels}{no seq substitutions}'
-  sku: G8
-  priority: high
-  preemptible: False
-  command:
-  - python main.py 
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH 
-    --validation-path-name VAL_DATA_PATH 
-    --test-paths-names TEST_DATA_PATH 
-    --full-path-name FULL_DATA_PATH
-    --name '{amlt}{w sampling 0.5}{description label}{label aug -> synonyms_exact and labels}{no seq substitutions}'
-    --override AUGMENT_LABELS_WITH ['label','synonym_exact']
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact and labels}{random substitutions 0.15}'
+# - name: '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact}{no seq substitutions}'
 #   sku: G8
 #   priority: high
 #   preemptible: False
@@ -87,10 +49,50 @@ jobs:
 #     --validation-path-name VAL_DATA_PATH 
 #     --test-paths-names TEST_DATA_PATH 
 #     --full-path-name FULL_DATA_PATH
-#     --name '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact and labels}{random substitutions 0.15}'
-#     --override AUGMENT_LABELS_WITH ['label','synonym_exact'] AUGMENT_SEQUENCE_PROBABILITY 0.15
+#     --name '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact}{no seq substitutions}'
+#     --override AUGMENT_LABELS_WITH synonym_exact
 #     --amlt
 #     --use-wandb
 #   submit_args:
 #     env:
 #       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact and labels}{no seq substitutions}'
+#   sku: G8
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py 
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH 
+#     --validation-path-name VAL_DATA_PATH 
+#     --test-paths-names TEST_DATA_PATH 
+#     --full-path-name FULL_DATA_PATH
+#     --name '{amlt}{w sampling 0.5}{description label}{label aug -> synonyms_exact and labels}{no seq substitutions}'
+#     --override AUGMENT_LABELS_WITH label+synonym_exact
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+- name: '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact and labels}{random substitutions 0.15}'
+  sku: G8
+  priority: high
+  preemptible: False
+  command:
+  - python main.py 
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH 
+    --validation-path-name VAL_DATA_PATH 
+    --test-paths-names TEST_DATA_PATH 
+    --full-path-name FULL_DATA_PATH
+    --name '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact and labels}{random substitutions 0.15}'
+    --override AUGMENT_LABELS_WITH label+synonym_exact AUGMENT_SEQUENCE_PROBABILITY 0.15
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_API_KEY: "$WANDB_API_KEY"
+
+

@@ -70,7 +70,8 @@ class ProteinDataset(Dataset):
         self.masked_msa_token = "<MASK>"
         self.augment_sequence_probability = config["params"]["AUGMENT_SEQUENCE_PROBABILITY"]
         self.use_residue_masking = config["params"]["USE_RESIDUE_MASKING"]
-        self.augment_labels = not config["params"]["AUGMENT_LABELS_WITH"]==[]
+        self.augment_labels = config["params"]["AUGMENT_LABELS_WITH"] is not None
+        self.augment_labels_with = config["params"]["AUGMENT_LABELS_WITH"].split('+') if self.augment_labels else []
         
         # Load the BLOSUM62 matrix and convert to defaultdict using dictionary comprehension
         blosum62 = bl.BLOSUM(62)
@@ -106,7 +107,7 @@ class ProteinDataset(Dataset):
 
         self.label_annotation_map = self.create_label_annotation_map(go_annotations_path = data_paths["go_annotations_path"],
                                                                      go_description_type = config["params"]['GO_DESCRIPTION_TYPE'],
-                                                                     augment_with = config["params"]['AUGMENT_LABELS_WITH']
+                                                                     augment_with = self.augment_labels_with
                                                                      )
     @staticmethod
     def create_label_annotation_map(go_annotations_path: str,
@@ -136,11 +137,6 @@ class ProteinDataset(Dataset):
             for column in sorted(augment_with+[go_description_type]):
                 label_annotation_map[key]+=ensure_list(value[column] )
 
-            if c<100:
-                print('base col: ',go_description_type, 'augment with: ', augment_with)
-                print('\n')
-                print(key,': ',label_annotation_map[key])
-            c+=1
         return label_annotation_map
 
         

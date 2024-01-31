@@ -51,7 +51,8 @@ def generate_label_embeddeing_path(params:dict,paths:dict):
     label_embedding_path=label_embedding_path.split('/')
     temp=label_embedding_path[-1].split('.')
 
-    description_types = sorted([params["GO_DESCRIPTION_TYPE"]] + params["AUGMENT_LABELS_WITH"])
+    augment_labels_with = params["AUGMENT_LABELS_WITH"].split('+') if params["AUGMENT_LABELS_WITH"] is not None else []
+    description_types = sorted([params["GO_DESCRIPTION_TYPE"]] + augment_labels_with)
 
     label_embedding_path[-1] = \
         temp[0] + '_' \
