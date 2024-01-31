@@ -59,12 +59,6 @@ class ProteinDataset(Dataset):
         # Set the dataset type and data path
         self.dataset_type = data_paths["dataset_type"]
         self.data_path = data_paths["data_path"]
-
-        # Set and process the vocabularies
-        self.amino_acid_vocabulary = vocabularies["amino_acid_vocab"]
-        self.label_vocabulary = vocabularies["GO_label_vocab"]
-        self.sequence_id_vocabulary = vocabularies["sequence_id_vocab"]
-        self._process_vocab()
         
         # Initialize data augmentation parameters
         self.masked_msa_token = "<MASK>"
@@ -91,9 +85,19 @@ class ProteinDataset(Dataset):
             )
             self.data = self.data[:int(subset_fraction * len(self.data))]
 
-        # Deduplicate the data if deduplicate is True
-        self._clean_data(deduplicate=deduplicate,
-            max_sequence_length=config["params"]["MAX_SEQUENCE_LENGTH"])
+        # Set the vocabularies
+        self.amino_acid_vocabulary = vocabularies["amino_acid_vocab"]
+        self.label_vocabulary = vocabularies["GO_label_vocab"]
+        self.sequence_id_vocabulary = vocabularies["sequence_id_vocab"]
+
+        # Preprocess dataset
+        self.label_frequency = None
+        self._preprocess_data(
+            deduplicate=deduplicate,
+            max_sequence_length=config["params"]["MAX_SEQUENCE_LENGTH"],
+            remove_unrepresented_labels=config["params"]["REMOVE_UNREPRESENTED_LABELS"]
+            )
+
 
         '''
         # Load the map from alphanumeric label id to text label
@@ -169,12 +173,12 @@ class ProteinDataset(Dataset):
         self.label_annotation_map_idxs = label_annotation_map_idxs
         self.base_label_idxs = base_label_idxs
         
-    def _clean_data(self,deduplicate,max_sequence_length):
+    def _preprocess_data(self,deduplicate,max_sequence_length,remove_unrepresented_labels):
         """
         Remove duplicate sequences from self.data, keeping only the first instance of each sequence
         Use pandas to improve performance
         """
-        
+        self.logger.info("Cleaning data...")
         # Convert self.data to a DataFrame
         df = pd.DataFrame(self.data, columns=["sequence", "labels"])
 
@@ -197,6 +201,16 @@ class ProteinDataset(Dataset):
 
         # Convert the DataFrame back to the list of tuples format
         self.data = list(df.itertuples(index=False, name=None))
+
+        #Calculate label frequency. 
+        self.calculate_label_frequency()
+
+        # Process vocabulary
+        if (remove_unrepresented_labels) and (self.dataset_type == "train"):
+            self.logger.info("Removing unrepresented labels from the training set vocabulary")
+
+            self.label_vocabulary = [label for label in self.label_vocabulary if label in self.label_frequency]
+            self._process_vocab()
 
     # Helper functions for processing and loading vocabularies
     def _process_vocab(self):
@@ -389,6 +403,7 @@ class ProteinDataset(Dataset):
         return self.process_example(sequence, labels,label_idxs)
     
     def calculate_pos_weight(self):
+        #TODO: UPDATE THIS CODE TO LEVERAGE LABEL FREQUENCY ATTRIBUTE INSTEAD
         self.logger.info("Calculating bce_pos_weight...")
         def count_labels(chunk):
             num_positive_labels_chunk = 0
@@ -412,27 +427,35 @@ class ProteinDataset(Dataset):
         self.logger.info(f"Calculated bce_pos_weight= {pos_weight.item()}")
         return pos_weight
 
+    def calculate_label_frequency(self):
+        if self.label_frequency is None:
+            self.logger.info("Calculating label frequency...")
+            def count_labels(chunk):
+                label_freq = Counter()
+                for _, labels in chunk:
+                    labels = labels[1:]
+                    label_freq.update(labels)
+                return label_freq
+
+            # Adjust chunk size if necessary.
+            chunk_size = max(len(self.data) // cpu_count(), 1)
+
+            results = Parallel(n_jobs=-1)(
+                delayed(count_labels)(self.data[i:i+chunk_size]) for i in range(0, len(self.data), chunk_size)
+            )
+
+            #Label frequency
+            self.label_frequency = Counter()
+            for result in results:
+                self.label_frequency.update(result)
+        
 
     def calculate_label_weights(self, inv_freq= True, power=0.3, normalize = True,return_list=False):
         self.logger.info("Calculating label weights...")
-        def count_labels(chunk):
-            label_freq = Counter()
-            for _, labels in chunk:
-                labels = labels[1:]
-                label_freq.update(labels)
-            return label_freq
+        
+        assert self.label_frequency is not None, "Must call calculate_label_frequency first"
 
-        # Adjust chunk size if necessary.
-        chunk_size = max(len(self.data) // cpu_count(), 1)
-
-        results = Parallel(n_jobs=-1)(
-            delayed(count_labels)(self.data[i:i+chunk_size]) for i in range(0, len(self.data), chunk_size)
-        )
-
-        #Label frequency
-        label_weights = Counter()
-        for result in results:
-            label_weights.update(result)
+        label_weights = self.label_frequency.copy()
         
         if inv_freq:
             # Inverse frequency

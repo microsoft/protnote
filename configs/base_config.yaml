@@ -86,6 +86,7 @@ params:
   # Data processing and metrics
   DEDUPLICATE: True
   MAX_SEQUENCE_LENGTH: 10000 # Only affects training set. Just 8 seqs with 10K+ length
+  REMOVE_UNREPRESENTED_LABELS: True # Removes labels that never apply to train sequences
   NORMALIZE_PROBABILITIES: False
   GO_DESCRIPTION_TYPE: 'name' #label or name
 
