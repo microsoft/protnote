@@ -458,7 +458,7 @@ def train_validate_test(gpu, args):
     # Initialize EvalMetrics
     eval_metrics = EvalMetrics(device=device)
     
-    label_sample_sizes = {k:(v if v is not None else len(vocabularies['GO_label_vocab'])) 
+    label_sample_sizes = {k:(v if v is not None else len(datasets[k][0].label_vocabulary)) 
                           for k,v in label_sample_sizes.items()}
 
     # Log sizes of all datasets
