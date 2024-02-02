@@ -83,7 +83,8 @@ def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
     df = pd.DataFrame(data_list, columns=["ID", "Embedding"]).set_index("ID")
     return df
  
- 
+
+
 def get_or_generate_label_embeddings(
     label_annotations,
     label_tokenizer,
@@ -96,12 +97,6 @@ def get_or_generate_label_embeddings(
     append_in_cpu=True
 ):
     """Load or generate label embeddings based on the provided paths and parameters."""
-    
-
-    label_embedding_path=label_embedding_path.split('/')
-    temp=label_embedding_path[-1].split('.')
-    label_embedding_path[-1] = temp[0] + '_' + pooling_method + '.' + temp[1]
-    label_embedding_path = '/'.join(label_embedding_path)
 
     assert pooling_method in ['mean','last_token','all'], f"pooling_method = {pooling_method} not supported for caching"
 
@@ -110,32 +105,30 @@ def get_or_generate_label_embeddings(
         if logger is not None and is_master:
             logger.info(
                 f"Loaded label embeddings from {label_embedding_path}")
+        return label_embedding_matrix
     else:
         if logger is not None:
             logger.info("Generating and saving label embeddings from text...")
  
         # If not master, throw an error
-        if not is_master:
-            raise ValueError(
-                "Cannot generate label embeddings on distributed process (avoid race conditions).")
- 
-        label_encoder.eval()
-        with torch.no_grad():
-            label_embedding_matrix = generate_label_embeddings_from_text(
-                label_annotations,
-                label_tokenizer,
-                label_encoder,
-                pooling_method,
-                batch_size_limit,
-                append_in_cpu
-            ).cpu()
-        label_encoder.train()
+        if is_master:
+            label_encoder.eval()
+            with torch.no_grad():
+                label_embedding_matrix = generate_label_embeddings_from_text(
+                    label_annotations,
+                    label_tokenizer,
+                    label_encoder,
+                    pooling_method,
+                    batch_size_limit,
+                    append_in_cpu
+                ).cpu()
+            label_encoder.train()
 
-        torch.save(label_embedding_matrix, label_embedding_path)
-        if logger is not None:
-            logger.info(
-                f"Saved label embeddings to {label_embedding_path}")
-    return label_embedding_matrix
+            torch.save(label_embedding_matrix, label_embedding_path)
+            if logger is not None:
+                logger.info(
+                    f"Saved label embeddings to {label_embedding_path}")
+            return label_embedding_matrix
  
  
 def get_or_generate_sequence_embeddings(paths, device, sequence_encoder, datasets, params, logger):

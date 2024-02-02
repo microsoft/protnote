@@ -3,6 +3,7 @@ import pandas as pd
 import argparse
 import logging
 import re
+import numpy as np
 
 logging.basicConfig(level=logging.INFO)
 
@@ -22,6 +23,31 @@ def calculate_label(row):
         
     return definition
 
+def process_synonyms(row)->dict:
+    """extracts the synonyms of a GO Annotation
+
+    :param row: Row of GO annotation dataset
+    :type row: _type_
+    :return: dict
+    :rtype: lists of synonyms for relevant scopes
+    """    
+    if row is np.nan or not row:
+        return {"synonym_exact": [], "synonym_narrow": [], "synonym_related": [], "synonym_broad": []}
+
+    scopes = {"EXACT": [], "NARROW": [], "RELATED": [], "BROAD": []}
+    for synonym in row:
+        match = re.search(r'\"(.+?)\"\s+(EXACT|NARROW|RELATED|BROAD)\s+\[', synonym)
+        if match:
+            text, scope = match.groups()
+            scopes[scope].append(text)
+
+    return {
+        "synonym_exact": scopes["EXACT"],
+        "synonym_narrow": scopes["NARROW"],
+        "synonym_related": scopes["RELATED"],
+        "synonym_broad": scopes["BROAD"]
+    }
+
 
 def download_and_process_obo(url: str, output_file: str):
     """
@@ -39,11 +65,21 @@ def download_and_process_obo(url: str, output_file: str):
     # Create a new column called "label"
     df["label"] = df.apply(calculate_label, axis=1)
 
-    # Filter the dataframe to retain only 'label' column, with the 'id' column as the index
-    df_filtered = df[['label']]
+    #Extract synonyms to augment dataset
+    df_synonyms = df["synonym"].apply(process_synonyms)
+    df_synonyms = pd.DataFrame(df_synonyms.tolist(), index=df.index)
+
+    # Merge the new columns back to the original DataFrame with the same index
+    df = pd.concat([df, df_synonyms], axis=1)
+
+    # Filter the dataframe to retain only 'label', 'name' and 'synonym' columns, with the 'id' column as the index
+    df_filtered = df[['label','name']+list(df_synonyms.columns)]
 
     # Save the filtered dataframe as a pickle
     df_filtered.to_pickle(output_file)
+
+
+
 
     logging.info(f"Saved filtered dataframe as a pickle to {output_file}")
 
@@ -58,9 +94,9 @@ if __name__ == "__main__":
     # TODO: Filename can be figured out from URL
     parser = argparse.ArgumentParser(
         description="Download OBO file and save GO ID and label to a pickle.")
-    parser.add_argument("url", type=str,
+    parser.add_argument("--url", type=str,
                         help="URL to the OBO file.")
-    parser.add_argument("output_file", type=str,
+    parser.add_argument("--output_file", type=str,
                         help="Path to save the resulting pickle file.")
     args = parser.parse_args()
 

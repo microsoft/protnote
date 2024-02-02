@@ -320,28 +320,35 @@ def train_validate_test(gpu, args):
     if params["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"] == 0:
         logger.info("We are not training the label encoder, so generating all label embeddings upfront...")
         for key, dataset in datasets.items():
-            if key == 'train' and params["AUGMENT_LABEL_PROBABILITY"] > 0:
-                logger.info("Skipping setting label embedding matrix for the training set because we are augmenting it.")
-                continue
             for subset in dataset:
                 # Create ordered list of labels
                 label_text_list = []
+                label_annotation_map_idxs = {}
+                base_label_idxs = []
+                s = 0
                 for label_id in subset.label_vocabulary:
-                    label_text_list.append(subset.label_annotation_map[label_id])
-                
-                # Generate embeddings
+                    descriptions = subset.label_annotation_map[label_id]
+                    num_descriptions = len(descriptions)
+                    label_text_list.extend(descriptions)
+                    label_annotation_map_idxs[label_id] = [s,s+num_descriptions-1]
+                    base_label_idxs.append(s)
+                    s += num_descriptions
+
                 label_embedding_matrix = get_or_generate_label_embeddings(
                     label_annotations=label_text_list,
                     label_tokenizer=label_tokenizer,
-                    label_encoder=label_encoder,
-                    label_embedding_path=config["paths"]["LABEL_EMBEDDING_PATH"],
+                    label_encoder=label_encoder.to(gpu),
+                    label_embedding_path=config["LABEL_EMBEDDING_PATH"],
                     logger=logger,
                     batch_size_limit=config["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
                     is_master=is_master,
                     pooling_method=config["params"]["LABEL_EMBEDDING_POOLING_METHOD"]
                 )
                 
-                subset.set_label_embedding_matrix(label_embedding_matrix)
+                subset.set_label_embedding_specs(label_embedding_matrix=label_embedding_matrix,
+                                                  label_annotation_map_idxs=label_annotation_map_idxs,
+                                                  base_label_idxs=base_label_idxs
+                                                  )
 
     model = ProTCL(
         # Parameters
@@ -360,7 +367,7 @@ def train_validate_test(gpu, args):
         output_neuron_bias=sigmoid_bias_from_prob(params["OUTPUT_NEURON_PROBABILITY_BIAS"]) if params["OUTPUT_NEURON_PROBABILITY_BIAS"] is not None else None,
         outout_mlp_add_batchnorm=params["OUTPUT_MLP_BATCHNORM"],
         projection_head_num_layers=params["PROJECTION_HEAD_NUM_LAYERS"],
-        dropout=params["DROPOUT"],
+        dropout=params["OUTPUT_MLP_DROPOUT"],
         projection_head_hidden_dim_scale_factor=params["PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR"],
 
         # Training options
@@ -451,7 +458,7 @@ def train_validate_test(gpu, args):
     # Initialize EvalMetrics
     eval_metrics = EvalMetrics(device=device)
     
-    label_sample_sizes = {k:(v if v is not None else len(vocabularies['GO_label_vocab'])) 
+    label_sample_sizes = {k:(v if v is not None else len(datasets[k][0].label_vocabulary)) 
                           for k,v in label_sample_sizes.items()}
 
     # Log sizes of all datasets

@@ -199,6 +199,10 @@ def get_label_embeddings(tokenized_labels, model, method, batch_size_limit=1000,
                         
             all_label_embeddings.append(sequence_embeddings.cpu() if append_in_cpu else sequence_embeddings)
 
+            if (idx+1) % (len(dataloader) // 10) == 0:
+                logging.info(f"label embedding generation progress = {round((idx+1)*100/len(dataloader),2)}%")
+
+
             del sequence_embeddings
         # Concatenate all the label embeddings
         return torch.cat(all_label_embeddings, dim=0)

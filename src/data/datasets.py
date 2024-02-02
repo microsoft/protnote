@@ -4,6 +4,7 @@ from src.utils.data import read_fasta, read_json, get_vocab_mappings, read_pickl
 from src.utils.models import tokenize_labels, get_label_embeddings
 from typing import Dict
 import pandas as pd
+import numpy as np
 import logging
 from typing import List
 from src.data.collators import collate_variable_sequence_length
@@ -13,6 +14,7 @@ from functools import partial
 from collections import Counter
 from src.data.samplers import GridBatchSampler,observation_sampler_factory
 import random
+import math
 import blosum as bl
 
 class ProteinDataset(Dataset):
@@ -57,18 +59,13 @@ class ProteinDataset(Dataset):
         # Set the dataset type and data path
         self.dataset_type = data_paths["dataset_type"]
         self.data_path = data_paths["data_path"]
-
-        # Set and process the vocabularies
-        self.amino_acid_vocabulary = vocabularies["amino_acid_vocab"]
-        self.label_vocabulary = vocabularies["GO_label_vocab"]
-        self.sequence_id_vocabulary = vocabularies["sequence_id_vocab"]
-        self._process_vocab()
         
         # Initialize data augmentation parameters
         self.masked_msa_token = "<MASK>"
         self.augment_sequence_probability = config["params"]["AUGMENT_SEQUENCE_PROBABILITY"]
         self.use_residue_masking = config["params"]["USE_RESIDUE_MASKING"]
-        self.augment_label_probability = config["params"]["AUGMENT_LABEL_PROBABILITY"]
+        self.augment_labels = config["params"]["AUGMENT_LABELS_WITH"] is not None
+        self.augment_labels_with = config["params"]["AUGMENT_LABELS_WITH"].split('+') if self.augment_labels else []
         
         # Load the BLOSUM62 matrix and convert to defaultdict using dictionary comprehension
         blosum62 = bl.BLOSUM(62)
@@ -88,27 +85,100 @@ class ProteinDataset(Dataset):
             )
             self.data = self.data[:int(subset_fraction * len(self.data))]
 
-        # Deduplicate the data if deduplicate is True
-        self._clean_data(deduplicate=deduplicate,
-            max_sequence_length=config["params"]["MAX_SEQUENCE_LENGTH"])
+        # Set the vocabularies
+        self.amino_acid_vocabulary = vocabularies["amino_acid_vocab"]
+        self.label_vocabulary = vocabularies["GO_label_vocab"]
+        self.sequence_id_vocabulary = vocabularies["sequence_id_vocab"]
 
+        # Preprocess dataset
+        self.label_frequency = None
+        self._preprocess_data(
+            deduplicate=deduplicate,
+            max_sequence_length=config["params"]["MAX_SEQUENCE_LENGTH"],
+            remove_unrepresented_labels=config["params"]["REMOVE_UNREPRESENTED_LABELS"]
+            )
+
+
+        '''
         # Load the map from alphanumeric label id to text label
-        self.label_annotation_map = {key: value['label'] for key, value in read_pickle(
+        self.temp = {key: value[config["params"]['GO_DESCRIPTION_TYPE']] for key, value in read_pickle(
             data_paths["go_annotations_path"]).to_dict(orient='index').items()}
 
+        self.label_annotation_map={}
+        for key, value in read_pickle(data_paths["go_annotations_path"]).to_dict(orient='index').items():
+            self.label_annotation_map[key] = [value[config["params"]['GO_DESCRIPTION_TYPE']]] + value['synonym_exact'] 
+        '''
+
+        self.label_annotation_map = self.create_label_annotation_map(go_annotations_path = data_paths["go_annotations_path"],
+                                                                     go_description_type = config["params"]['GO_DESCRIPTION_TYPE'],
+                                                                     augment_with = self.augment_labels_with
+                                                                     )
+    @staticmethod
+    def create_label_annotation_map(go_annotations_path: str,
+                                    go_description_type:str,
+                                    augment_with: list):
+        def ensure_list(value):
+            # Case 1: If the value is already a list
+            if isinstance(value, list):
+                return value
+            # Case 2: If the value is NaN
+            elif value is math.nan or (isinstance(value, float) and math.isnan(value)):
+                return []
+            # Case 3: For all other cases (including strings)
+            else:
+                return [value]
+        
+        assert go_description_type not in augment_with, f'''Can't include {go_description_type} in AUGMENT_LABELS_WITH 
+                                                            because this is already the base description set by GO_DESCRIPTION_TYPE.
+                                                            Doing this would yield to "double counting" of descriptions of type {go_description_type}
+                                                        '''
+        label_annotation_map={}
+        c=1
+        for key, value in read_pickle(go_annotations_path).to_dict(orient='index').items():
+            label_annotation_map[key] = []            
+            
+            #Add descriptionts from main column and augmentation in predictable order.
+            for column in sorted(augment_with+[go_description_type]):
+                label_annotation_map[key]+=ensure_list(value[column] )
+
+        return label_annotation_map
+
+        
     # Helper functions for setting embedding dictionaries
     def set_sequence_embedding_df(self, embedding_df: pd.DataFrame):
         self.sequence_embedding_df = embedding_df
 
-    def set_label_embedding_matrix(self, embedding_matrix: torch.Tensor):
-        self.label_embedding_matrix = embedding_matrix
+    def set_label_embedding_specs(self,
+                                  label_embedding_matrix: torch.Tensor,
+                                  label_annotation_map_idxs : list,
+                                  base_label_idxs: list):
+        """Sets the embedding matrix (2D Tensor) that store embeddings of all GO descriptions with 
+        their possible variants. If a label has multiple possible descriptions their embeddings
+        are flattened to fit the 2D embedding matrix.
 
-    def _clean_data(self,deduplicate,max_sequence_length):
+        Separately receives a mapping that stores the range of indexes where the possible descriptions
+        of a go label lie in the flattened array. This is used to recover the dataset from its flattened version
+
+
+        :param label_embedding_matrix: Matrix that stores the embeddings of all possible label descriptions (with synonyms/augmentations)
+        :type label_embedding_matrix: torch.Tensor
+        :param label_annotation_map_idxs:  mapping that stores the range of indexes where the possible descriptions
+        of a go label lie in the flattened array. This is used to recover the dataset from its flattened version
+        :type label_annotation_map_idxs: list
+        :param base_label_idxs: list that stores the indexes from embedding matrix corresponding to the original base label descriptions 
+        :type base_label_idxs: list
+        """        
+        
+        self.label_embedding_matrix = label_embedding_matrix
+        self.label_annotation_map_idxs = label_annotation_map_idxs
+        self.base_label_idxs = base_label_idxs
+        
+    def _preprocess_data(self,deduplicate,max_sequence_length,remove_unrepresented_labels):
         """
         Remove duplicate sequences from self.data, keeping only the first instance of each sequence
         Use pandas to improve performance
         """
-        
+        self.logger.info("Cleaning data...")
         # Convert self.data to a DataFrame
         df = pd.DataFrame(self.data, columns=["sequence", "labels"])
 
@@ -131,6 +201,16 @@ class ProteinDataset(Dataset):
 
         # Convert the DataFrame back to the list of tuples format
         self.data = list(df.itertuples(index=False, name=None))
+
+        #Calculate label frequency. 
+        self.calculate_label_frequency()
+
+        # Process vocabulary
+        if (remove_unrepresented_labels) and (self.dataset_type == "train"):
+            self.logger.info("Removing unrepresented labels from the training set vocabulary")
+
+            self.label_vocabulary = [label for label in self.label_vocabulary if label in self.label_frequency]
+            self._process_vocab()
 
     # Helper functions for processing and loading vocabularies
     def _process_vocab(self):
@@ -218,7 +298,7 @@ class ProteinDataset(Dataset):
         
         return augmented_sequence
     
-    def _augment_labels(self, labels: list[str]) -> list[str]:
+    def _get_go_descriptions(self) -> list[str]:
         """
         Augment label text by randomly selecting additional GPT summarizations for some labels.
         Each label has a probability of being augmented based on self.augment_label_probability.
@@ -228,13 +308,12 @@ class ProteinDataset(Dataset):
         Returns:
             list[str]: The augmented labels.
         """
-        augmented_labels = []
-        # for label in labels:
-        #     if random.random() < self.augment_label_probability:
-        #         augmented_labels.append(self.masked_msa_token)
-        #     else:
-        #         augmented_labels.append(label)
-        return augmented_labels
+        
+        label_descriptions = []
+        for label in self.label_vocabulary:
+            label_descriptions.append(self.label_annotation_map[label][0]) # index 0 is the default description
+        
+        return label_descriptions
 
     def process_example(self, sequence: str, labels: list[str], label_idxs:list[int] = None) -> dict:
         sequence_id_alphanumeric, labels = labels[0], labels[1:]
@@ -250,10 +329,6 @@ class ProteinDataset(Dataset):
             if self.augment_sequence_probability > 0:
                 sequence = self._augment_sequence(sequence)
             
-            # If augmenting labels, augment the labels
-            if self.augment_label_probability > 0:
-                labels = self._augment_labels(labels)
-
         # Convert the sequence and labels to integers for one-hot encoding (impacted by augmentation)
         amino_acid_ints = torch.tensor(
             [self.aminoacid2int[aa] for aa in sequence], dtype=torch.long
@@ -275,12 +350,26 @@ class ProteinDataset(Dataset):
 
         tokenized_labels = None
         label_embeddings = None
+        # Set the label embeddings, if provided
         if self.label_embedding_matrix is not None:
-            # Set the label embeddings, if provided
-            label_embeddings = self.label_embedding_matrix
+            # Augment label descriptions by sampling from synonyms (if available)
+            #NOTE: WE AUGMENT LABELS PER SEQUENCE, BUT INSIDE COLLATOR ONLY USE THE LABELS FROM FIRST SEQUENCE IN BATCh
+            if self.augment_labels & (self.dataset_type == "train"):
+                sampled_description_idxs = []
+                for l,description_index_range in self.label_annotation_map_idxs.items():
+                    sampled_idx = np.random.randint(description_index_range[0],description_index_range[1]+1) #Add +1 to high b/c randing high range is exclusive
+                    sampled_description_idxs.append(sampled_idx)
+                
+                label_embeddings = self.label_embedding_matrix[sampled_description_idxs]
+
+            else:
+                label_embeddings = self.label_embedding_matrix[self.base_label_idxs]
         else:
             # Tokenize the labels if we don't have label embedding
-            tokenized_labels = tokenize_labels(labels, self.label_tokenizer)
+            # extract label descriptions and optionally augment
+            label_descriptions = self._get_go_descriptions()
+
+            tokenized_labels = tokenize_labels(label_descriptions, self.label_tokenizer)
 
         # Get the sequence embedding, if provided
         sequence_embedding = None
@@ -314,6 +403,7 @@ class ProteinDataset(Dataset):
         return self.process_example(sequence, labels,label_idxs)
     
     def calculate_pos_weight(self):
+        #TODO: UPDATE THIS CODE TO LEVERAGE LABEL FREQUENCY ATTRIBUTE INSTEAD
         self.logger.info("Calculating bce_pos_weight...")
         def count_labels(chunk):
             num_positive_labels_chunk = 0
@@ -337,27 +427,35 @@ class ProteinDataset(Dataset):
         self.logger.info(f"Calculated bce_pos_weight= {pos_weight.item()}")
         return pos_weight
 
+    def calculate_label_frequency(self):
+        if self.label_frequency is None:
+            self.logger.info("Calculating label frequency...")
+            def count_labels(chunk):
+                label_freq = Counter()
+                for _, labels in chunk:
+                    labels = labels[1:]
+                    label_freq.update(labels)
+                return label_freq
+
+            # Adjust chunk size if necessary.
+            chunk_size = max(len(self.data) // cpu_count(), 1)
+
+            results = Parallel(n_jobs=-1)(
+                delayed(count_labels)(self.data[i:i+chunk_size]) for i in range(0, len(self.data), chunk_size)
+            )
+
+            #Label frequency
+            self.label_frequency = Counter()
+            for result in results:
+                self.label_frequency.update(result)
+        
 
     def calculate_label_weights(self, inv_freq= True, power=0.3, normalize = True,return_list=False):
         self.logger.info("Calculating label weights...")
-        def count_labels(chunk):
-            label_freq = Counter()
-            for _, labels in chunk:
-                labels = labels[1:]
-                label_freq.update(labels)
-            return label_freq
+        
+        assert self.label_frequency is not None, "Must call calculate_label_frequency first"
 
-        # Adjust chunk size if necessary.
-        chunk_size = max(len(self.data) // cpu_count(), 1)
-
-        results = Parallel(n_jobs=-1)(
-            delayed(count_labels)(self.data[i:i+chunk_size]) for i in range(0, len(self.data), chunk_size)
-        )
-
-        #Label frequency
-        label_weights = Counter()
-        for result in results:
-            label_weights.update(result)
+        label_weights = self.label_frequency.copy()
         
         if inv_freq:
             # Inverse frequency
