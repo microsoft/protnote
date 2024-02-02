@@ -142,7 +142,10 @@ def get_setup(
         else []
     )
 
-    dataset_paths_list = train_paths_list + val_paths_list + test_paths_list
+    dataset_paths = {'train': train_paths_list,
+                          'validation':val_paths_list,
+                          'test': test_paths_list
+                          }
 
     # Set the timezone for the entire Python environment
     os.environ["TZ"] = "US/Pacific"
@@ -197,7 +200,7 @@ def get_setup(
         "params": params,
         "embed_sequences_params": embed_sequences_params,
         "paths": paths,
-        "dataset_paths_list": dataset_paths_list,
+        "dataset_paths": dataset_paths,
         "timestamp": timestamp,
         "logger": logger,
         "ROOT_PATH": ROOT_PATH,
@@ -205,3 +208,5 @@ def get_setup(
         "OUTPUT_PATH": OUTPUT_PATH,
         "LABEL_EMBEDDING_PATH":label_embedding_path
     }
+
+

@@ -210,7 +210,8 @@ class ProteinDataset(Dataset):
             self.logger.info("Removing unrepresented labels from the training set vocabulary")
 
             self.label_vocabulary = [label for label in self.label_vocabulary if label in self.label_frequency]
-            self._process_vocab()
+        
+        self._process_vocab()
 
     # Helper functions for processing and loading vocabularies
     def _process_vocab(self):

@@ -182,7 +182,7 @@ def train_validate_test(gpu, args):
     #---------------------- DATASETS ----------------------# 
     # Create individual datasets
     train_dataset = ProteinDataset(
-        data_paths=config['dataset_paths_list'][0], # The first dataset path is the training set. TODO: Change to dictionary.
+        data_paths=config['dataset_paths']['train'][0], 
         config=config,
         vocabularies=vocabularies,
         logger=logger,
@@ -190,10 +190,10 @@ def train_validate_test(gpu, args):
         subset_fraction=params["TRAIN_SUBSET_FRACTION"],
         deduplicate=params["DEDUPLICATE"],
         label_tokenizer=label_tokenizer,
-    )
+    ) if args.train_path_name is not None else None
 
     validation_dataset = ProteinDataset(
-        data_paths=config['dataset_paths_list'][1], # The second dataset path is the validation set.  TODO: Change to dictionary.
+        data_paths=config['dataset_paths']['validation'][0], 
         config=config,
         vocabularies=vocabularies,
         logger=logger,
@@ -201,10 +201,10 @@ def train_validate_test(gpu, args):
         subset_fraction=params["VALIDATION_SUBSET_FRACTION"],
         deduplicate=params["DEDUPLICATE"],
         label_tokenizer=label_tokenizer,
-    )
+    ) if args.validation_path_name is not None else None
 
     test_dataset = ProteinDataset(
-        data_paths=config['dataset_paths_list'][2], # The third dataset path is the test set.  TODO: Change to dictionary.
+        data_paths=config['dataset_paths']['test'][0], 
         config=config,
         vocabularies=vocabularies,
         logger=logger,
@@ -212,7 +212,7 @@ def train_validate_test(gpu, args):
         subset_fraction=params["TEST_SUBSET_FRACTION"],
         deduplicate=params["DEDUPLICATE"],
         label_tokenizer=label_tokenizer,
-    )
+    ) if args.test_paths_names is not None else None
 
     # Add datasets to a dictionary
     # TODO: This does not support multiple datasets. But I think we should remove that support anyway. Too complicated.
@@ -221,6 +221,9 @@ def train_validate_test(gpu, args):
         "validation": [validation_dataset],
         "test": [test_dataset]
     }
+
+    #Remove empty datasets. May happen in cases like only validating a model.
+    datasets = {k:v for k,v in datasets.items() if v[0] is not None}
     
     #-----------------------------------------------------# 
 
@@ -459,7 +462,7 @@ def train_validate_test(gpu, args):
     eval_metrics = EvalMetrics(device=device)
     
     label_sample_sizes = {k:(v if v is not None else len(datasets[k][0].label_vocabulary)) 
-                          for k,v in label_sample_sizes.items()}
+                          for k,v in label_sample_sizes.items() if k in datasets.keys()}
 
     # Log sizes of all datasets
     [logger.info(f"{subset_name} dataset size: {len(dataset)}") for subset_name, subset in datasets.items() for dataset in subset]
