@@ -44,6 +44,9 @@ def main():
     parser.add_argument("--test-paths-names", nargs="+", type=str, default=None,
                         help="Specify all the desired test paths names to test the model using names from config file to test. If not provided, model will not be tested.")
 
+    parser.add_argument("--zero-shot-path-name", type=str, default=None,
+                        help="Specify all the desired zero shot paths names to test the model using names from config file to test. If not provided, model will not be tested.")
+
     parser.add_argument("--use-wandb", action="store_true", default=False,
                         help="Use Weights & Biases for logging. Default is False.")
 
@@ -122,6 +125,7 @@ def train_validate_test(gpu, args):
         train_path_name=args.train_path_name,
         val_path_name=args.validation_path_name,
         test_paths_names=args.test_paths_names,
+        zero_shot_path_name=args.zero_shot_path_name,
         amlt=args.amlt,
         is_master=is_master,
     )
@@ -178,6 +182,9 @@ def train_validate_test(gpu, args):
     # Load or generate the vocabularies
     vocabularies = get_or_generate_vocabularies(
         paths["FULL_DATA_PATH"], paths["VOCABULARIES_DIR"], logger)
+    
+    zero_shot_vocabularies = get_or_generate_vocabularies(
+        paths["ZERO_SHOT_DATA_PATH"], paths["VOCABULARIES_DIR"], logger,prefix='zero_shot_')
 
     #---------------------- DATASETS ----------------------# 
     # Create individual datasets
@@ -214,12 +221,25 @@ def train_validate_test(gpu, args):
         label_tokenizer=label_tokenizer,
     ) if args.test_paths_names is not None else None
 
+    zero_shot_dataset = ProteinDataset(
+        data_paths=config['dataset_paths']['zero_shot'][0], 
+        config=config,
+        vocabularies=zero_shot_vocabularies,
+        logger=logger,
+        require_label_idxs=False,  # Label indices are not required for testing
+        subset_fraction=params["TEST_SUBSET_FRACTION"],
+        deduplicate=params["DEDUPLICATE"],
+        label_tokenizer=label_tokenizer,
+    ) if args.zero_shot_path_name is not None else None
+
+
     # Add datasets to a dictionary
     # TODO: This does not support multiple datasets. But I think we should remove that support anyway. Too complicated.
     datasets = {
         "train": [train_dataset],
         "validation": [validation_dataset],
-        "test": [test_dataset]
+        "test": [test_dataset],
+        "zero_shot": [zero_shot_dataset]
     }
 
     #Remove empty datasets. May happen in cases like only validating a model.
@@ -235,7 +255,8 @@ def train_validate_test(gpu, args):
     label_sample_sizes = {
         "train": params["TRAIN_LABEL_SAMPLE_SIZE"],
         "validation": params["VALIDATION_LABEL_SAMPLE_SIZE"],
-        "test": None  # No sampling for the test set
+        "test": None,  # No sampling for the test set
+        "zero_shot": None  # No sampling for the zero_shot
     }
     
     # Calculate the weighting for the train dataset
@@ -295,29 +316,6 @@ def train_validate_test(gpu, args):
             bottleneck_factor=config["embed_sequences_params"]["BOTTLENECK_FACTOR"],
         )
 
-
-    # Generate all sequence embeddings upfront, if we can
-    sequence_embedding_df = None
-    if not params["TRAIN_SEQUENCE_ENCODER"]:
-        logger.info("We are not training the sequence encoder, so generating all sequence embeddings upfront...")
-        sequence_embedding_df = get_or_generate_sequence_embeddings(
-            paths,
-            device,
-            sequence_encoder,
-            datasets,
-            params,
-            logger,
-        )
-        sequence_encoder = sequence_encoder.to('cpu')
-
-        # Loop through all the datasets and set the sequence embedding df
-        for key, dataset,  in datasets.items():
-            if key == 'train' and params["AUGMENT_SEQUENCE_PROBABILITY"] > 0:
-                logger.info("Skipping setting sequence embedding df for the training set because we are augmenting it.")
-                # If we are augmenting the training set, we don't want to set the sequence embedding df
-                continue
-            for subset in dataset:
-                subset.set_sequence_embedding_df(sequence_embedding_df)
                 
     # Generate all label embeddings upfront, if we can
     if params["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"] == 0:
@@ -337,11 +335,17 @@ def train_validate_test(gpu, args):
                     base_label_idxs.append(s)
                     s += num_descriptions
 
+                #Use the same file for all data types except zero_shot
+                prefix='zero_shot_' if subset.dataset_type == 'zero_shot' else ''
+                label_embedding_path = config["LABEL_EMBEDDING_PATH"].split('/')
+                label_embedding_path = '/'.join([*label_embedding_path[:-1],prefix+label_embedding_path[-1]])
+
+                logger.info(f"get or generate {subset.dataset_type} label embeddings...")
                 label_embedding_matrix = get_or_generate_label_embeddings(
                     label_annotations=label_text_list,
                     label_tokenizer=label_tokenizer,
                     label_encoder=label_encoder.to(gpu),
-                    label_embedding_path=config["LABEL_EMBEDDING_PATH"],
+                    label_embedding_path = label_embedding_path,
                     logger=logger,
                     batch_size_limit=config["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
                     is_master=is_master,
@@ -467,11 +471,37 @@ def train_validate_test(gpu, args):
     # Log sizes of all datasets
     [logger.info(f"{subset_name} dataset size: {len(dataset)}") for subset_name, subset in datasets.items() for dataset in subset]
 
+
+    # Generate all sequence embeddings upfront, if we can
+    sequence_embedding_df = None
+    if not params["TRAIN_SEQUENCE_ENCODER"]:
+        logger.info("We are not training the sequence encoder, so generating all sequence embeddings upfront...")
+        sequence_embedding_df = get_or_generate_sequence_embeddings(
+            paths,
+            device,
+            sequence_encoder,
+            datasets,
+            params,
+            logger,
+        )
+        #sequence_encoder = sequence_encoder.to('cpu')
+
+        # Loop through all the datasets and set the sequence embedding df
+        for key, dataset,  in datasets.items():
+            if key == 'train' and params["AUGMENT_SEQUENCE_PROBABILITY"] > 0:
+                logger.info("Skipping setting sequence embedding df for the training set because we are augmenting it.")
+                # If we are augmenting the training set, we don't want to set the sequence embedding df
+                continue
+            for subset in dataset:
+                subset.set_sequence_embedding_df(sequence_embedding_df)
+
+
     ####### TRAINING AND VALIDATION LOOPS #######
     if args.train_path_name is not None:
         # Train function
         Trainer.train(train_loader=loaders["train"][0],
             val_loader=loaders["validation"][0],
+            zero_shot_loader=loaders["zero_shot"][0],
             train_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*",
                                                                              threshold=0.5,
                                                                         num_labels=label_sample_sizes["train"] if (params['IN_BATCH_SAMPLING'] or params['GRID_SAMPLER']) is False else None
@@ -479,6 +509,9 @@ def train_validate_test(gpu, args):
             val_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*", threshold=0.5,
                                                                 num_labels=label_sample_sizes["validation"]
                                                                 ),
+            zero_shot_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*", threshold=0.5,
+                                                    num_labels=label_sample_sizes["zero_shot"]
+                                                    ),
             val_optimization_metric_name=params["OPTIMIZATION_METRIC_NAME"])
     else:
         logger.info("Skipping training...")

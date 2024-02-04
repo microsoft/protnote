@@ -51,6 +51,7 @@ class ProteinDataset(Dataset):
             "train",
             "validation",
             "test",
+            "zero_shot",
         ], "dataset_type must be one of 'train', 'val', or 'test'"
         
         # Tokenizer
@@ -376,7 +377,7 @@ class ProteinDataset(Dataset):
         sequence_embedding = None
         if self.sequence_embedding_df is not None:
             sequence_embedding = torch.tensor(
-                self.sequence_embedding_df.loc[sequence_id_alphanumeric].values)
+                self.sequence_embedding_df.loc[sequence_id_alphanumeric,'Embedding'])
 
         # Return a dict containing the processed example
         return {

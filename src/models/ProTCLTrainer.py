@@ -186,6 +186,29 @@ class ProTCLTrainer:
             loss = self.loss_fn(logits, label_multihots.float())
 
         return loss.item(), logits, label_multihots, sequence_ids
+    
+    def test_zero_shot(self,
+                       zero_shot_loader: torch.utils.data.DataLoader,
+                       eval_metrics: MetricCollection,
+                       ):
+        
+        
+        prefix = 'zero_shot'
+
+        zero_shot_metrics = self.evaluate(data_loader=zero_shot_loader,
+                                       eval_metrics=eval_metrics,
+                                       metrics_prefix=prefix)
+
+        if self.use_wandb and self.is_master:
+            try:
+                if self.use_wandb and self.is_master:
+                    wandb.log(zero_shot_metrics,
+                                step=self.training_step
+                                )
+
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to log validation metrics to wandb: {e}")
 
     def validate(self,
                  val_loader: torch.utils.data.DataLoader,
@@ -361,11 +384,11 @@ class ProTCLTrainer:
         if not self.use_amlt:
             mAP_micro = BinaryAUPRC(device='cpu')
             mAP_macro = MultilabelAUPRC(device='cpu',
-                                        num_labels=len(self.vocabularies["GO_label_vocab"]))
+                                        num_labels=len(data_loader.dataset.label_vocabulary))
         else:
             mAP_micro = BinaryBinnedAUPRC(device='cpu',threshold=50)
             mAP_macro = MultilabelBinnedAUPRC(device='cpu',
-                                            num_labels=len(self.vocabularies["GO_label_vocab"]),
+                                            num_labels=len(data_loader.dataset.label_vocabulary),
                                             threshold=50)
 
         with torch.no_grad():
@@ -414,7 +437,7 @@ class ProTCLTrainer:
                 self.logger.info("Saving validation results...")
                 if self.is_master:
                     save_evaluation_results(results=test_results,
-                                            label_vocabulary=self.vocabularies["GO_label_vocab"],
+                                            label_vocabulary=data_loader.dataset.label_vocabulary,
                                             run_name=self.run_name,
                                             output_dir=self.config["paths"]["RESULTS_DIR"],
                                             data_split_name=metrics_prefix
@@ -543,24 +566,28 @@ class ProTCLTrainer:
             wandb.log(train_metrics,
                       step=self.training_step
                       )
-
-        
+            
         return train_metrics
-        
         
     def train(
         self,
         train_loader: torch.utils.data.DataLoader,
         val_loader: torch.utils.data.DataLoader,
+        zero_shot_loader: torch.utils.data.DataLoader,
         train_eval_metrics: MetricCollection,
         val_eval_metrics: MetricCollection,
+        zero_shot_eval_metrics: MetricCollection,
         val_optimization_metric_name: str
     ):
         """Train model
-        :param train_loader: _description_
+        :param train_loader: training set dataloader
         :type train_loader: torch.utils.data.DataLoader
-        :param val_loader: _description_
+        :param val_loader: validation set dataloader
         :type val_loader: torch.utils.data.DataLoader
+        :param zero_shot_loader: zero shot set dataloader
+        :type zero_shot_loader: torch.utils.data.DataLoader
+        :param val_optimization_metric_name: metric name  used to save checkpoints based on validation performance
+        :type val_optimization_metric_name: str
         """
         self.model.train()
 
@@ -596,13 +623,19 @@ class ProTCLTrainer:
 
                 # Run validation
                 self.validate(val_loader=val_loader,
-                                            eval_metrics=val_eval_metrics,
-                                            val_optimization_metric_name=val_optimization_metric_name
-                                            )
+                              eval_metrics=val_eval_metrics,
+                              val_optimization_metric_name=val_optimization_metric_name
+                             )
+
+                # Run zero shot testing
+                self.test_zero_shot(zero_shot_loader=zero_shot_loader,
+                              eval_metrics=zero_shot_eval_metrics
+                             )
 
                 if self.label_encoder_num_trainable_layers>0:
                     # Clear the label embedding matrix
                     val_loader.dataset.set_label_embedding_matrix(None)
+                    zero_shot_loader.dataset.set_label_embedding_matrix(None)
 
                 self.logger.info(
                     f"Epoch {epoch}/{self.starting_epoch + self.num_epochs - 1}, Batch {self.training_step}, Training Loss: {train_metrics['train_loss']}"

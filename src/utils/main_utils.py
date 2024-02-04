@@ -8,7 +8,8 @@ from src.data.collators import collate_variable_sequence_length
 from torch.utils.data import ConcatDataset, DataLoader
 from src.utils.models import generate_label_embeddings_from_text
 import pandas as pd
- 
+from functools import partial
+
  
 def validate_arguments(args, parser):
     # Ensure the full data path is provided
@@ -54,14 +55,14 @@ def validate_arguments(args, parser):
 def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
     """Generate sequence embeddings for the given datasets."""
     sequence_encoder = sequence_encoder.to(device)
-    all_datasets = datasets["train"] + \
-        datasets["validation"] + datasets["test"]
+    all_datasets = [dataset for dataset_list in datasets.values() for dataset in dataset_list]
     combined_dataset = ConcatDataset(all_datasets)
     combined_loader = DataLoader(
         combined_dataset,
         batch_size=params["SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD"],
         shuffle=False,
-        collate_fn=collate_variable_sequence_length,
+        collate_fn=partial(collate_variable_sequence_length,
+                           return_label_multihots=False), #have to use return_label_multihots to ignore multihot concat with zero shot
         num_workers=params["NUM_WORKERS"],
         pin_memory=True,
     )
@@ -134,10 +135,11 @@ def get_or_generate_label_embeddings(
 def get_or_generate_sequence_embeddings(paths, device, sequence_encoder, datasets, params, logger):
     """Load or generate sequence embeddings based on the provided paths and parameters."""
     if "SEQUENCE_EMBEDDING_PATH" in paths and os.path.exists(paths["SEQUENCE_EMBEDDING_PATH"]):
-        sequence_embedding_df = read_pickle(paths["SEQUENCE_EMBEDDING_PATH"])
+        sequence_embedding_df = torch.load(paths["SEQUENCE_EMBEDDING_PATH"])
         logger.info(
             f"Loaded sequence embeddings from {paths['SEQUENCE_EMBEDDING_PATH']}")
     else:
+        
         logger.info("Generating sequence embeddings...")
         sequence_embedding_df = generate_sequence_embeddings(
             device, sequence_encoder, datasets, params)
@@ -152,14 +154,16 @@ def get_or_generate_sequence_embeddings(paths, device, sequence_encoder, dataset
     return sequence_embedding_df
  
  
-def get_or_generate_vocabularies(full_data_path, vocabularies_dir, logger):
+def get_or_generate_vocabularies(full_data_path, vocabularies_dir, logger,prefix=''):
     """Load or generate vocabularies based on the provided paths."""
     all_vocab_types = ['amino_acid_vocab',
-                       'GO_label_vocab', 'sequence_id_vocab']
+                       'GO_label_vocab',
+                       'sequence_id_vocab']
+    
     missing_vocab_types = []
     vocabularies = {}
     for vocab_type in all_vocab_types:
-        full_path = os.path.join(vocabularies_dir, f"{vocab_type}.json")
+        full_path = os.path.join(vocabularies_dir, f"{prefix+vocab_type}.json")
         if os.path.exists(full_path):
             vocabularies[vocab_type] = read_json(full_path)
             logger.info(f"Loaded {vocab_type} vocabulary from {full_path}")
@@ -169,11 +173,11 @@ def get_or_generate_vocabularies(full_data_path, vocabularies_dir, logger):
         logger.info(
             f"Generating {', '.join(missing_vocab_types)} vocabularies...")
         vocabularies.update(generate_vocabularies(
-            full_data_path, missing_vocab_types, logger, vocabularies_dir))
+            full_data_path, missing_vocab_types, logger, vocabularies_dir, prefix=prefix))
     return vocabularies
  
  
-def generate_vocabularies(data_path, vocab_types, logger, output_dir=None):
+def generate_vocabularies(data_path, vocab_types, logger, output_dir=None, prefix=''):
     """Generate vocabularies based on the provided data path."""
     data = read_fasta(data_path)
     go_labels, amino_acids, sequence_ids = set(), set(), set()
@@ -195,7 +199,7 @@ def generate_vocabularies(data_path, vocab_types, logger, output_dir=None):
             if value:
                 # Create directory if it doesn't exist
                 os.makedirs(output_dir, exist_ok=True)
-                with open(os.path.join(output_dir, f"{key}.json"), "w") as f:
+                with open(os.path.join(output_dir, f"{prefix+key}.json"), "w") as f:
                     json.dump(value, f)
                     logger.info(
                         f"Saved {len(value)} items as the {key} to {os.path.join(output_dir, key, '.json')}")
