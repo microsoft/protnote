@@ -51,6 +51,7 @@ class ProteinDataset(Dataset):
             "train",
             "validation",
             "test",
+            "zero_shot",
         ], "dataset_type must be one of 'train', 'val', or 'test'"
         
         # Tokenizer

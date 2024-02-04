@@ -24,6 +24,8 @@ params:
   TRAIN_BATCH_SIZE: 8 # 64 for V100
   VALIDATION_BATCH_SIZE: 32 # 64 for V100
   TEST_BATCH_SIZE: 32 # 4 for V100
+  ZERO_SHOT_BATCH_SIZE: 32
+
   # Sampling
   GRID_SAMPLER: False
   IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
@@ -86,9 +88,9 @@ params:
   # Data processing and metrics
   DEDUPLICATE: True
   MAX_SEQUENCE_LENGTH: 10000 # Only affects training set. Just 8 seqs with 10K+ length
-  REMOVE_UNREPRESENTED_LABELS: True # Removes labels that never apply to train sequences
+  REMOVE_UNREPRESENTED_LABELS: False # Removes labels that never apply to train sequences
   NORMALIZE_PROBABILITIES: False
-  GO_DESCRIPTION_TYPE: 'name' #label or name
+  GO_DESCRIPTION_TYPE: 'label' #label or name
 
   # Augmentation
   AUGMENT_SEQUENCE_PROBABILITY: 0.0 # 0.0 = no augmentation. The probability that any given residue will be augmented. AlphaFold uses 0.15 (15% of residues are augmented)
@@ -102,8 +104,8 @@ params:
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
 
   # Subset fractions (for rapid prototyping; set to 1 for final model)
-  TRAIN_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
-  VALIDATION_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
+  TRAIN_SUBSET_FRACTION: .001 # Set to 1.0 if you want to use all data
+  VALIDATION_SUBSET_FRACTION: .01 # Set to 1.0 if you want to use all data
   TEST_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
   SHUFFLE_LABELS: False # Only has an effect if sample sizes are set and not using grid sampler. If False, simply select same labels in order
 
@@ -127,13 +129,13 @@ paths:
     VAL_DATA_PATH: swissprot/proteinfer_splits/random/dev_GO.fasta
     TEST_DATA_PATH: swissprot/proteinfer_splits/random/test_GO.fasta
     FULL_DATA_PATH: swissprot/proteinfer_splits/random/full_GO.fasta # used to generate vocabularies
-
-    # Zero shot data paths
-    ZERO_SHOT_DATA_PATH: zero_shot/SwissProt_2023_unseen_sequences_and_labels.fasta
+    ZERO_SHOT_DATA_PATH: swissprot/zero_shot/SwissProt_2023_unseen_sequences_and_labels.fasta # Zero shot data paths
 
     # Vocabulary paths
     VOCABULARIES_DIR: vocabularies/proteinfer
     GO_ANNOTATIONS_PATH: annotations/go_annotations_2019_07_01_augmented.pkl # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
+    ZERO_SHOT_VOCABULARIES_DIR: vocabularies/zero_shot
+    ZERO_SHOT_GO_ANNOTATIONS_PATH: annotations/go_annotations_2023_07_27_augmented.pkl
 
     # Embeddings paths (if using frozen pre-trained models)
     BASE_LABEL_EMBEDDING_PATH: embeddings/frozen_BioGPT_label_embeddings.pkl # this is the base path which is modified by POOLING_METHOD

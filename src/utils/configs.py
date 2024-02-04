@@ -71,8 +71,9 @@ def get_setup(
     train_path_name: str = None,
     val_path_name: str = None,
     test_paths_names: list = None,
+    zero_shot_path_name: list = None,
     amlt: bool = False,
-    is_master: bool = True,
+    is_master: bool = True
 ):
     # Get the root path from the environment variable; default to current directory if ROOT_PATH is not set
     if amlt:
@@ -109,14 +110,12 @@ def get_setup(
         for key, value in section_values.items()
     }
 
-    # Load datasets from config file paths; the same vocabulary is used for all datasets
-    common_paths = {
-        "vocabularies_dir": paths["VOCABULARIES_DIR"],
-        "go_annotations_path": paths['GO_ANNOTATIONS_PATH']
-    }
-
     train_paths_list = (
-        [{**common_paths, "data_path": paths[train_path_name], "dataset_type": "train"}]
+        [{"data_path": paths[train_path_name],
+          "dataset_type": "train",
+          "go_annotations_path": paths['GO_ANNOTATIONS_PATH'],
+          "vocabularies_dir": paths["VOCABULARIES_DIR"]
+          }]
         if train_path_name is not None
         else []
     )
@@ -124,9 +123,10 @@ def get_setup(
     val_paths_list = (
         [
             {
-                **common_paths,
                 "data_path": paths[val_path_name],
                 "dataset_type": "validation",
+                "go_annotations_path": paths['GO_ANNOTATIONS_PATH'],
+                "vocabularies_dir": paths["VOCABULARIES_DIR"]
             }
         ]
         if val_path_name is not None
@@ -135,17 +135,36 @@ def get_setup(
 
     test_paths_list = (
         [
-            {**common_paths, "data_path": paths[key], "dataset_type": "test"}
+            {"data_path": paths[key],
+             "dataset_type": "test",
+             "go_annotations_path": paths['GO_ANNOTATIONS_PATH'],
+             "vocabularies_dir": paths["VOCABULARIES_DIR"]
+             }
             for key in test_paths_names
         ]
         if test_paths_names is not None
         else []
     )
 
+    zero_shot_path_name_list = (
+        [
+            {
+                "data_path": paths[zero_shot_path_name],
+                "dataset_type": "zero_shot",
+                "go_annotations_path": paths['ZERO_SHOT_GO_ANNOTATIONS_PATH'],
+                "vocabularies_dir": paths["ZERO_SHOT_VOCABULARIES_DIR"]
+            }
+        ]
+        if zero_shot_path_name is not None
+        else []
+    )
+
+
     dataset_paths = {'train': train_paths_list,
-                          'validation':val_paths_list,
-                          'test': test_paths_list
-                          }
+                     'validation':val_paths_list,
+                     'test': test_paths_list,
+                     'zero_shot': zero_shot_path_name_list
+                    }
 
     # Set the timezone for the entire Python environment
     os.environ["TZ"] = "US/Pacific"

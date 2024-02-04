@@ -54,8 +54,7 @@ def validate_arguments(args, parser):
 def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
     """Generate sequence embeddings for the given datasets."""
     sequence_encoder = sequence_encoder.to(device)
-    all_datasets = datasets["train"] + \
-        datasets["validation"] + datasets["test"]
+    all_datasets = [dataset for dataset_list in datasets.values() for dataset in dataset_list]
     combined_dataset = ConcatDataset(all_datasets)
     combined_loader = DataLoader(
         combined_dataset,
@@ -67,7 +66,9 @@ def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
     )
     # Initialize an empty list to store data
     data_list = []
+    c=1
     for batch in tqdm(combined_loader):
+        print(c,device)
         sequence_onehots, sequence_ids, sequence_lengths = (
             batch["sequence_onehots"].to(device),
             batch["sequence_ids"],
@@ -78,6 +79,7 @@ def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
                 sequence_onehots, sequence_lengths)
             for i, original_id in enumerate(sequence_ids):
                 data_list.append((original_id, embeddings[i].cpu().numpy()))
+        c+=1
  
     # Convert the list to a DataFrame
     df = pd.DataFrame(data_list, columns=["ID", "Embedding"]).set_index("ID")
@@ -152,14 +154,16 @@ def get_or_generate_sequence_embeddings(paths, device, sequence_encoder, dataset
     return sequence_embedding_df
  
  
-def get_or_generate_vocabularies(full_data_path, vocabularies_dir, logger):
+def get_or_generate_vocabularies(full_data_path, vocabularies_dir, logger,prefix=''):
     """Load or generate vocabularies based on the provided paths."""
     all_vocab_types = ['amino_acid_vocab',
-                       'GO_label_vocab', 'sequence_id_vocab']
+                       'GO_label_vocab',
+                       'sequence_id_vocab']
+    
     missing_vocab_types = []
     vocabularies = {}
     for vocab_type in all_vocab_types:
-        full_path = os.path.join(vocabularies_dir, f"{vocab_type}.json")
+        full_path = os.path.join(vocabularies_dir, f"{prefix+vocab_type}.json")
         if os.path.exists(full_path):
             vocabularies[vocab_type] = read_json(full_path)
             logger.info(f"Loaded {vocab_type} vocabulary from {full_path}")
@@ -169,11 +173,11 @@ def get_or_generate_vocabularies(full_data_path, vocabularies_dir, logger):
         logger.info(
             f"Generating {', '.join(missing_vocab_types)} vocabularies...")
         vocabularies.update(generate_vocabularies(
-            full_data_path, missing_vocab_types, logger, vocabularies_dir))
+            full_data_path, missing_vocab_types, logger, vocabularies_dir, prefix=prefix))
     return vocabularies
  
  
-def generate_vocabularies(data_path, vocab_types, logger, output_dir=None):
+def generate_vocabularies(data_path, vocab_types, logger, output_dir=None, prefix=''):
     """Generate vocabularies based on the provided data path."""
     data = read_fasta(data_path)
     go_labels, amino_acids, sequence_ids = set(), set(), set()
@@ -195,7 +199,7 @@ def generate_vocabularies(data_path, vocab_types, logger, output_dir=None):
             if value:
                 # Create directory if it doesn't exist
                 os.makedirs(output_dir, exist_ok=True)
-                with open(os.path.join(output_dir, f"{key}.json"), "w") as f:
+                with open(os.path.join(output_dir, f"{prefix+key}.json"), "w") as f:
                     json.dump(value, f)
                     logger.info(
                         f"Saved {len(value)} items as the {key} to {os.path.join(output_dir, key, '.json')}")
