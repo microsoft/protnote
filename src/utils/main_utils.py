@@ -8,7 +8,8 @@ from src.data.collators import collate_variable_sequence_length
 from torch.utils.data import ConcatDataset, DataLoader
 from src.utils.models import generate_label_embeddings_from_text
 import pandas as pd
- 
+from functools import partial
+
  
 def validate_arguments(args, parser):
     # Ensure the full data path is provided
@@ -60,15 +61,14 @@ def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
         combined_dataset,
         batch_size=params["SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD"],
         shuffle=False,
-        collate_fn=collate_variable_sequence_length,
+        collate_fn=partial(collate_variable_sequence_length,
+                           return_label_multihots=False), #have to use return_label_multihots to ignore multihot concat with zero shot
         num_workers=params["NUM_WORKERS"],
         pin_memory=True,
     )
     # Initialize an empty list to store data
     data_list = []
-    c=1
     for batch in tqdm(combined_loader):
-        print(c,device)
         sequence_onehots, sequence_ids, sequence_lengths = (
             batch["sequence_onehots"].to(device),
             batch["sequence_ids"],
@@ -79,7 +79,6 @@ def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
                 sequence_onehots, sequence_lengths)
             for i, original_id in enumerate(sequence_ids):
                 data_list.append((original_id, embeddings[i].cpu().numpy()))
-        c+=1
  
     # Convert the list to a DataFrame
     df = pd.DataFrame(data_list, columns=["ID", "Embedding"]).set_index("ID")
@@ -136,10 +135,11 @@ def get_or_generate_label_embeddings(
 def get_or_generate_sequence_embeddings(paths, device, sequence_encoder, datasets, params, logger):
     """Load or generate sequence embeddings based on the provided paths and parameters."""
     if "SEQUENCE_EMBEDDING_PATH" in paths and os.path.exists(paths["SEQUENCE_EMBEDDING_PATH"]):
-        sequence_embedding_df = read_pickle(paths["SEQUENCE_EMBEDDING_PATH"])
+        sequence_embedding_df = torch.load(paths["SEQUENCE_EMBEDDING_PATH"])
         logger.info(
             f"Loaded sequence embeddings from {paths['SEQUENCE_EMBEDDING_PATH']}")
     else:
+        
         logger.info("Generating sequence embeddings...")
         sequence_embedding_df = generate_sequence_embeddings(
             device, sequence_encoder, datasets, params)

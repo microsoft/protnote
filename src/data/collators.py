@@ -9,6 +9,7 @@ def collate_variable_sequence_length(batch: List[Tuple],
                                      shuffle_labels=False,
                                      in_batch_sampling=False,
                                      grid_sampler=False,
+                                     return_label_multihots=True,
                                      world_size=1,
                                      rank=0):
     """
@@ -22,6 +23,7 @@ def collate_variable_sequence_length(batch: List[Tuple],
         label_sample_size (int, optional): The number of labels to sample for training. 
                                            Used with grid_sampler or in_batch_sampling.
         distribute_labels (bool, optional): Whether to distribute labels across different GPUs.
+        return_label_multihots (bool, optional): Whether to batched multihot labels.
         shuffle_labels (bool, optional): Whether to shuffle labels during sampling.
         in_batch_sampling (bool, optional): If True, samples labels that are present within the batch.
         grid_sampler (bool, optional): If True, uses a grid sampling strategy for labels.
@@ -156,8 +158,66 @@ def collate_variable_sequence_length(batch: List[Tuple],
         "sequence_ids": processed_sequence_ids,
         "sequence_embeddings": processed_sequence_embeddings,
         "sequence_lengths": torch.stack(processed_sequence_lengths),
-        "label_multihots": torch.stack(processed_label_multihots),
         "tokenized_labels": processed_tokenized_labels,
         "label_embeddings": processed_label_embeddings,
+    }
+
+    if return_label_multihots:
+        processed_batch["label_multihots"] = torch.stack(processed_label_multihots)
+
+    return processed_batch
+
+
+def simple_variable_sequence_collator(batch: List[Tuple]):
+    """
+    Collates a batch of data with variable sequence lengths. Pads sequences to the maximum length within the batch to handle the variable 
+    lengths.
+
+    Args:
+        batch (List[Tuple]): A list of tuples, where each tuple represents one data point. 
+                             Each tuple contains a dictionary with keys like 'sequence_onehots', 
+                             'sequence_embedding', 'sequence_length', 'label_multihots', etc.
+    Returns:
+        Dict: A dictionary containing the processed batch data. Keys include:
+              - 'sequence_onehots': Tensor, padded one-hot encoded sequences.
+              - 'sequence_ids': List, sequence IDs.
+              - 'sequence_lengths': Tensor, lengths of sequences.
+    """
+
+    # Determine the maximum sequence length in the batch
+    max_length = max(item["sequence_length"] for item in batch)
+
+    # Initialize lists to store the processed values
+    processed_sequence_onehots = []
+    processed_sequence_ids = []
+    processed_sequence_lengths = []
+
+    # Loop through the batch
+    for row in batch:
+        # Get the sequence onehots, sequence embedding, sequence length, label multihots, tokenized labels, and label embedding
+        sequence_onehots = row["sequence_onehots"]
+        sequence_id = row["sequence_id"]
+        sequence_length = row["sequence_length"]
+
+        # Set padding
+        padding_length = max_length - sequence_length
+
+        # Get the sequence dimension (e.g., 20 for amino acids)
+        sequence_dim = sequence_onehots.shape[0]
+
+        # Pad the sequence to the max_length and append to the processed_sequences list
+        processed_sequence_onehots.append(
+            torch.cat(
+                (sequence_onehots, torch.zeros((sequence_dim, padding_length))), dim=1
+            )
+        )
+
+        processed_sequence_lengths.append(sequence_length)
+        processed_sequence_ids.append(sequence_id)
+
+    processed_batch = {
+        "sequence_onehots": torch.stack(processed_sequence_onehots),
+        "sequence_ids": processed_sequence_ids,
+        "sequence_lengths": torch.stack(processed_sequence_lengths),
     }
     return processed_batch

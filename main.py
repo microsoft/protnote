@@ -316,29 +316,6 @@ def train_validate_test(gpu, args):
             bottleneck_factor=config["embed_sequences_params"]["BOTTLENECK_FACTOR"],
         )
 
-
-    # Generate all sequence embeddings upfront, if we can
-    sequence_embedding_df = None
-    if not params["TRAIN_SEQUENCE_ENCODER"]:
-        logger.info("We are not training the sequence encoder, so generating all sequence embeddings upfront...")
-        sequence_embedding_df = get_or_generate_sequence_embeddings(
-            paths,
-            device,
-            sequence_encoder,
-            datasets,
-            params,
-            logger,
-        )
-        sequence_encoder = sequence_encoder.to('cpu')
-
-        # Loop through all the datasets and set the sequence embedding df
-        for key, dataset,  in datasets.items():
-            if key == 'train' and params["AUGMENT_SEQUENCE_PROBABILITY"] > 0:
-                logger.info("Skipping setting sequence embedding df for the training set because we are augmenting it.")
-                # If we are augmenting the training set, we don't want to set the sequence embedding df
-                continue
-            for subset in dataset:
-                subset.set_sequence_embedding_df(sequence_embedding_df)
                 
     # Generate all label embeddings upfront, if we can
     if params["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"] == 0:
@@ -493,6 +470,31 @@ def train_validate_test(gpu, args):
 
     # Log sizes of all datasets
     [logger.info(f"{subset_name} dataset size: {len(dataset)}") for subset_name, subset in datasets.items() for dataset in subset]
+
+
+    # Generate all sequence embeddings upfront, if we can
+    sequence_embedding_df = None
+    if not params["TRAIN_SEQUENCE_ENCODER"]:
+        logger.info("We are not training the sequence encoder, so generating all sequence embeddings upfront...")
+        sequence_embedding_df = get_or_generate_sequence_embeddings(
+            paths,
+            device,
+            sequence_encoder,
+            datasets,
+            params,
+            logger,
+        )
+        #sequence_encoder = sequence_encoder.to('cpu')
+
+        # Loop through all the datasets and set the sequence embedding df
+        for key, dataset,  in datasets.items():
+            if key == 'train' and params["AUGMENT_SEQUENCE_PROBABILITY"] > 0:
+                logger.info("Skipping setting sequence embedding df for the training set because we are augmenting it.")
+                # If we are augmenting the training set, we don't want to set the sequence embedding df
+                continue
+            for subset in dataset:
+                subset.set_sequence_embedding_df(sequence_embedding_df)
+
 
     ####### TRAINING AND VALIDATION LOOPS #######
     if args.train_path_name is not None:
