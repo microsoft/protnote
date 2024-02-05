@@ -483,6 +483,7 @@ def train_validate_test(gpu, args):
             datasets,
             params,
             logger,
+            is_master=is_master
         )
         #sequence_encoder = sequence_encoder.to('cpu')
 
@@ -586,6 +587,28 @@ def train_validate_test(gpu, args):
             logger.info("Testing complete.")
 
         all_metrics.update(test_metrics)
+
+
+    # Setup for testing
+    if args.zero_shot_path_name:
+        logger.info(
+            f"\n{'='*100}\nTesting on zero_shot set\n{'='*100}")
+        if is_master:
+            log_gpu_memory_usage(logger, 0)
+
+        # TODO: If best_val_th is not defined, alert an error to either provide a decision threshold or a validation datapath
+        zero_shot_metrics = Trainer.evaluate(
+            data_loader=loaders["zero_shot"][0],
+            eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*",
+                                                                        threshold=0.5,
+                                                                        num_labels=label_sample_sizes["zero_shot"]),
+            save_results=args.save_prediction_results,
+            metrics_prefix=f'final_zero_shot'
+        )
+        all_metrics.update(zero_shot_metrics)
+        logger.info(json.dumps(zero_shot_metrics, indent=4))
+        logger.info("Zero shot evaluation complete.")
+
 
     ####### CLEANUP #######
     logger.info(

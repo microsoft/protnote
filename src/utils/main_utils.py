@@ -55,6 +55,7 @@ def validate_arguments(args, parser):
 def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
     """Generate sequence embeddings for the given datasets."""
     sequence_encoder = sequence_encoder.to(device)
+    sequence_encoder.eval()
     all_datasets = [dataset for dataset_list in datasets.values() for dataset in dataset_list]
     combined_dataset = ConcatDataset(all_datasets)
     combined_loader = DataLoader(
@@ -68,6 +69,7 @@ def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
     )
     # Initialize an empty list to store data
     data_list = []
+    
     for batch in tqdm(combined_loader):
         sequence_onehots, sequence_ids, sequence_lengths = (
             batch["sequence_onehots"].to(device),
@@ -79,7 +81,8 @@ def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
                 sequence_onehots, sequence_lengths)
             for i, original_id in enumerate(sequence_ids):
                 data_list.append((original_id, embeddings[i].cpu().numpy()))
- 
+    
+    sequence_encoder.train()
     # Convert the list to a DataFrame
     df = pd.DataFrame(data_list, columns=["ID", "Embedding"]).set_index("ID")
     return df
@@ -132,26 +135,28 @@ def get_or_generate_label_embeddings(
             return label_embedding_matrix
  
  
-def get_or_generate_sequence_embeddings(paths, device, sequence_encoder, datasets, params, logger):
+def get_or_generate_sequence_embeddings(paths, device, sequence_encoder, datasets, params, logger, is_master=True):
     """Load or generate sequence embeddings based on the provided paths and parameters."""
     if "SEQUENCE_EMBEDDING_PATH" in paths and os.path.exists(paths["SEQUENCE_EMBEDDING_PATH"]):
         sequence_embedding_df = torch.load(paths["SEQUENCE_EMBEDDING_PATH"])
-        logger.info(
-            f"Loaded sequence embeddings from {paths['SEQUENCE_EMBEDDING_PATH']}")
-    else:
-        
-        logger.info("Generating sequence embeddings...")
-        sequence_embedding_df = generate_sequence_embeddings(
-            device, sequence_encoder, datasets, params)
-        
-        # Save the sequence embeddings to paths["SEQUENCE_EMBEDDING_PATH"]
-        if paths["SEQUENCE_EMBEDDING_PATH"] is not None:
-            torch.save(sequence_embedding_df, paths["SEQUENCE_EMBEDDING_PATH"])
-            if logger is not None:
-                    logger.info(
-                        f"Saved label embeddings to {paths['SEQUENCE_EMBEDDING_PATH']}")
+        if logger is not None and is_master:
+                logger.info(
+                    f"Loaded sequence embeddings from {paths['SEQUENCE_EMBEDDING_PATH']}")
+                
+        return sequence_embedding_df
+    elif logger is not None and is_master:
+            logger.info("Generating sequence embeddings...")
+            sequence_embedding_df = generate_sequence_embeddings(
+                device, sequence_encoder, datasets, params)
+            
+            # Save the sequence embeddings to paths["SEQUENCE_EMBEDDING_PATH"]
+            if paths["SEQUENCE_EMBEDDING_PATH"] is not None:
+                torch.save(sequence_embedding_df, paths["SEQUENCE_EMBEDDING_PATH"])
+                if logger is not None:
+                        logger.info(
+                            f"Saved label embeddings to {paths['SEQUENCE_EMBEDDING_PATH']}")
 
-    return sequence_embedding_df
+            return sequence_embedding_df
  
  
 def get_or_generate_vocabularies(full_data_path, vocabularies_dir, logger,prefix=''):
