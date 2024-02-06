@@ -416,7 +416,7 @@ class ProTCLTrainer:
 
                 # Print progress every 25%
                 if batch_idx % (len(data_loader) // 4) == 0:
-                    self.logger.info(f"[Validation] Epoch {self.epoch}: Processed {batch_idx} out of {len(data_loader)} batches ({batch_idx / len(data_loader) * 100:.2f}%).")  
+                    self.logger.info(f"[Evaluation] Epoch {self.epoch}: Processed {batch_idx} out of {len(data_loader)} batches ({batch_idx / len(data_loader) * 100:.2f}%).")  
 
 
                 # Accumulate loss

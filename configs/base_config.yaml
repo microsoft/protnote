@@ -90,12 +90,12 @@ params:
   MAX_SEQUENCE_LENGTH: 10000 # Only affects training set. Just 8 seqs with 10K+ length
   REMOVE_UNREPRESENTED_LABELS: False # Removes labels that never apply to train sequences
   NORMALIZE_PROBABILITIES: False
-  GO_DESCRIPTION_TYPE: 'label' #label or name
+  GO_DESCRIPTION_TYPE: 'name' #label or name
 
   # Augmentation
   AUGMENT_SEQUENCE_PROBABILITY: 0.0 # 0.0 = no augmentation. The probability that any given residue will be augmented. AlphaFold uses 0.15 (15% of residues are augmented)
   USE_RESIDUE_MASKING: False # If True, also use masking to augment sequences. Must then also set AUGMENT_SEQUENCE_PROBABILITY > 0, and TRAIN_SEQUENCE_ENCODER = True
-  AUGMENT_LABELS_WITH: null #Specifies what descriptions to use for augmentation. 
+  AUGMENT_LABELS_WITH: label+synonym_exact #Specifies what descriptions to use for augmentation. 
                                                  #Options are any combination of: ['label','synonym_exact'],['name','synonym_exact'],['synonym_exact'],[]
   # Constants
   SEED: 42
@@ -103,7 +103,7 @@ params:
   NUM_WORKERS: 3
   DECISION_TH: null # Set to null if you want to use the best threshold from validation
 
-  # Subset fractions (for rapid prototyping; set to 1 for final model)
+  # Subset fractions (for rapid prototyping; set to 1 for final model)[s]
   TRAIN_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
   VALIDATION_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
   TEST_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
