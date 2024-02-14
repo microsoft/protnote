@@ -159,16 +159,16 @@ def pool_embeddings(last_hidden_states,attention_mask,method):
  
     return sequence_embedding
 
-def get_label_embeddings(tokenized_labels, model, method, batch_size_limit=1000,append_in_cpu = False):
+def get_label_embeddings(tokenized_labels, model, method, batch_size_limit=1000, append_in_cpu = False):
     """
     Get embeddings for a list of tokenized labels.
     Assumes that tokenized_labels and model are on the same device, ideally GPU.
     """
     total_labels = tokenized_labels["input_ids"].shape[0]
-    
+    model.eval()
 
     if total_labels <= batch_size_limit:
-        with autocast():
+        with autocast(), torch.no_grad():
             sequence_embeddings = model(
                 input_ids=tokenized_labels["input_ids"],
                 attention_mask=tokenized_labels["attention_mask"]
@@ -191,23 +191,22 @@ def get_label_embeddings(tokenized_labels, model, method, batch_size_limit=1000,
         all_label_embeddings = []
         for idx,batch in enumerate(dataloader):
             input_ids, attention_mask = batch
-            with autocast():
+            with autocast(), torch.no_grad():
                 sequence_embeddings = model(
                     input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
             sequence_embeddings = pool_embeddings(
                 sequence_embeddings, attention_mask,method)
                         
             all_label_embeddings.append(sequence_embeddings.cpu() if append_in_cpu else sequence_embeddings)
+            del sequence_embeddings
 
             if (len(dataloader) >= 10):
                 if ((idx+1) % (len(dataloader) // 10) == 0):
                     logging.info(f"label embedding generation progress = {round((idx+1)*100/len(dataloader),2)}%")
 
-
-            del sequence_embeddings
         # Concatenate all the label embeddings
+        model.train()
         return torch.cat(all_label_embeddings, dim=0)
-
 
 def generate_label_embeddings_from_text(label_annotations, label_tokenizer, label_encoder, pooling_method, batch_size_limit=1000, append_in_cpu=False):
     """Tokenize the labels and generate label embeddings."""
@@ -220,8 +219,11 @@ def generate_label_embeddings_from_text(label_annotations, label_tokenizer, labe
         label_encoder.device)
 
     # Generate label embeddings
-    return get_label_embeddings(tokenized_labels, label_encoder, pooling_method ,batch_size_limit=batch_size_limit,append_in_cpu=append_in_cpu)
-
+    return get_label_embeddings(tokenized_labels=tokenized_labels,
+                                model = label_encoder,
+                                method = pooling_method,
+                                batch_size_limit=batch_size_limit,
+                                append_in_cpu=append_in_cpu)
 
 def sigmoid_bias_from_prob(prior_prob):
     return -np.log((1 - prior_prob) / prior_prob)

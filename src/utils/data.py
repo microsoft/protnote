@@ -9,6 +9,7 @@ import random
 import numpy as np
 import wget
 import hashlib
+from typing import Union
 import transformers
 from collections import OrderedDict
 from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo
@@ -78,6 +79,34 @@ def get_vocab_mappings(vocabulary):
     int2term = {idx: term for term, idx in term2int.items()}
     return term2int, int2term
 
+def generate_vocabularies(file_or_path: Union[str,list],
+                          logger)->dict:
+    """Generate vocabularies based on the provided data path.
+    
+    path must be .fasta and file must be the result of using read_fasta(path)
+    """
+    vocabs = {'amino_acid_vocab':set(),
+              'GO_label_vocab':set(),
+              'sequence_id_vocab':set()
+            }
+    
+    logger.info("Generating vocabularies..")
+    if isinstance(file_or_path,str):
+        data = read_fasta(file_or_path)
+    elif isinstance(file_or_path,list):
+        data = list(file_or_path)
+    else:
+        raise TypeError("File not supported")
+
+    for sequence, labels in data:
+        vocabs['sequence_id_vocab'].add(labels[0])
+        vocabs['GO_label_vocab'].update(labels[1:])
+        vocabs['amino_acid_vocab'].update(list(sequence))
+    
+    for vocab_type in vocabs.keys():
+        vocabs[vocab_type] = sorted(list(vocabs[vocab_type]))
+ 
+    return vocabs
 
 def save_to_pickle(item, file_path: str):
     with open(file_path, "wb") as p:

@@ -2,7 +2,7 @@ from src.utils.data import (
     seed_everything,
     log_gpu_memory_usage
 )
-from src.utils.main_utils import get_or_generate_vocabularies,  get_or_generate_label_embeddings, get_or_generate_sequence_embeddings, validate_arguments
+from src.utils.main_utils import get_or_generate_sequence_embeddings, validate_arguments
 from src.data.datasets import ProteinDataset, create_multiple_loaders, calculate_sequence_weights
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
@@ -43,9 +43,6 @@ def main():
 
     parser.add_argument("--test-paths-names", nargs="+", type=str, default=None,
                         help="Specify all the desired test paths names to test the model using names from config file to test. If not provided, model will not be tested.")
-
-    parser.add_argument("--zero-shot-path-name", type=str, default=None,
-                        help="Specify all the desired zero shot paths names to test the model using names from config file to test. If not provided, model will not be tested.")
 
     parser.add_argument("--use-wandb", action="store_true", default=False,
                         help="Use Weights & Biases for logging. Default is False.")
@@ -125,7 +122,6 @@ def train_validate_test(gpu, args):
         train_path_name=args.train_path_name,
         val_path_name=args.validation_path_name,
         test_paths_names=args.test_paths_names,
-        zero_shot_path_name=args.zero_shot_path_name,
         amlt=args.amlt,
         is_master=is_master,
     )
@@ -179,58 +175,32 @@ def train_validate_test(gpu, args):
 
     label_encoder = label_encoder.to(device)
 
-    # Load or generate the vocabularies
-    vocabularies = get_or_generate_vocabularies(
-        paths["FULL_DATA_PATH"], paths["VOCABULARIES_DIR"], logger)
-    
-    zero_shot_vocabularies = get_or_generate_vocabularies(
-        paths["ZERO_SHOT_DATA_PATH"], paths["VOCABULARIES_DIR"], logger,prefix='zero_shot_')
-
     #---------------------- DATASETS ----------------------# 
     # Create individual datasets
     train_dataset = ProteinDataset(
         data_paths=config['dataset_paths']['train'][0], 
         config=config,
-        vocabularies=vocabularies,
         logger=logger,
         require_label_idxs=params['GRID_SAMPLER'],
-        subset_fraction=params["TRAIN_SUBSET_FRACTION"],
-        deduplicate=params["DEDUPLICATE"],
         label_tokenizer=label_tokenizer,
     ) if args.train_path_name is not None else None
 
     validation_dataset = ProteinDataset(
         data_paths=config['dataset_paths']['validation'][0], 
         config=config,
-        vocabularies=vocabularies,
         logger=logger,
         require_label_idxs=False,  # Label indices are not required for validation. 
-        subset_fraction=params["VALIDATION_SUBSET_FRACTION"],
-        deduplicate=params["DEDUPLICATE"],
         label_tokenizer=label_tokenizer,
     ) if args.validation_path_name is not None else None
 
     test_dataset = ProteinDataset(
         data_paths=config['dataset_paths']['test'][0], 
         config=config,
-        vocabularies=vocabularies,
         logger=logger,
         require_label_idxs=False,  # Label indices are not required for testing
-        subset_fraction=params["TEST_SUBSET_FRACTION"],
-        deduplicate=params["DEDUPLICATE"],
         label_tokenizer=label_tokenizer,
     ) if args.test_paths_names is not None else None
 
-    zero_shot_dataset = ProteinDataset(
-        data_paths=config['dataset_paths']['zero_shot'][0], 
-        config=config,
-        vocabularies=zero_shot_vocabularies,
-        logger=logger,
-        require_label_idxs=False,  # Label indices are not required for testing
-        subset_fraction=params["TEST_SUBSET_FRACTION"],
-        deduplicate=params["DEDUPLICATE"],
-        label_tokenizer=label_tokenizer,
-    ) if args.zero_shot_path_name is not None else None
 
 
     # Add datasets to a dictionary
@@ -238,13 +208,13 @@ def train_validate_test(gpu, args):
     datasets = {
         "train": [train_dataset],
         "validation": [validation_dataset],
-        "test": [test_dataset],
-        "zero_shot": [zero_shot_dataset]
+        "test": [test_dataset]
     }
 
     #Remove empty datasets. May happen in cases like only validating a model.
     datasets = {k:v for k,v in datasets.items() if v[0] is not None}
-    
+
+
     #-----------------------------------------------------# 
 
     # Initialize new run
@@ -256,7 +226,6 @@ def train_validate_test(gpu, args):
         "train": params["TRAIN_LABEL_SAMPLE_SIZE"],
         "validation": params["VALIDATION_LABEL_SAMPLE_SIZE"],
         "test": None,  # No sampling for the test set
-        "zero_shot": None  # No sampling for the zero_shot
     }
     
     # Calculate the weighting for the train dataset
@@ -316,53 +285,14 @@ def train_validate_test(gpu, args):
             bottleneck_factor=config["embed_sequences_params"]["BOTTLENECK_FACTOR"],
         )
 
-                
-    # Generate all label embeddings upfront, if we can
-    if params["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"] == 0:
-        logger.info("We are not training the label encoder, so generating all label embeddings upfront...")
-        for key, dataset in datasets.items():
-            for subset in dataset:
-                # Create ordered list of labels
-                label_text_list = []
-                label_annotation_map_idxs = {}
-                base_label_idxs = []
-                s = 0
-                for label_id in subset.label_vocabulary:
-                    descriptions = subset.label_annotation_map[label_id]
-                    num_descriptions = len(descriptions)
-                    label_text_list.extend(descriptions)
-                    label_annotation_map_idxs[label_id] = [s,s+num_descriptions-1]
-                    base_label_idxs.append(s)
-                    s += num_descriptions
-
-                #Use the same file for all data types except zero_shot
-                prefix='zero_shot_' if subset.dataset_type == 'zero_shot' else ''
-                label_embedding_path = config["LABEL_EMBEDDING_PATH"].split('/')
-                label_embedding_path = '/'.join([*label_embedding_path[:-1],prefix+label_embedding_path[-1]])
-
-                logger.info(f"get or generate {subset.dataset_type} label embeddings...")
-                label_embedding_matrix = get_or_generate_label_embeddings(
-                    label_annotations=label_text_list,
-                    label_tokenizer=label_tokenizer,
-                    label_encoder=label_encoder.to(gpu),
-                    label_embedding_path = label_embedding_path,
-                    logger=logger,
-                    batch_size_limit=config["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
-                    is_master=is_master,
-                    pooling_method=config["params"]["LABEL_EMBEDDING_POOLING_METHOD"]
-                )
-                
-                subset.set_label_embedding_specs(label_embedding_matrix=label_embedding_matrix,
-                                                  label_annotation_map_idxs=label_annotation_map_idxs,
-                                                  base_label_idxs=base_label_idxs
-                                                  )
-
     model = ProTCL(
         # Parameters
         protein_embedding_dim=params["PROTEIN_EMBEDDING_DIM"],
         label_embedding_dim=params["LABEL_EMBEDDING_DIM"],
         latent_dim=params["LATENT_EMBEDDING_DIM"],
         label_embedding_pooling_method=params["LABEL_EMBEDDING_POOLING_METHOD"],
+        sequence_embedding_dropout=params["SEQUENCE_EMBEDDING_DROPOUT"],
+        label_embedding_dropout=params["LABEL_EMBEDDING_DROPOUT"],
 
         # Encoders
         label_encoder=label_encoder,
@@ -385,7 +315,7 @@ def train_validate_test(gpu, args):
         label_batch_size_limit=params["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
         sequence_batch_size_limit=params["SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD"],
 
-        #
+        #Others
         feature_fusion=config["params"]["FEATURE_FUSION"],
         temperature=config["params"]["SUPCON_TEMP"]
     ).to(device)
@@ -438,7 +368,6 @@ def train_validate_test(gpu, args):
         model=model,
         device=device,
         config=config,
-        vocabularies=vocabularies,
         logger=logger,
         timestamp=timestamp,
         run_name=args.name,
@@ -472,37 +401,11 @@ def train_validate_test(gpu, args):
     [logger.info(f"{subset_name} dataset size: {len(dataset)}") for subset_name, subset in datasets.items() for dataset in subset]
 
 
-    # Generate all sequence embeddings upfront, if we can
-    sequence_embedding_df = None
-    if not params["TRAIN_SEQUENCE_ENCODER"]:
-        logger.info("We are not training the sequence encoder, so generating all sequence embeddings upfront...")
-        sequence_embedding_df = get_or_generate_sequence_embeddings(
-            paths,
-            device,
-            sequence_encoder,
-            datasets,
-            params,
-            logger,
-            is_master=is_master
-        )
-        #sequence_encoder = sequence_encoder.to('cpu')
-
-        # Loop through all the datasets and set the sequence embedding df
-        for key, dataset,  in datasets.items():
-            if key == 'train' and params["AUGMENT_SEQUENCE_PROBABILITY"] > 0:
-                logger.info("Skipping setting sequence embedding df for the training set because we are augmenting it.")
-                # If we are augmenting the training set, we don't want to set the sequence embedding df
-                continue
-            for subset in dataset:
-                subset.set_sequence_embedding_df(sequence_embedding_df)
-
-
     ####### TRAINING AND VALIDATION LOOPS #######
     if args.train_path_name is not None:
         # Train function
         Trainer.train(train_loader=loaders["train"][0],
             val_loader=loaders["validation"][0],
-            zero_shot_loader=loaders["zero_shot"][0],
             train_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*",
                                                                              threshold=0.5,
                                                                         num_labels=label_sample_sizes["train"] if (params['IN_BATCH_SAMPLING'] or params['GRID_SAMPLER']) is False else None
@@ -510,9 +413,6 @@ def train_validate_test(gpu, args):
             val_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*", threshold=0.5,
                                                                 num_labels=label_sample_sizes["validation"]
                                                                 ),
-            zero_shot_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*", threshold=0.5,
-                                                    num_labels=label_sample_sizes["zero_shot"]
-                                                    ),
             val_optimization_metric_name=params["OPTIMIZATION_METRIC_NAME"])
     else:
         logger.info("Skipping training...")
@@ -588,26 +488,6 @@ def train_validate_test(gpu, args):
 
         all_metrics.update(test_metrics)
 
-
-    # Setup for testing
-    if args.zero_shot_path_name:
-        logger.info(
-            f"\n{'='*100}\nTesting on zero_shot set\n{'='*100}")
-        if is_master:
-            log_gpu_memory_usage(logger, 0)
-
-        # TODO: If best_val_th is not defined, alert an error to either provide a decision threshold or a validation datapath
-        zero_shot_metrics = Trainer.evaluate(
-            data_loader=loaders["zero_shot"][0],
-            eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*",
-                                                                        threshold=0.5,
-                                                                        num_labels=label_sample_sizes["zero_shot"]),
-            save_results=args.save_prediction_results,
-            metrics_prefix=f'final_zero_shot'
-        )
-        all_metrics.update(zero_shot_metrics)
-        logger.info(json.dumps(zero_shot_metrics, indent=4))
-        logger.info("Zero shot evaluation complete.")
 
 
     ####### CLEANUP #######

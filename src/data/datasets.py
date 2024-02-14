@@ -1,21 +1,23 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
-from src.utils.data import read_fasta, read_json, get_vocab_mappings, read_pickle
-from src.utils.models import tokenize_labels, get_label_embeddings
-from typing import Dict
-import pandas as pd
-import numpy as np
 import logging
-from typing import List
-from src.data.collators import collate_variable_sequence_length
+import random
+import math
+import blosum as bl
+from time import time
 from collections import defaultdict
 from joblib import Parallel, delayed, cpu_count
 from functools import partial
 from collections import Counter
+from typing import List
+from typing import Dict
+import pandas as pd
+import numpy as np
+from torch.utils.data import Dataset, DataLoader
+from src.data.collators import collate_variable_sequence_length
+from src.utils.data import read_fasta, get_vocab_mappings, read_pickle
+from src.utils.models import tokenize_labels
 from src.data.samplers import GridBatchSampler,observation_sampler_factory
-import random
-import math
-import blosum as bl
+from src.utils.data import generate_vocabularies
 
 class ProteinDataset(Dataset):
     """
@@ -25,12 +27,10 @@ class ProteinDataset(Dataset):
         self,
         data_paths: dict,
         config: dict,
-        vocabularies: dict,
         logger=None,
         require_label_idxs=False,
-        subset_fraction: float = 1.0,
-        deduplicate: bool = False,
-        label_tokenizer=None,
+        label_tokenizer=None
+        
     ):
         """
         data_paths (dict): Dictionary containing paths to the data and vocabularies.
@@ -50,9 +50,9 @@ class ProteinDataset(Dataset):
         assert data_paths["dataset_type"] in [
             "train",
             "validation",
-            "test",
-            "zero_shot",
+            "test"
         ], "dataset_type must be one of 'train', 'val', or 'test'"
+        
         
         # Tokenizer
         self.label_tokenizer = label_tokenizer
@@ -74,19 +74,28 @@ class ProteinDataset(Dataset):
         
         # Initialize class variables and pre-computed embedding matrices
         self.data = read_fasta(data_paths["data_path"])
-        self.label_embedding_matrix = self.sequence_embedding_df = None
+        self.sequence_embedding_df = None
         
         # Flag to know how Dataset indexing will be handled
         self.require_label_idxs = require_label_idxs
 
         # Subset the data if subset_fraction is provided
+        subset_fraction=config['params'][f"{self.dataset_type.upper()}_SUBSET_FRACTION"]
         if subset_fraction < 1.0:
             logging.info(
                 f"Subsetting {subset_fraction*100}% of the {self.dataset_type} set..."
             )
             self.data = self.data[:int(subset_fraction * len(self.data))]
 
-        # Set the vocabularies
+        # Set the vocabularies.
+        # If extract_vocabularies is null, generate vocab from self.data
+        self.go_description_type = config['params']['GO_DESCRIPTION_TYPE'] #The base description
+        self.extract_vocabularies_from = config["params"]["EXTRACT_VOCABULARIES_FROM"]
+        vocabularies = generate_vocabularies(file_or_path = (config['paths'][self.extract_vocabularies_from] 
+                                                             if self.extract_vocabularies_from is not None 
+                                                             else self.data),
+                                             logger=logger)
+        
         self.amino_acid_vocabulary = vocabularies["amino_acid_vocab"]
         self.label_vocabulary = vocabularies["GO_label_vocab"]
         self.sequence_id_vocabulary = vocabularies["sequence_id_vocab"]
@@ -94,85 +103,21 @@ class ProteinDataset(Dataset):
         # Preprocess dataset
         self.label_frequency = None
         self._preprocess_data(
-            deduplicate=deduplicate,
+            deduplicate=config['params']["DEDUPLICATE"],
             max_sequence_length=config["params"]["MAX_SEQUENCE_LENGTH"],
             remove_unrepresented_labels=config["params"]["REMOVE_UNREPRESENTED_LABELS"]
             )
 
-
-        '''
-        # Load the map from alphanumeric label id to text label
-        self.temp = {key: value[config["params"]['GO_DESCRIPTION_TYPE']] for key, value in read_pickle(
-            data_paths["go_annotations_path"]).to_dict(orient='index').items()}
-
-        self.label_annotation_map={}
-        for key, value in read_pickle(data_paths["go_annotations_path"]).to_dict(orient='index').items():
-            self.label_annotation_map[key] = [value[config["params"]['GO_DESCRIPTION_TYPE']]] + value['synonym_exact'] 
-        '''
-
-        self.label_annotation_map = self.create_label_annotation_map(go_annotations_path = data_paths["go_annotations_path"],
-                                                                     go_description_type = config["params"]['GO_DESCRIPTION_TYPE'],
-                                                                     augment_with = self.augment_labels_with
-                                                                     )
-    @staticmethod
-    def create_label_annotation_map(go_annotations_path: str,
-                                    go_description_type:str,
-                                    augment_with: list):
-        def ensure_list(value):
-            # Case 1: If the value is already a list
-            if isinstance(value, list):
-                return value
-            # Case 2: If the value is NaN
-            elif value is math.nan or (isinstance(value, float) and math.isnan(value)):
-                return []
-            # Case 3: For all other cases (including strings)
-            else:
-                return [value]
-        
-        assert go_description_type not in augment_with, f'''Can't include {go_description_type} in AUGMENT_LABELS_WITH 
-                                                            because this is already the base description set by GO_DESCRIPTION_TYPE.
-                                                            Doing this would yield to "double counting" of descriptions of type {go_description_type}
-                                                        '''
-        label_annotation_map={}
-        c=1
-        for key, value in read_pickle(go_annotations_path).to_dict(orient='index').items():
-            label_annotation_map[key] = []            
-            
-            #Add descriptionts from main column and augmentation in predictable order.
-            for column in sorted(augment_with+[go_description_type]):
-                label_annotation_map[key]+=ensure_list(value[column] )
-
-        return label_annotation_map
-
+        #TODO: This path could be constructed in get_setup
+        INDEX_OUTPUT_PATH = config['LABEL_EMBEDDING_PATH'].split('.')
+        INDEX_OUTPUT_PATH = '_'.join([INDEX_OUTPUT_PATH[0] ,'index']) + '.'+ INDEX_OUTPUT_PATH[1]
+        self.label_embeddings_index,self.label_embeddings = self._process_label_embedding_mapping(mapping=torch.load(INDEX_OUTPUT_PATH),
+                                                                                                  embeddings = torch.load(config['LABEL_EMBEDDING_PATH']))
+        print(len(self.label_embeddings_index),len(self.label_embeddings))
         
     # Helper functions for setting embedding dictionaries
     def set_sequence_embedding_df(self, embedding_df: pd.DataFrame):
         self.sequence_embedding_df = embedding_df
-
-    def set_label_embedding_specs(self,
-                                  label_embedding_matrix: torch.Tensor,
-                                  label_annotation_map_idxs : list,
-                                  base_label_idxs: list):
-        """Sets the embedding matrix (2D Tensor) that store embeddings of all GO descriptions with 
-        their possible variants. If a label has multiple possible descriptions their embeddings
-        are flattened to fit the 2D embedding matrix.
-
-        Separately receives a mapping that stores the range of indexes where the possible descriptions
-        of a go label lie in the flattened array. This is used to recover the dataset from its flattened version
-
-
-        :param label_embedding_matrix: Matrix that stores the embeddings of all possible label descriptions (with synonyms/augmentations)
-        :type label_embedding_matrix: torch.Tensor
-        :param label_annotation_map_idxs:  mapping that stores the range of indexes where the possible descriptions
-        of a go label lie in the flattened array. This is used to recover the dataset from its flattened version
-        :type label_annotation_map_idxs: list
-        :param base_label_idxs: list that stores the indexes from embedding matrix corresponding to the original base label descriptions 
-        :type base_label_idxs: list
-        """        
-        
-        self.label_embedding_matrix = label_embedding_matrix
-        self.label_annotation_map_idxs = label_annotation_map_idxs
-        self.base_label_idxs = base_label_idxs
         
     def _preprocess_data(self,deduplicate,max_sequence_length,remove_unrepresented_labels):
         """
@@ -207,6 +152,7 @@ class ProteinDataset(Dataset):
         self.calculate_label_frequency()
 
         # Process vocabulary
+        #TODO: remove unrepresented labels is depracted in favor of using extract_vocabularies_from = null
         if (remove_unrepresented_labels) and (self.dataset_type == "train"):
             self.logger.info("Removing unrepresented labels from the training set vocabulary")
 
@@ -300,22 +246,63 @@ class ProteinDataset(Dataset):
         
         return augmented_sequence
     
-    def _get_go_descriptions(self) -> list[str]:
-        """
-        Augment label text by randomly selecting additional GPT summarizations for some labels.
-        Each label has a probability of being augmented based on self.augment_label_probability.
-        Args:
-            labels (list[str]): The labels to augment.
+    def _get_base_label_embeddings(self):
+        label_embedding_idxs_list = []
+        for go_term in self.label_vocabulary:
+            idx = self.label_embeddings_index[go_term]['base_idx']
+            label_embedding_idxs_list.append(idx)
+        return self.label_embeddings[label_embedding_idxs_list]
 
-        Returns:
-            list[str]: The augmented labels.
-        """
+    def _process_label_embedding_mapping(self,
+                                         mapping:pd.DataFrame,
+                                         embeddings:torch.Tensor):
         
-        label_descriptions = []
-        for label in self.label_vocabulary:
-            label_descriptions.append(self.label_annotation_map[label][0]) # index 0 is the default description
+        self.logger.info("Processing label embeddings...")
+        descriptions_considered = [self.go_description_type]+self.augment_labels_with
         
-        return label_descriptions
+        #Select only desires description types and ids from label vocabulary
+        mask = (mapping['description_type'].isin(descriptions_considered))\
+               &(mapping['id'].isin(self.label_vocabulary))\
+                .values
+        mapping = mapping[mask]
+        embeddings = embeddings[mask]
+
+        mapping = mapping\
+            .reset_index(drop=True)\
+            .reset_index()
+
+        #For safety 
+        assert len(embeddings) == len(mapping)
+
+        # And filtering the tensor as well.
+        mapping = pd.concat([mapping.groupby('id').agg(min_idx=('index','min'),max_idx=('index','max')),
+                             mapping\
+                                .query("description_type==@self.go_description_type")\
+                                .rename(columns={'index':'base_idx'})\
+                                .set_index('id')\
+                                .drop('description_type',axis=1),
+                            ],axis=1).to_dict(orient='index')
+        self.logger.info("Done")
+        return mapping, embeddings
+        
+    def _sample_label_embeddings(self):
+        
+        assert self.go_description_type not in self.augment_labels_with,f'''Can't include {self.go_description_type} in AUGMENT_LABELS_WITH 
+                                                                            because this is already the base description set by GO_DESCRIPTION_TYPE.
+                                                                            Doing this would yield to "double counting" of descriptions of type {self.go_description_type}
+                                                                        '''
+        
+        label_embedding_idxs_list = []
+        
+        for go_term in self.label_vocabulary:    
+
+            idx = np.random.randint(low=self.label_embeddings_index[go_term]['min_idx'],
+                                    high=self.label_embeddings_index[go_term]['max_idx']+1
+                                    )
+            label_embedding_idxs_list.append(idx)
+
+            
+        return self.label_embeddings[label_embedding_idxs_list]
 
     def process_example(self, sequence: str, labels: list[str], label_idxs:list[int] = None) -> dict:
         sequence_id_alphanumeric, labels = labels[0], labels[1:]
@@ -351,27 +338,13 @@ class ProteinDataset(Dataset):
             label_idxs = torch.tensor(label_idxs)
 
         tokenized_labels = None
-        label_embeddings = None
-        # Set the label embeddings, if provided
-        if self.label_embedding_matrix is not None:
-            # Augment label descriptions by sampling from synonyms (if available)
-            #NOTE: WE AUGMENT LABELS PER SEQUENCE, BUT INSIDE COLLATOR ONLY USE THE LABELS FROM FIRST SEQUENCE IN BATCh
-            if self.augment_labels & (self.dataset_type == "train"):
-                sampled_description_idxs = []
-                for l,description_index_range in self.label_annotation_map_idxs.items():
-                    sampled_idx = np.random.randint(description_index_range[0],description_index_range[1]+1) #Add +1 to high b/c randing high range is exclusive
-                    sampled_description_idxs.append(sampled_idx)
-                
-                label_embeddings = self.label_embedding_matrix[sampled_description_idxs]
 
-            else:
-                label_embeddings = self.label_embedding_matrix[self.base_label_idxs]
+        # Augment label descriptions by sampling from synonyms (if available)
+        #NOTE: WE AUGMENT LABELS PER SEQUENCE, BUT INSIDE COLLATOR ONLY USE THE LABELS FROM FIRST SEQUENCE IN BATCh
+        if self.augment_labels & (self.dataset_type == "train"):
+            label_embeddings = self._sample_label_embeddings()
         else:
-            # Tokenize the labels if we don't have label embedding
-            # extract label descriptions and optionally augment
-            label_descriptions = self._get_go_descriptions()
-
-            tokenized_labels = tokenize_labels(label_descriptions, self.label_tokenizer)
+            label_embeddings = self._get_base_label_embeddings()
 
         # Get the sequence embedding, if provided
         sequence_embedding = None
