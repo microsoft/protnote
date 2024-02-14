@@ -23,7 +23,6 @@ class ProTCLTrainer:
         model: torch.nn.Module,
         device: str,
         config: dict,
-        vocabularies: dict,
         logger: logging.Logger,
         timestamp: str,
         run_name: str,
@@ -67,7 +66,6 @@ class ProTCLTrainer:
         self.EPOCHS_PER_VALIDATION = config["params"]["EPOCHS_PER_VALIDATION"]
         self.gradient_accumulation_steps = config["params"]["GRADIENT_ACCUMULATION_STEPS"]
         self.clip_value = config["params"]["CLIP_VALUE"]
-        self.vocabularies = vocabularies
         self.label_normalizer = load_gz_json(
             config["paths"]["PARENTHOOD_LIB_PATH"]
         )
@@ -330,6 +328,7 @@ class ProTCLTrainer:
     def _normalize_probabilities(self,probabilities):
         # TODO: Using original normalize_confidences implemented with numpy,
                     # but this is slow. Should be able to do this with torch tensors.
+        '''
         return torch.tensor(
                     normalize_confidences(
                         predictions=probabilities.detach().cpu().numpy(),
@@ -338,7 +337,7 @@ class ProTCLTrainer:
                     ),
                     device=self.device,
                 )
-
+        '''
     def evaluate(
         self,
         data_loader: torch.utils.data.DataLoader,
@@ -355,26 +354,6 @@ class ProTCLTrainer:
         :rtype: dict
         """
         self.model.eval()
-
-        # Compute all label embeddings upfront, since we're not training
-        #TODO: THIS WILL BREAK IF TRAINING LABEL ENCODER
-        if data_loader.dataset.label_embedding_matrix is None:
-            logging.info(
-                "Computing label embeddings for evaluation...")
-            with torch.no_grad():
-                label_embedding_matrix = generate_label_embeddings_from_text(
-                    label_annotations = data_loader.dataset.label_text_list,
-                    label_tokenizer = data_loader.dataset.label_tokenizer,
-                    label_encoder = self.model.module.label_encoder,
-                    batch_size_limit = self.config["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
-                    pooling_method = self.config["params"]["LABEL_EMBEDDING_POOLING_METHOD"]
-                ).cpu()
-
-                
-            data_loader.dataset.set_label_embedding_matrix(
-                label_embedding_matrix)
-            logging.info("Done computing label embeddings.")
-
         total_loss = 0
         test_results = defaultdict(list)
 
@@ -573,10 +552,8 @@ class ProTCLTrainer:
         self,
         train_loader: torch.utils.data.DataLoader,
         val_loader: torch.utils.data.DataLoader,
-        zero_shot_loader: torch.utils.data.DataLoader,
         train_eval_metrics: MetricCollection,
         val_eval_metrics: MetricCollection,
-        zero_shot_eval_metrics: MetricCollection,
         val_optimization_metric_name: str
     ):
         """Train model
@@ -584,8 +561,6 @@ class ProTCLTrainer:
         :type train_loader: torch.utils.data.DataLoader
         :param val_loader: validation set dataloader
         :type val_loader: torch.utils.data.DataLoader
-        :param zero_shot_loader: zero shot set dataloader
-        :type zero_shot_loader: torch.utils.data.DataLoader
         :param val_optimization_metric_name: metric name  used to save checkpoints based on validation performance
         :type val_optimization_metric_name: str
         """
@@ -626,16 +601,6 @@ class ProTCLTrainer:
                               eval_metrics=val_eval_metrics,
                               val_optimization_metric_name=val_optimization_metric_name
                              )
-
-                # Run zero shot testing
-                self.test_zero_shot(zero_shot_loader=zero_shot_loader,
-                              eval_metrics=zero_shot_eval_metrics
-                             )
-
-                if self.label_encoder_num_trainable_layers>0:
-                    # Clear the label embedding matrix
-                    val_loader.dataset.set_label_embedding_matrix(None)
-                    zero_shot_loader.dataset.set_label_embedding_matrix(None)
 
                 self.logger.info(
                     f"Epoch {epoch}/{self.starting_epoch + self.num_epochs - 1}, Batch {self.training_step}, Training Loss: {train_metrics['train_loss']}"

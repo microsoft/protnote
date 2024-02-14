@@ -1,4 +1,3 @@
-import torch
 import os
 import time
 import datetime
@@ -6,6 +5,7 @@ import logging
 from src.utils.data import read_yaml
 import sys
 from ast import literal_eval
+from pathlib import Path
 
 def try_literal_eval(val):
     try:
@@ -41,22 +41,18 @@ def override_config(config: dict, overrides: list):
                     f"Key '{key}' not found in the 'params' section of the config."
                 )
 
-def generate_label_embeddeing_path(params:dict,paths:dict):
+def generate_label_embeddeing_path(params:dict,
+                                   base_label_embedding_path:str):
     '''
     Generates the name of the file that caches label embeddings. Needed due to different
     ways of pooling embeddings, different types of go descriptions and other paramters. 
     This way we can store different verstions/types of label embeddings for caching
     '''
-    label_embedding_path = paths['BASE_LABEL_EMBEDDING_PATH']
-    label_embedding_path=label_embedding_path.split('/')
+    label_embedding_path=base_label_embedding_path.split('/')
     temp=label_embedding_path[-1].split('.')
 
-    augment_labels_with = params["AUGMENT_LABELS_WITH"].split('+') if params["AUGMENT_LABELS_WITH"] is not None else []
-    description_types = sorted([params["GO_DESCRIPTION_TYPE"]] + augment_labels_with)
-
     label_embedding_path[-1] = \
-        temp[0] + '_' \
-        + '_'.join(description_types) \
+        temp[0] \
         + '_' \
         + params["LABEL_EMBEDDING_POOLING_METHOD"] \
         + '.' + temp[1]
@@ -71,7 +67,6 @@ def get_setup(
     train_path_name: str = None,
     val_path_name: str = None,
     test_paths_names: list = None,
-    zero_shot_path_name: list = None,
     amlt: bool = False,
     is_master: bool = True
 ):
@@ -81,7 +76,8 @@ def get_setup(
         DATA_PATH = os.environ["AMLT_DATA_DIR"]
         OUTPUT_PATH = os.environ["AMLT_OUTPUT_DIR"]
     else:
-        ROOT_PATH = os.environ.get("ROOT_PATH", ".")
+        ROOT_PATH = str(Path(os.path.dirname(__file__)).parents[1])
+        print(ROOT_PATH)
         DATA_PATH = os.path.join(ROOT_PATH, "data")
         OUTPUT_PATH = os.path.join(ROOT_PATH, "outputs")
         if not os.path.exists(OUTPUT_PATH) and is_master:
@@ -146,24 +142,10 @@ def get_setup(
         else []
     )
 
-    zero_shot_path_name_list = (
-        [
-            {
-                "data_path": paths[zero_shot_path_name],
-                "dataset_type": "zero_shot",
-                "go_annotations_path": paths['ZERO_SHOT_GO_ANNOTATIONS_PATH'],
-                "vocabularies_dir": paths["ZERO_SHOT_VOCABULARIES_DIR"]
-            }
-        ]
-        if zero_shot_path_name is not None
-        else []
-    )
-
 
     dataset_paths = {'train': train_paths_list,
                      'validation':val_paths_list,
-                     'test': test_paths_list,
-                     'zero_shot': zero_shot_path_name_list
+                     'test': test_paths_list
                     }
 
     # Set the timezone for the entire Python environment
@@ -212,7 +194,8 @@ def get_setup(
         logger.setLevel(logging.CRITICAL + 1)
 
     # Generate embeddings
-    label_embedding_path = generate_label_embeddeing_path(params=params,paths=paths)
+    label_embedding_path = generate_label_embeddeing_path(params=params,
+                                                          base_label_embedding_path=paths['BASE_LABEL_EMBEDDING_PATH'])
     
     # Return a dictionary
     return {

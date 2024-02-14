@@ -73,7 +73,7 @@ def download_and_process_obo(url: str, output_file: str):
     df = pd.concat([df, df_synonyms], axis=1)
 
     # Filter the dataframe to retain only 'label', 'name' and 'synonym' columns, with the 'id' column as the index
-    df_filtered = df[['label','name']+list(df_synonyms.columns)]
+    df_filtered = df[['label','name']+list(df_synonyms.columns)+['is_obsolete']]
 
     # Save the filtered dataframe as a pickle
     df_filtered.to_pickle(output_file)
@@ -94,7 +94,9 @@ if __name__ == "__main__":
     # TODO: Filename can be figured out from URL
     parser = argparse.ArgumentParser(
         description="Download OBO file and save GO ID and label to a pickle.")
-    parser.add_argument("--url", type=str,
+    parser.add_argument("--url",
+                        type=str,
+                        default='http://release.geneontology.org/2023-07-27/ontology/go.obo',
                         help="URL to the OBO file.")
     parser.add_argument("--output_file", type=str,
                         help="Path to save the resulting pickle file.")

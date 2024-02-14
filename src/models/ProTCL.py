@@ -21,6 +21,8 @@ class ProTCL(nn.Module):
         output_neuron_bias=None,
         outout_mlp_add_batchnorm=True,
         dropout=0.0,
+        sequence_embedding_dropout=0.0,
+        label_embedding_dropout=0.0,
         projection_head_num_layers=1,
         projection_head_hidden_dim_scale_factor = 1,
         label_batch_size_limit=float("inf"),
@@ -46,18 +48,23 @@ class ProTCL(nn.Module):
 
         # Projection heads
         self.W_p = MLP(protein_embedding_dim,
-                       [latent_dim*projection_head_hidden_dim_scale_factor]*(projection_head_num_layers-1) + [latent_dim],
-                       bias=False,
-                       norm_layer=torch.nn.BatchNorm1d,
-                       dropout=dropout
-                       )
+                                    [latent_dim*projection_head_hidden_dim_scale_factor]*(projection_head_num_layers-1) + [latent_dim],
+                                    bias=False,
+                                    norm_layer=torch.nn.BatchNorm1d,
+                                    dropout=dropout)
         
+
         self.W_l = MLP(label_embedding_dim,
                        [latent_dim*projection_head_hidden_dim_scale_factor]*(projection_head_num_layers-1) + [latent_dim],
                        bias=False,
                        norm_layer=torch.nn.BatchNorm1d,
                        dropout=dropout
                        )
+        #Doing it this way to avoid weight name changing even if dropout is 0 to avoid model loading issues.
+        if sequence_embedding_dropout>0:
+            self.W_p = nn.Sequential(nn.Dropout(sequence_embedding_dropout),self.W_p)
+        if label_embedding_dropout>0:
+            self.W_l = nn.Sequential(nn.Dropout(label_embedding_dropout),self.W_l)
         
         #MLP For raw attention score in case label embedding pooling method = all
         if self.label_embedding_pooling_method=='all':
@@ -225,6 +232,7 @@ class ProTCL(nn.Module):
 def get_mlp(input_dim,
             hidden_dim,
             num_layers,
+            input_dropout=0.0,
             dropout=0.0,
             batch_norm = False,
             output_neuron_bias=None):
@@ -232,6 +240,9 @@ def get_mlp(input_dim,
     Creates a variable length MLP with ReLU activations.
     """
     layers = []
+
+    if input_dropout>0:
+        layers.append(nn.Dropout(input_dropout))
 
     add_hidden_layers_bias =  not batch_norm
    
