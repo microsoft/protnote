@@ -12,6 +12,8 @@ import hashlib
 from typing import Union
 import transformers
 from collections import OrderedDict
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo
 
 def log_gpu_memory_usage(logger, device_id):
@@ -46,6 +48,10 @@ def hash_alphanumeric_sequence_id(s: str):
 
 
 def read_fasta(data_path: str, sep=" "):
+    """
+    Reads a FASTA file and returns a list of tuples containing sequences and labels.
+    labels[0] contains the sequence ID, and the rest of the labels are GO terms. 
+    """
     sequences_with_labels = []
 
     for record in SeqIO.parse(data_path, "fasta"):
@@ -111,7 +117,27 @@ def generate_vocabularies(file_or_path: Union[str,list],
 def save_to_pickle(item, file_path: str):
     with open(file_path, "wb") as p:
         pickle.dump(item, p)
+        
 
+def save_to_fasta(sequence_label_tuples, output_file):
+    """
+    Save a list of tuples in the form (sequence, [labels]) to a FASTA file.
+
+    :param sequence_label_tuples: List of tuples containing sequences and labels
+    :param output_file: Path to the output FASTA file
+    """
+    records = []
+    for idx, (sequence, labels) in enumerate(sequence_label_tuples):
+        # Create a description from labels, joined by space
+        description = " ".join(labels)
+        # Use the index as an ID for uniqueness
+        record = SeqRecord(Seq(sequence), id=f"seq{idx}", description=description)
+        records.append(record)
+
+    # Write the SeqRecord objects to a FASTA file
+    with open(output_file, "w") as output_handle:
+        SeqIO.write(records, output_handle, "fasta")
+        print("Saved FASTA file to " + output_file)
 
 def read_pickle(file_path: str):
     with open(file_path, "rb") as p:
