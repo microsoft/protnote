@@ -65,8 +65,8 @@ class ProteinDataset(Dataset):
         self.masked_msa_token = "<MASK>"
         self.augment_sequence_probability = config["params"]["AUGMENT_SEQUENCE_PROBABILITY"]
         self.use_residue_masking = config["params"]["USE_RESIDUE_MASKING"]
-        self.augment_labels = config["params"]["AUGMENT_LABELS_WITH"] is not None
-        self.augment_labels_with = config["params"]["AUGMENT_LABELS_WITH"].split('+') if self.augment_labels else []
+        self.augment_labels = config["params"]["LABEL_AUGMENTATION_DESCRIPTIONS"] is not None
+        self.label_augmentation_descriptions = config["params"]["LABEL_AUGMENTATION_DESCRIPTIONS"].split('+') if self.augment_labels else []
         
         # Load the BLOSUM62 matrix and convert to defaultdict using dictionary comprehension
         blosum62 = bl.BLOSUM(62)
@@ -87,9 +87,13 @@ class ProteinDataset(Dataset):
             )
             self.data = self.data[:int(subset_fraction * len(self.data))]
 
+        
+        #Define description types used for inference. Can be 1 or more. If more than 1, then predictions 
+        # will be ensembled per go term
+        self.inference_go_descriptions = config['params']['INFERENCE_GO_DESCRIPTIONS'].split('+') 
+
         # Set the vocabularies.
         # If extract_vocabularies is null, generate vocab from self.data
-        self.go_description_type = config['params']['GO_DESCRIPTION_TYPE'] #The base description
         self.extract_vocabularies_from = config["params"]["EXTRACT_VOCABULARIES_FROM"]
         vocabularies = generate_vocabularies(file_or_path = (config['paths'][self.extract_vocabularies_from] 
                                                              if self.extract_vocabularies_from is not None 
@@ -245,21 +249,16 @@ class ProteinDataset(Dataset):
                 augmented_sequence += amino_acid
         
         return augmented_sequence
-    
-    def _get_base_label_embeddings(self):
-        label_embedding_idxs_list = []
-        for go_term in self.label_vocabulary:
-            idx = self.label_embeddings_index[go_term]['base_idx']
-            label_embedding_idxs_list.append(idx)
-        return self.label_embeddings[label_embedding_idxs_list]
 
     def _process_label_embedding_mapping(self,
                                          mapping:pd.DataFrame,
                                          embeddings:torch.Tensor):
+
+        assert set(self.inference_go_descriptions).issubset(set(['name','label'])), """only supporting name, label or name+label"""
         
         self.logger.info("Processing label embeddings...")
-        descriptions_considered = [self.go_description_type]+self.augment_labels_with
-        
+        descriptions_considered = self.label_augmentation_descriptions if self.dataset_type=='train' else self.inference_go_descriptions
+
         #Select only desires description types and ids from label vocabulary
         mask = (mapping['description_type'].isin(descriptions_considered))\
                &(mapping['id'].isin(self.label_vocabulary))\
@@ -275,23 +274,13 @@ class ProteinDataset(Dataset):
         assert len(embeddings) == len(mapping)
 
         # And filtering the tensor as well.
-        mapping = pd.concat([mapping.groupby('id').agg(min_idx=('index','min'),max_idx=('index','max')),
-                             mapping\
-                                .query("description_type==@self.go_description_type")\
-                                .rename(columns={'index':'base_idx'})\
-                                .set_index('id')\
-                                .drop('description_type',axis=1),
-                            ],axis=1).to_dict(orient='index')
+        mapping = mapping.groupby('id').agg(min_idx=('index','min'),max_idx=('index','max')).to_dict(orient='index')
+
         self.logger.info("Done")
         return mapping, embeddings
         
     def _sample_label_embeddings(self):
-        
-        assert self.go_description_type not in self.augment_labels_with,f'''Can't include {self.go_description_type} in AUGMENT_LABELS_WITH 
-                                                                            because this is already the base description set by GO_DESCRIPTION_TYPE.
-                                                                            Doing this would yield to "double counting" of descriptions of type {self.go_description_type}
-                                                                        '''
-        
+
         label_embedding_idxs_list = []
         
         for go_term in self.label_vocabulary:    
@@ -301,7 +290,6 @@ class ProteinDataset(Dataset):
                                     )
             label_embedding_idxs_list.append(idx)
 
-            
         return self.label_embeddings[label_embedding_idxs_list]
 
     def process_example(self, sequence: str, labels: list[str], label_idxs:list[int] = None) -> dict:
@@ -344,7 +332,7 @@ class ProteinDataset(Dataset):
         if self.augment_labels & (self.dataset_type == "train"):
             label_embeddings = self._sample_label_embeddings()
         else:
-            label_embeddings = self._get_base_label_embeddings()
+            label_embeddings = self.label_embeddings
 
         # Get the sequence embedding, if provided
         sequence_embedding = None

@@ -11,6 +11,7 @@ class ProTCL(nn.Module):
         protein_embedding_dim=1100,
         label_embedding_dim=1024,
         label_embedding_pooling_method='mean',
+        descriptions_per_label = 1,
         latent_dim=1024,
         label_encoder=None,
         sequence_encoder=None,
@@ -37,6 +38,7 @@ class ProTCL(nn.Module):
 
         # Encoders
         self.label_encoder, self.sequence_encoder = label_encoder, sequence_encoder
+        self.descriptions_per_label = descriptions_per_label
 
         # Batch size limits
         self.label_batch_size_limit,  self.sequence_batch_size_limit = label_batch_size_limit, sequence_batch_size_limit
@@ -224,9 +226,16 @@ class ProTCL(nn.Module):
         else:
             raise ValueError("feature fusion method not implemented")
         
-        # Reshape for loss function
-        logits = logits.reshape(num_sequences, num_labels)
-
+        # Reshape for loss 
+        if self.descriptions_per_label==1:
+            logits = logits.reshape(num_sequences, num_labels)
+        else:
+            assert not self.training, "label ensembling shouldn't be done during training"
+            #Get equivalent logit of averaging in probability space
+            logits = torch.special.logit(torch.sigmoid(logits)\
+                .reshape(num_sequences,
+                         num_labels//self.descriptions_per_label,
+                         self.descriptions_per_label).mean(axis=-1))
         return logits
 
 def get_mlp(input_dim,

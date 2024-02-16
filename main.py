@@ -297,6 +297,7 @@ def train_validate_test(gpu, args):
         # Encoders
         label_encoder=label_encoder,
         sequence_encoder=sequence_encoder,
+        descriptions_per_label=len(params["INFERENCE_GO_DESCRIPTIONS"].split('+')),
 
         # Output Layer
         output_mlp_hidden_dim_scale_factor=params["OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR"],
