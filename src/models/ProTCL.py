@@ -232,10 +232,16 @@ class ProTCL(nn.Module):
         else:
             assert not self.training, "label ensembling shouldn't be done during training"
             #Get equivalent logit of averaging in probability space
+
             logits = torch.special.logit(torch.sigmoid(logits)\
                 .reshape(num_sequences,
                          num_labels//self.descriptions_per_label,
-                         self.descriptions_per_label).mean(axis=-1))
+                         self.descriptions_per_label).mean(axis=-1),eps=1e-7)
+
+            # logits = logits\
+            #             .reshape(num_sequences,
+            #              num_labels//self.descriptions_per_label,
+            #              self.descriptions_per_label).mean(axis=-1)
         return logits
 
 def get_mlp(input_dim,
