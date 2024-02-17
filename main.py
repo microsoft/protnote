@@ -2,7 +2,7 @@ from src.utils.data import (
     seed_everything,
     log_gpu_memory_usage
 )
-from src.utils.main_utils import get_or_generate_sequence_embeddings, validate_arguments
+from src.utils.main_utils import validate_arguments
 from src.data.datasets import ProteinDataset, create_multiple_loaders, calculate_sequence_weights
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
@@ -200,8 +200,6 @@ def train_validate_test(gpu, args):
         require_label_idxs=False,  # Label indices are not required for testing
         label_tokenizer=label_tokenizer,
     ) if args.test_paths_names is not None else None
-
-
 
     # Add datasets to a dictionary
     # TODO: This does not support multiple datasets. But I think we should remove that support anyway. Too complicated.

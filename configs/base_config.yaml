@@ -1,6 +1,5 @@
 ---
 # Parameters for model training
-# TODO: Optimizer can also be a hyperparameter
 params:
   ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET V100 VS. SANDBOX A100 ##############
 
@@ -21,9 +20,9 @@ params:
 
   ### V100 ###
   # Batch sizes
-  TRAIN_BATCH_SIZE: 32 # 64 for V100
-  VALIDATION_BATCH_SIZE: 32 # 64 for V100
-  TEST_BATCH_SIZE: 32 # 4 for V100
+  TRAIN_BATCH_SIZE: 8 # 8 per GPU for V100 (64 if using 8 GPUs)
+  VALIDATION_BATCH_SIZE: 32 # 32 per GPU for V100 (256 if using 8 GPUs)
+  TEST_BATCH_SIZE: 32 # 32 per GPU for V100 (256 if using 8 GPUs)
   ZERO_SHOT_BATCH_SIZE: 32
 
   # Sampling
@@ -42,26 +41,26 @@ params:
   # General
   LEARNING_RATE: 0.0003
   OPTIMIZER: Adam
-  WEIGHT_DECAY: 0.001 #Only used for ADAM W or SGD
+  WEIGHT_DECAY: 0.01 # Only used for ADAM W or SGD
   PROTEIN_EMBEDDING_DIM: 1100
   LABEL_EMBEDDING_DIM: 1024
   LATENT_EMBEDDING_DIM: 1024
-  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 3 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
-  OUTPUT_MLP_NUM_LAYERS: 3
+  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 2 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
+  OUTPUT_MLP_NUM_LAYERS: 2
   OUTPUT_NEURON_PROBABILITY_BIAS: null
   OUTPUT_MLP_BATCHNORM: True
   SYNC_BN: False
   OUTPUT_MLP_DROPOUT: 0.0
   LABEL_EMBEDDING_DROPOUT: 0.0
   SEQUENCE_EMBEDDING_DROPOUT: 0.0
-  PROJECTION_HEAD_NUM_LAYERS: 4
-  PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 3
-  FEATURE_FUSION: concatenation #concatenation, concatenation_diff, concatenation_prod, similarity
-  LABEL_EMBEDDING_POOLING_METHOD: 'last_token' #select from mean, last_token, all
-  EXTRACT_VOCABULARIES_FROM: FULL_DATA_PATH #Can be any predefined path or null. Null means generate vocab from scratch with dataset.
+  PROJECTION_HEAD_NUM_LAYERS: 2
+  PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 2
+  FEATURE_FUSION: concatenation # Select from concatenation, concatenation_diff, concatenation_prod, similarity
+  LABEL_EMBEDDING_POOLING_METHOD: 'last_token' # Select from mean, last_token, all
+  EXTRACT_VOCABULARIES_FROM: null # Can be any predefined path (e.g., FULL_DATA_PATH) or null. Null means generate vocab from scratch with dataset. Must set to null for zero-shot
   OPTIMIZATION_METRIC_NAME: f1_macro # Only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
-  NUM_EPOCHS: 100
+  NUM_EPOCHS: 32
 
   # Memory optimizations
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
@@ -93,10 +92,10 @@ params:
   MAX_SEQUENCE_LENGTH: 10000 # Only affects training set. Just 8 seqs with 10K+ length
   REMOVE_UNREPRESENTED_LABELS: False # Removes labels that never apply to train sequences
   NORMALIZE_PROBABILITIES: False
-  INFERENCE_GO_DESCRIPTIONS: name+label #only label, name, or name+label are supported.
+  INFERENCE_GO_DESCRIPTIONS: name+label # only label, name, or name+label are supported.
 
   # Augmentation
-  AUGMENT_SEQUENCE_PROBABILITY: 0.15 # 0.0 = no augmentation. The probability that any given residue will be augmented. AlphaFold uses 0.15 (15% of residues are augmented)
+  AUGMENT_RESIDUE_PROBABILITY: 0.15 # 0.0 = no augmentation. The probability that any given residue will be augmented. AlphaFold uses 0.15 (15% of residues are augmented)
   USE_RESIDUE_MASKING: False # If True, also use masking to augment sequences. Must then also set AUGMENT_SEQUENCE_PROBABILITY > 0, and TRAIN_SEQUENCE_ENCODER = True
   LABEL_AUGMENTATION_DESCRIPTIONS: name+label+synonym_exact #Specifies what descriptions to use for augmentation. #Options are any combination of label name and synonym_exact
 
@@ -133,9 +132,10 @@ paths:
     TEST_DATA_PATH: swissprot/proteinfer_splits/random/test_GO.fasta
     FULL_DATA_PATH: swissprot/proteinfer_splits/random/full_GO.fasta # used to generate vocabularies
   
-    TRAIN_DATA_PATH_ZERO_SHOT: swissprot/zero_shot/train_GO.fasta
-    VAL_DATA_PATH_ZERO_SHOT: swissprot/zero_shot/dev_GO.fasta
-    TEST_DATA_PATH_ZERO_SHOT: swissprot/zero_shot/test_GO.fasta
+    TRAIN_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/2024-02-17_train_GO_zero_shot.fasta
+    VAL_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/2024-02-17_dev_GO_zero_shot.fasta
+    TEST_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/2024-02-17_test_GO_zero_shot.fasta
+    # We don't need a full zero-shot path, since we generate vocabularies independently
 
     # Vocabulary paths
     VOCABULARIES_DIR: vocabularies/proteinfer
@@ -143,7 +143,6 @@ paths:
 
     # Embeddings paths (if using frozen pre-trained models)
     BASE_LABEL_EMBEDDING_PATH: embeddings/frozen_BioGPT_label_embeddings.pt # this is the base path which is modified by POOLING_METHOD
-    SEQUENCE_EMBEDDING_PATH: embeddings/frozen_proteinfer_sequence_embeddings.pt
 
     # ProteInfer paths
     PARENTHOOD_LIB_PATH: vocabularies/parenthood.json.gz

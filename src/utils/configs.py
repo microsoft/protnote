@@ -41,12 +41,12 @@ def override_config(config: dict, overrides: list):
                     f"Key '{key}' not found in the 'params' section of the config."
                 )
 
-def generate_label_embeddeing_path(params:dict,
+def generate_label_embedding_path(params:dict,
                                    base_label_embedding_path:str):
     '''
     Generates the name of the file that caches label embeddings. Needed due to different
     ways of pooling embeddings, different types of go descriptions and other paramters. 
-    This way we can store different verstions/types of label embeddings for caching
+    This way we can store different versions/types of label embeddings for caching
     '''
     label_embedding_path=base_label_embedding_path.split('/')
     temp=label_embedding_path[-1].split('.')
@@ -194,7 +194,7 @@ def get_setup(
         logger.setLevel(logging.CRITICAL + 1)
 
     # Generate embeddings
-    label_embedding_path = generate_label_embeddeing_path(params=params,
+    label_embedding_path = generate_label_embedding_path(params=params,
                                                           base_label_embedding_path=paths['BASE_LABEL_EMBEDDING_PATH'])
     
     # Return a dictionary

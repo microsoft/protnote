@@ -49,16 +49,20 @@ def hash_alphanumeric_sequence_id(s: str):
 
 def read_fasta(data_path: str, sep=" "):
     """
-    Reads a FASTA file and returns a list of tuples containing sequences and labels.
-    labels[0] contains the sequence ID, and the rest of the labels are GO terms. 
+    Reads a FASTA file and returns a list of tuples containing sequences, ids, and labels.
     """
-    sequences_with_labels = []
+    sequences_with_ids_and_labels = []
 
     for record in SeqIO.parse(data_path, "fasta"):
         sequence = str(record.seq)
-        labels = record.description.split(sep)
-        sequences_with_labels.append((sequence, labels))
-    return sequences_with_labels
+        components = record.description.split(sep)
+        # labels[0] contains the sequence ID, and the rest of the labels are GO terms. 
+        sequence_id = components[0]
+        labels = components[1:]
+        
+        # Return a tuple of sequence, sequence_id, and labels
+        sequences_with_ids_and_labels.append((sequence, sequence_id, labels))
+    return sequences_with_ids_and_labels
 
 
 def read_yaml(data_path: str):
@@ -85,28 +89,24 @@ def get_vocab_mappings(vocabulary):
     int2term = {idx: term for term, idx in term2int.items()}
     return term2int, int2term
 
-def generate_vocabularies(file_or_path: Union[str,list],
-                          logger)->dict:
-    """Generate vocabularies based on the provided data path.
-    
-    path must be .fasta and file must be the result of using read_fasta(path)
+def generate_vocabularies(file_path: str)->dict:
+    """
+    Generate vocabularies based on the provided data path.
+    path must be .fasta file
     """
     vocabs = {'amino_acid_vocab':set(),
               'GO_label_vocab':set(),
               'sequence_id_vocab':set()
             }
     
-    logger.info("Generating vocabularies..")
-    if isinstance(file_or_path,str):
-        data = read_fasta(file_or_path)
-    elif isinstance(file_or_path,list):
-        data = list(file_or_path)
+    if isinstance(file_path,str):
+        data = read_fasta(file_path)
     else:
-        raise TypeError("File not supported")
+        raise TypeError("File not supported, vocabularies can only be generated from .fasta files.")
 
-    for sequence, labels in data:
-        vocabs['sequence_id_vocab'].add(labels[0])
-        vocabs['GO_label_vocab'].update(labels[1:])
+    for sequence, sequence_id, labels in data:
+        vocabs['sequence_id_vocab'].add(sequence_id)
+        vocabs['GO_label_vocab'].update(labels)
         vocabs['amino_acid_vocab'].update(list(sequence))
     
     for vocab_type in vocabs.keys():
@@ -119,7 +119,7 @@ def save_to_pickle(item, file_path: str):
         pickle.dump(item, p)
         
 
-def save_to_fasta(sequence_label_tuples, output_file):
+def save_to_fasta(sequence_id_labels_tuples, output_file):
     """
     Save a list of tuples in the form (sequence, [labels]) to a FASTA file.
 
@@ -127,11 +127,11 @@ def save_to_fasta(sequence_label_tuples, output_file):
     :param output_file: Path to the output FASTA file
     """
     records = []
-    for idx, (sequence, labels) in enumerate(sequence_label_tuples):
+    for _, (sequence, id, labels,) in enumerate(sequence_id_labels_tuples):
         # Create a description from labels, joined by space
         description = " ".join(labels)
-        # Use the index as an ID for uniqueness
-        record = SeqRecord(Seq(sequence), id=f"seq{idx}", description=description)
+       
+        record = SeqRecord(Seq(sequence), id=id, description=description)
         records.append(record)
 
     # Write the SeqRecord objects to a FASTA file

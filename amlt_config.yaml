@@ -1,5 +1,5 @@
 # For field details: https://amulet-docs.azurewebsites.net/config_file.html
-description: Experiment with shorter go descriptions 'names'
+description: zero shot medium MLP ablations
 
 target:
   service: amlk8s
@@ -19,7 +19,7 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-# - name: '{amlt}{w sampling 0.5}{description names}{label aug False}{no seq substitutions}'
+# - name: '{normal}{medium MLP}{label}{mean}{sequence augmentations 0.1}'
 #   sku: G8
 #   priority: high
 #   preemptible: False
@@ -31,51 +31,16 @@ jobs:
 #     --validation-path-name VAL_DATA_PATH 
 #     --test-paths-names TEST_DATA_PATH 
 #     --full-path-name FULL_DATA_PATH
-#     --name '{amlt}{w sampling 0.5}{description names}{label aug False}{no seq substitutions}'
+#     --name '{normal}{medium MLP}{names}{mean}{sequence augmentations 0.1}'
+#     --override GO_DESCRIPTION_TYPE label LABEL_EMBEDDING_POOLING_METHOD mean
 #     --amlt
 #     --use-wandb
 #   submit_args:
 #     env:
 #       WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact}{no seq substitutions}'
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py 
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH 
-#     --validation-path-name VAL_DATA_PATH 
-#     --test-paths-names TEST_DATA_PATH 
-#     --full-path-name FULL_DATA_PATH
-#     --name '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact}{no seq substitutions}'
-#     --override AUGMENT_LABELS_WITH synonym_exact
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact and labels}{no seq substitutions}'
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py 
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH 
-#     --validation-path-name VAL_DATA_PATH 
-#     --test-paths-names TEST_DATA_PATH 
-#     --full-path-name FULL_DATA_PATH
-#     --name '{amlt}{w sampling 0.5}{description label}{label aug -> synonyms_exact and labels}{no seq substitutions}'
-#     --override AUGMENT_LABELS_WITH label+synonym_exact
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact and labels}{random substitutions 0.15}'
+
+
+- name: '{zero shot}{medium MLP}{names}{last_token}{sequence augmentations 0.1}'
   sku: G8
   priority: high
   preemptible: False
@@ -83,16 +48,49 @@ jobs:
   - python main.py 
     --nodes 1
     --gpus 8
-    --train-path-name TRAIN_DATA_PATH 
-    --validation-path-name VAL_DATA_PATH 
-    --test-paths-names TEST_DATA_PATH 
-    --full-path-name FULL_DATA_PATH
-    --name '{amlt}{w sampling 0.5}{description names}{label aug -> synonyms_exact and labels}{random substitutions 0.15}'
-    --override AUGMENT_LABELS_WITH label+synonym_exact AUGMENT_SEQUENCE_PROBABILITY 0.15
+    --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
+    --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
+    --test-paths-names TEST_DATA_PATH_ZERO_SHOT 
+    --name '{zero shot}{medium MLP}{names}{last_token}{sequence augmentations 0.1}'
+    --override EXTRACT_VOCABULARIES_FROM null 
     --amlt
     --use-wandb
   submit_args:
     env:
       WANDB_API_KEY: "$WANDB_API_KEY"
-
-
+- name: '{zero shot}{medium MLP}{names}{last_token}{sequence augmentations 0.1}{label augmentations label}'
+  sku: G8
+  priority: high
+  preemptible: False
+  command:
+  - python main.py 
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
+    --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
+    --test-paths-names TEST_DATA_PATH_ZERO_SHOT
+    --name '{zero shot}{medium MLP}{names}{last_token}{sequence augmentations 0.1}{label augmentations label}'
+    --override EXTRACT_VOCABULARIES_FROM null AUGMENT_LABELS_WITH label
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: '{zero shot}{medium MLP}{names}{last_token}{sequence augmentations 0.1}{label augmentations label+synonym_exact}'
+  sku: G8
+  priority: high
+  preemptible: False
+  command:
+  - python main.py 
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
+    --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
+    --test-paths-names TEST_DATA_PATH_ZERO_SHOT 
+    --name '{zero shot}{medium MLP}{names}{last_token}{sequence augmentations 0.1}{label augmentations label+synonym_exact}'
+    --override EXTRACT_VOCABULARIES_FROM null AUGMENT_LABELS_WITH label+synonym_exact
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_API_KEY: "$WANDB_API_KEY"

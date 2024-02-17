@@ -156,26 +156,22 @@ class ProTCLTrainer:
         """
 
         # Unpack the validation or testing batch
-        sequence_onehots, sequence_embeddings, sequence_lengths, sequence_ids, label_multihots, tokenized_labels, label_embeddings = (
+        sequence_onehots, sequence_lengths, sequence_ids, label_multihots, label_embeddings = (
             batch["sequence_onehots"],
-            batch["sequence_embeddings"],
             batch["sequence_lengths"],
             batch["sequence_ids"],
             batch["label_multihots"],
-            batch["tokenized_labels"],
             batch["label_embeddings"]
         )
 
         # Move all unpacked batch elements to GPU, if available
-        sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = self._to_device(
-            sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings)
+        sequence_onehots, sequence_lengths, label_multihots, label_embeddings = self._to_device(
+            sequence_onehots, sequence_lengths, label_multihots, label_embeddings)
 
         # Forward pass
         inputs = {
             "sequence_onehots": sequence_onehots,
-            "sequence_embeddings": sequence_embeddings,
             "sequence_lengths": sequence_lengths,
-            "tokenized_labels": tokenized_labels,
             "label_embeddings": label_embeddings
         }
         with autocast():
@@ -455,25 +451,21 @@ class ProTCLTrainer:
             self.training_step += 1
 
             # Unpack the training batch
-            sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = (
+            sequence_onehots, sequence_lengths, label_multihots, label_embeddings = (
                 batch["sequence_onehots"],
-                batch["sequence_embeddings"],
                 batch["sequence_lengths"],
                 batch["label_multihots"],
-                batch["tokenized_labels"],
                 batch["label_embeddings"]
             )
 
             # Move all unpacked batch elements to GPU, if available
-            sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings = self._to_device(
-                sequence_onehots, sequence_embeddings, sequence_lengths, label_multihots, tokenized_labels, label_embeddings)
+            sequence_onehots, sequence_lengths, label_multihots, label_embeddings = self._to_device(
+                sequence_onehots, sequence_lengths, label_multihots, label_embeddings)
 
             # Forward pass
             inputs = {
                 "sequence_onehots": sequence_onehots,
-                "sequence_embeddings": sequence_embeddings,
                 "sequence_lengths": sequence_lengths,
-                "tokenized_labels": tokenized_labels,
                 "label_embeddings": label_embeddings
             }
 

@@ -6,19 +6,6 @@ from tqdm import tqdm
 from src.utils.data import read_fasta, save_to_fasta
 from datetime import datetime
 
-def load_label_vocabulary(label_vocab_path):
-    """
-    Load the label vocabulary from a JSON file.
-
-    Parameters:
-    - label_vocab_path: str, path to the label vocabulary JSON file.
-
-    Returns:
-    - dict, label vocabulary loaded from the JSON file.
-    """
-    with open(label_vocab_path) as f:
-        return json.load(f)
-
 def split_labels(label_vocabulary):
     """
     Split the label vocabulary into training, validation, and test sets.
@@ -50,7 +37,7 @@ def filter_dataset(dataset, labels, desc="Filtering dataset"):
     - list, filtered dataset with only specified labels.
     """
     labels_set = set(labels)  # Convert list to set for O(1) lookup
-    filtered = [(sequence, [label for label in sequence_labels if label in labels_set]) for sequence, sequence_labels in tqdm(dataset, desc=desc)]
+    filtered = [(sequence, sequence_id, [label for label in sequence_labels if label in labels_set]) for sequence, sequence_id, sequence_labels in tqdm(dataset, desc=desc)]
     return filtered
 
 
@@ -68,7 +55,10 @@ def main(train_path, val_path, test_path, label_vocab_path, output_path):
     train = read_fasta(train_path)
     val = read_fasta(val_path)
     test = read_fasta(test_path)
-    label_vocabulary = load_label_vocabulary(label_vocab_path)
+    
+    with open(label_vocab_path) as f:
+        label_vocabulary= json.load(f)
+        
     train_labels, val_labels, test_labels = split_labels(label_vocabulary)
 
     filtered_datasets = {
@@ -87,11 +77,11 @@ if __name__ == "__main__":
     python make_zero_shot_datasets_from_proteinfer.py --train_path data/swissprot/proteinfer_splits/random/train_GO.fasta --val_path data/swissprot/proteinfer_splits/random/dev_GO.fasta --test_path data/swissprot/proteinfer_splits/random/test_GO.fasta --label_vocab_path data/vocabularies/proteinfer/GO_label_vocab.json --output_path data/swissprot/proteinfer_splits/random/ 
     """
     parser = ArgumentParser(description="Filter and save datasets for zero-shot learning.")
-    parser.add_argument("--train_path", required=True, help="Path to the training set fasta file.")
-    parser.add_argument("--val_path", required=True, help="Path to the validation set fasta file.")
-    parser.add_argument("--test_path", required=True, help="Path to the test set fasta file.")
-    parser.add_argument("--label_vocab_path", required=True, help="Path to the label vocabulary JSON file.")
-    parser.add_argument("--output_path", required=True, help="Directory where the filtered fasta files will be saved.")
+    parser.add_argument("--train_path", required=False, help="Path to the training set fasta file.", default="data/swissprot/proteinfer_splits/random/train_GO.fasta")
+    parser.add_argument("--val_path", required=False, help="Path to the validation set fasta file.", default="data/swissprot/proteinfer_splits/random/dev_GO.fasta")
+    parser.add_argument("--test_path", required=False, help="Path to the test set fasta file.", default="data/swissprot/proteinfer_splits/random/test_GO.fasta")
+    parser.add_argument("--label_vocab_path", required=False, help="Path to the label vocabulary JSON file.", default="data/vocabularies/proteinfer/GO_label_vocab.json")
+    parser.add_argument("--output_path", required=False, help="Directory where the filtered fasta files will be saved.", default="data/swissprot/proteinfer_splits/random/")
     
     args = parser.parse_args()
     

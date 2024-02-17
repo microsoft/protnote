@@ -150,7 +150,8 @@ class ProTCL(nn.Module):
             tokenized_labels (optional): List of tokenized label sequences.
             label_embeddings (optional): Tensor of pre-trained label embeddings.
         """
-
+        
+        # TODO: Remove sequence_embeddings and tokenized_labels from this code. They are not used.
       
         #---------------------- LABEL EMBEDDING ----------------------# 
         if label_embeddings is not None and (self.label_encoder_num_trainable_layers == 0 or not self.training):

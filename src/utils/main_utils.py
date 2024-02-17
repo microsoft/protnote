@@ -1,21 +1,17 @@
-import os
-import json
 import torch
-import numpy as np
 from tqdm import tqdm
-from src.utils.data import read_json, read_fasta, read_pickle, save_to_pickle
 from src.data.collators import collate_variable_sequence_length
 from torch.utils.data import ConcatDataset, DataLoader
-from src.utils.models import generate_label_embeddings_from_text
 import pandas as pd
 from functools import partial
+import warnings
 
  
 def validate_arguments(args, parser):
-    # Ensure the full data path is provided
-    if args.full_path_name is None:
-        parser.error(
-            "You must provide the full path name to define the vocabularies using --full-path-name."
+    # Ensure the full data path is provided, or we are using the zero shot model        
+    if args.full_path_name is None and "zero" not in args.train_path_name:
+        warnings.warn(
+            "The full path name is not provided and the train path name does not contain the word 'zero'. Please ensure this is intentional."
         )
  
     # Raise error if train is provided without val
@@ -88,30 +84,3 @@ def generate_sequence_embeddings(device, sequence_encoder, datasets, params):
     # Convert the list to a DataFrame
     df = pd.DataFrame(data_list, columns=["ID", "Embedding"]).set_index("ID")
     return df
- 
-
- 
- 
-def get_or_generate_sequence_embeddings(paths, device, sequence_encoder, datasets, params, logger, is_master=True):
-    """Load or generate sequence embeddings based on the provided paths and parameters."""
-    if "SEQUENCE_EMBEDDING_PATH" in paths and os.path.exists(paths["SEQUENCE_EMBEDDING_PATH"]):
-        sequence_embedding_df = torch.load(paths["SEQUENCE_EMBEDDING_PATH"])
-        if logger is not None and is_master:
-                logger.info(
-                    f"Loaded sequence embeddings from {paths['SEQUENCE_EMBEDDING_PATH']}")
-                
-        return sequence_embedding_df
-    elif logger is not None and is_master:
-            logger.info("Generating sequence embeddings...")
-            sequence_embedding_df = generate_sequence_embeddings(
-                device, sequence_encoder, datasets, params)
-            
-            # Save the sequence embeddings to paths["SEQUENCE_EMBEDDING_PATH"]
-            if paths["SEQUENCE_EMBEDDING_PATH"] is not None:
-                torch.save(sequence_embedding_df, paths["SEQUENCE_EMBEDDING_PATH"])
-                if logger is not None:
-                        logger.info(
-                            f"Saved label embeddings to {paths['SEQUENCE_EMBEDDING_PATH']}")
-
-            return sequence_embedding_df
- 

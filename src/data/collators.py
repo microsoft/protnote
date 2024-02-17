@@ -19,7 +19,7 @@ def collate_variable_sequence_length(batch: List[Tuple],
     Args:
         batch (List[Tuple]): A list of tuples, where each tuple represents one data point. 
                              Each tuple contains a dictionary with keys like 'sequence_onehots', 
-                             'sequence_embedding', 'sequence_length', 'label_multihots', etc.
+                             'sequence_length', 'label_multihots', etc.
         label_sample_size (int, optional): The number of labels to sample for training. 
                                            Used with grid_sampler or in_batch_sampling.
         distribute_labels (bool, optional): Whether to distribute labels across different GPUs.
@@ -34,10 +34,8 @@ def collate_variable_sequence_length(batch: List[Tuple],
         Dict: A dictionary containing the processed batch data. Keys include:
               - 'sequence_onehots': Tensor, padded one-hot encoded sequences.
               - 'sequence_ids': List, sequence IDs.
-              - 'sequence_embeddings': Tensor, sequence embeddings if provided. Otherwise None.
               - 'sequence_lengths': Tensor, lengths of sequences.
               - 'label_multihots': Tensor, multihot encoded labels (possibly sampled).
-              - 'tokenized_labels': BatchEncoding, processed tokenized labels.
               - 'label_embeddings': Tensor, label embeddings if provided. Otherwise None.
 
     """
@@ -48,12 +46,10 @@ def collate_variable_sequence_length(batch: List[Tuple],
     # Initialize lists to store the processed values
     processed_sequence_onehots = []
     processed_sequence_ids = []
-    processed_sequence_embeddings = []
     processed_sequence_lengths = []
     processed_label_multihots = []
     processed_label_embeddings = None
-    processed_tokenized_labels = None
-
+    
     if grid_sampler:
         assert label_sample_size is not None, "Must provide label_sample_size if using grid sampler"
         assert not in_batch_sampling, "Can't use in batch sampling with grid sampler"
@@ -65,9 +61,7 @@ def collate_variable_sequence_length(batch: List[Tuple],
     sampled_label_indices = None
     num_labels = batch[0]["label_multihots"].shape[0]
 
-
     if label_sample_size:
-
         if grid_sampler:
             sampled_label_indices = batch[0]["label_idxs"]
         else:
@@ -87,37 +81,21 @@ def collate_variable_sequence_length(batch: List[Tuple],
     elif in_batch_sampling:
         sampled_label_indices=torch.where(sum(i['label_multihots'] for i in batch)>0)[0]
     
-        
-
-    # Apply the sampled labels to the tokenized labels and label embeddings
-    tokenized_labels = batch[0]["tokenized_labels"]
+    # Apply the sampled labels to the label embeddings
     label_embeddings = batch[0]["label_embeddings"]
 
     if sampled_label_indices is not None:
-        # Index input_ids and attention_mask with the sampled labels
-        tokenized_labels_input_ids = tokenized_labels["input_ids"][sampled_label_indices]
-        tokenized_labels_attention_mask = tokenized_labels["attention_mask"][sampled_label_indices]
-
-        # Create a new BatchEncoding object with the indexed tensors
-        processed_tokenized_labels = BatchEncoding({
-            "input_ids": tokenized_labels_input_ids,
-            "attention_mask": tokenized_labels_attention_mask
-        })
-
-        # Create a new tensor of embeddings with only the sampeld labels
-        if label_embeddings is not None:
-            processed_label_embeddings = label_embeddings[sampled_label_indices]
-    # Otherwise, use the original tokenized labels and label embeddings
+        # Create a new tensor of embeddings with only the sampled labels
+        processed_label_embeddings = label_embeddings[sampled_label_indices]
+    # Otherwise, use the original label embeddings
     else:
-        processed_tokenized_labels = tokenized_labels
         processed_label_embeddings = label_embeddings
 
     # Loop through the batch
     for row in batch:
-        # Get the sequence onehots, sequence embedding, sequence length, label multihots, tokenized labels, and label embedding
+        # Get the sequence onehots, sequence length, sequence id, and label multihots
         sequence_onehots = row["sequence_onehots"]
         sequence_id = row["sequence_id"]
-        sequence_embedding = row["sequence_embedding"]
         sequence_length = row["sequence_length"]
         label_multihots = row["label_multihots"]
 
@@ -139,85 +117,18 @@ def collate_variable_sequence_length(batch: List[Tuple],
             label_multihots = label_multihots[sampled_label_indices]
 
         # Append the other values to the processed lists
-        if sequence_embedding is not None:
-            processed_sequence_embeddings.append(sequence_embedding)
+        processed_sequence_ids.append(sequence_id)
         processed_sequence_lengths.append(sequence_length)
         processed_label_multihots.append(label_multihots)
-        processed_sequence_ids.append(sequence_id)
-
-    if len(processed_sequence_embeddings) == len(processed_sequence_onehots):
-        processed_sequence_embeddings = torch.stack(
-            processed_sequence_embeddings)
-        
-    # If sequence embeddings are an empty list, set them to None
-    if len(processed_sequence_embeddings) == 0:
-        processed_sequence_embeddings = None
-
+    
     processed_batch = {
         "sequence_onehots": torch.stack(processed_sequence_onehots),
         "sequence_ids": processed_sequence_ids,
-        "sequence_embeddings": processed_sequence_embeddings,
         "sequence_lengths": torch.stack(processed_sequence_lengths),
-        "tokenized_labels": processed_tokenized_labels,
         "label_embeddings": processed_label_embeddings,
     }
 
     if return_label_multihots:
         processed_batch["label_multihots"] = torch.stack(processed_label_multihots)
 
-    return processed_batch
-
-
-def simple_variable_sequence_collator(batch: List[Tuple]):
-    """
-    Collates a batch of data with variable sequence lengths. Pads sequences to the maximum length within the batch to handle the variable 
-    lengths.
-
-    Args:
-        batch (List[Tuple]): A list of tuples, where each tuple represents one data point. 
-                             Each tuple contains a dictionary with keys like 'sequence_onehots', 
-                             'sequence_embedding', 'sequence_length', 'label_multihots', etc.
-    Returns:
-        Dict: A dictionary containing the processed batch data. Keys include:
-              - 'sequence_onehots': Tensor, padded one-hot encoded sequences.
-              - 'sequence_ids': List, sequence IDs.
-              - 'sequence_lengths': Tensor, lengths of sequences.
-    """
-
-    # Determine the maximum sequence length in the batch
-    max_length = max(item["sequence_length"] for item in batch)
-
-    # Initialize lists to store the processed values
-    processed_sequence_onehots = []
-    processed_sequence_ids = []
-    processed_sequence_lengths = []
-
-    # Loop through the batch
-    for row in batch:
-        # Get the sequence onehots, sequence embedding, sequence length, label multihots, tokenized labels, and label embedding
-        sequence_onehots = row["sequence_onehots"]
-        sequence_id = row["sequence_id"]
-        sequence_length = row["sequence_length"]
-
-        # Set padding
-        padding_length = max_length - sequence_length
-
-        # Get the sequence dimension (e.g., 20 for amino acids)
-        sequence_dim = sequence_onehots.shape[0]
-
-        # Pad the sequence to the max_length and append to the processed_sequences list
-        processed_sequence_onehots.append(
-            torch.cat(
-                (sequence_onehots, torch.zeros((sequence_dim, padding_length))), dim=1
-            )
-        )
-
-        processed_sequence_lengths.append(sequence_length)
-        processed_sequence_ids.append(sequence_id)
-
-    processed_batch = {
-        "sequence_onehots": torch.stack(processed_sequence_onehots),
-        "sequence_ids": processed_sequence_ids,
-        "sequence_lengths": torch.stack(processed_sequence_lengths),
-    }
     return processed_batch

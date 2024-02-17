@@ -7,7 +7,6 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio import SeqIO
 from tqdm import tqdm
-from src.utils.data import read_fasta
 
 
 def process_sequence_tfrecord(record: dict, annotation_types: list):
