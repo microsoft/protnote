@@ -229,17 +229,21 @@ def train_validate_test(gpu, args):
     # Calculate the weighting for the train dataset
     sequence_weights = None
     if params["WEIGHTED_SAMPLING"] & (args.train_path_name is not None):
-        logger.info("Calculating sequence weights for weighted sampling...")
-        sequence_weights = calculate_sequence_weights(datasets["train"][0].data,
-                                                      datasets["train"][0].calculate_label_weights(power = params["INV_FREQUENCY_POWER"])
-                                                      )
+        # Calculate label weights
+        logger.info("Calculating label weights for weighted sampling...")
+        label_weights = datasets["train"][0].calculate_label_weights(power=params["INV_FREQUENCY_POWER"])
+
+        # Calculate sequence weights
+        logger.info("Calculating sequence weights based on the label weights...")
+        sequence_weights = calculate_sequence_weights(datasets["train"][0].data, label_weights)
         
         # If using clamping, clamp the weights based on the hyperparameters
         if params["SAMPLING_LOWER_CLAMP_BOUND"] is not None:
             sequence_weights = [max(x, params["SAMPLING_LOWER_CLAMP_BOUND"]) for x in sequence_weights]
         if params["SAMPLING_UPPER_CLAMP_BOUND"] is not None:
             sequence_weights = [min(x, params["SAMPLING_UPPER_CLAMP_BOUND"]) for x in sequence_weights]
-
+            
+    logger.info("Initializing data loaders...")
     # Define data loaders
     loaders = create_multiple_loaders(
         datasets,

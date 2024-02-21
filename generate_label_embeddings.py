@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from transformers import AutoTokenizer, AutoModel
 from src.utils.models import generate_label_embeddings_from_text
-from src.utils.configs import generate_label_embeddeing_path
+from src.utils.configs import generate_label_embedding_path
 from src.utils.data import read_yaml, read_pickle
 
 
@@ -49,18 +49,22 @@ def main():
     parser.add_argument(
         "--pooling-method",
         type=str,
-        default="last_token",
+        default="mean",
         help="How to pool embeddings. mean, last_token, or all",
     )
 
     args = parser.parse_args()
-
+    
     ROOT_PATH = os.path.dirname(__file__)
     CONFIG = read_yaml(os.path.join(ROOT_PATH, args.config))
+    
+    # Overwrite config pooling method
+    CONFIG["params"]["LABEL_EMBEDDING_POOLING_METHOD"] = args.pooling_method
+    
     DATA_PATH = os.path.join(ROOT_PATH, "data")
     OUTPUT_PATH = os.path.join(
         DATA_PATH,
-        generate_label_embeddeing_path(
+        generate_label_embedding_path(
             params=CONFIG["params"],
             base_label_embedding_path=CONFIG["paths"]["data_paths"][
                 "BASE_LABEL_EMBEDDING_PATH"
@@ -75,6 +79,8 @@ def main():
         DATA_PATH, CONFIG["paths"]["data_paths"]["GO_ANNOTATIONS_PATH"]
     )
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    logging.info(f"Pooled embeddings will be saved to {OUTPUT_PATH}\n Pooled embeddings index will be saved to {INDEX_OUTPUT_PATH} \n Using pooling method: {args.pooling_method}")
 
     go_descriptions = read_pickle(GO_ANNOTATIONS_PATH)
 
@@ -87,9 +93,9 @@ def main():
         CONFIG["params"]["LABEL_ENCODER_CHECKPOINT"],
     ).to(DEVICE)
 
-    logging.info("Flattening descriptions for batch processing...")
+    logging.info("Flattening descriptions for batch processing and calculating sequence token lengths...")
 
-    embeddings_idx = {'id':[],'description_type':[],'description':[]}
+    embeddings_idx = {'id': [],'description_type': [],'description': [], 'token_count': []}
     for go_term, desriptions in tqdm(
         go_descriptions[['name','label','synonym_exact']].iterrows(), total=len(go_descriptions)
     ):
@@ -98,6 +104,7 @@ def main():
                 embeddings_idx['description'].append(remove_obsolete_from_string(description))
                 embeddings_idx['id'].append(go_term)
                 embeddings_idx['description_type'].append(desription_type)
+                embeddings_idx['token_count'].append(len(label_tokenizer.tokenize(description))) # We need the token count for embedding normalization (longer descriptions will have more feature-rich embeddings)
 
     # Remove Obsolete/Deprecated texts
     logging.info("Extracting embeddings...")
@@ -109,13 +116,9 @@ def main():
         batch_size_limit=CONFIG["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
         append_in_cpu=False,
     ).to('cpu')
-    
-    #Removing text from embeddings file. Can include later.
-    embeddings_idx.pop('description')
 
     #Convert to indexed pandas df
     embeddings_idx = pd.DataFrame(embeddings_idx)
-    
 
     '''
     #Map embeddings to dict
@@ -140,8 +143,9 @@ def main():
     '''
     logging.info("Saving to a torch .pt...")
     torch.save(embeddings, OUTPUT_PATH)
-    torch.save(embeddings_idx,INDEX_OUTPUT_PATH)
+    torch.save(embeddings_idx, INDEX_OUTPUT_PATH)
     logging.info(f"Embeddings saved to {OUTPUT_PATH}")
+    logging.info(f"Index saved to {INDEX_OUTPUT_PATH}")
 
 if __name__=='__main__':
     main()

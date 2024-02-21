@@ -1,5 +1,4 @@
 ---
-# Parameters for model training
 params:
   ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET V100 VS. SANDBOX A100 ##############
 
@@ -23,7 +22,6 @@ params:
   TRAIN_BATCH_SIZE: 8 # 8 per GPU for V100 (64 if using 8 GPUs)
   VALIDATION_BATCH_SIZE: 32 # 32 per GPU for V100 (256 if using 8 GPUs)
   TEST_BATCH_SIZE: 32 # 32 per GPU for V100 (256 if using 8 GPUs)
-  ZERO_SHOT_BATCH_SIZE: 32
 
   # Sampling
   GRID_SAMPLER: False
@@ -34,6 +32,7 @@ params:
   SAMPLING_UPPER_CLAMP_BOUND: null # Upper bound for when clamping sampling weights
   TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. IS ALSO USED WITH GRID SAMPLER
   VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
+
   # Inference
   LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 500 # 1K for V100
   SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 64 # 64 for V100 
@@ -41,7 +40,7 @@ params:
   # General
   LEARNING_RATE: 0.0003
   OPTIMIZER: Adam
-  WEIGHT_DECAY: 0.01 # Only used for ADAM W or SGD
+  WEIGHT_DECAY: 0.001 # Only used for ADAM W or SGD
   PROTEIN_EMBEDDING_DIM: 1100
   LABEL_EMBEDDING_DIM: 1024
   LATENT_EMBEDDING_DIM: 1024
@@ -57,7 +56,7 @@ params:
   PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 2
   FEATURE_FUSION: concatenation # Select from concatenation, concatenation_diff, concatenation_prod, similarity
   LABEL_EMBEDDING_POOLING_METHOD: 'last_token' # Select from mean, last_token, all
-  EXTRACT_VOCABULARIES_FROM: null # Can be any predefined path (e.g., FULL_DATA_PATH) or null. Null means generate vocab from scratch with dataset. Must set to null for zero-shot
+  EXTRACT_VOCABULARIES_FROM: FULL_DATA_PATH # Can be any predefined path (e.g., FULL_DATA_PATH) or null. Null means generate vocab from scratch with dataset. Must set to null for zero-shot
   OPTIMIZATION_METRIC_NAME: f1_macro # Only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
   NUM_EPOCHS: 32
@@ -92,12 +91,13 @@ params:
   MAX_SEQUENCE_LENGTH: 10000 # Only affects training set. Just 8 seqs with 10K+ length
   REMOVE_UNREPRESENTED_LABELS: False # Removes labels that never apply to train sequences
   NORMALIZE_PROBABILITIES: False
-  INFERENCE_GO_DESCRIPTIONS: name+label # only label, name, or name+label are supported.
+  INFERENCE_GO_DESCRIPTIONS: name # Ensembling during inference (validation, test). Only label, name, or name+label are supported.
 
   # Augmentation
-  AUGMENT_RESIDUE_PROBABILITY: 0.15 # 0.0 = no augmentation. The probability that any given residue will be augmented. AlphaFold uses 0.15 (15% of residues are augmented)
+  AUGMENT_RESIDUE_PROBABILITY: 0.1 # 0.0 = no augmentation. The probability that any given residue will be augmented. AlphaFold uses 0.15 (15% of residues are augmented)
   USE_RESIDUE_MASKING: False # If True, also use masking to augment sequences. Must then also set AUGMENT_SEQUENCE_PROBABILITY > 0, and TRAIN_SEQUENCE_ENCODER = True
-  LABEL_AUGMENTATION_DESCRIPTIONS: name+label+synonym_exact #Specifies what descriptions to use for augmentation. #Options are any combination of label name and synonym_exact
+  LABEL_AUGMENTATION_DESCRIPTIONS: name # Specifies what descriptions to use during training. # Options are any combination of label, name, and synonym_exact. Must include at least one.
+  LABEL_EMBEDDING_NOISING_ALPHA: 0.0 # 0.0 = no noising. Typical ranges are <20. Noising scalar from https://arxiv.org/pdf/2310.05914.pdf
 
   # Constants
   SEED: 42
@@ -127,26 +127,26 @@ paths:
   # Paths referenced relative to DATA_PATH (will have DATA_PATH prepended)
   data_paths: 
     # ProteInfer data paths
-    TRAIN_DATA_PATH: swissprot/proteinfer_splits/random/train_GO.fasta
-    VAL_DATA_PATH: swissprot/proteinfer_splits/random/dev_GO.fasta
-    TEST_DATA_PATH: swissprot/proteinfer_splits/random/test_GO.fasta
-    FULL_DATA_PATH: swissprot/proteinfer_splits/random/full_GO.fasta # used to generate vocabularies
+    TRAIN_DATA_PATH: 'swissprot/proteinfer_splits/random/train_GO.fasta'
+    VAL_DATA_PATH: 'swissprot/proteinfer_splits/random/dev_GO.fasta'
+    TEST_DATA_PATH: 'swissprot/proteinfer_splits/random/test_GO.fasta'
+    FULL_DATA_PATH: 'swissprot/proteinfer_splits/random/full_GO.fasta' # used to generate vocabularies
   
-    TRAIN_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/2024-02-17_train_GO_zero_shot.fasta
-    VAL_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/2024-02-17_dev_GO_zero_shot.fasta
-    TEST_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/2024-02-17_test_GO_zero_shot.fasta
+    TRAIN_DATA_PATH_ZERO_SHOT: 'swissprot/proteinfer_splits/random/2024-02-17_train_GO_zero_shot.fasta'
+    VAL_DATA_PATH_ZERO_SHOT: 'swissprot/proteinfer_splits/random/2024-02-17_dev_GO_zero_shot.fasta'
+    TEST_DATA_PATH_ZERO_SHOT: 'swissprot/proteinfer_splits/random/2024-02-17_test_GO_zero_shot.fasta'
     # We don't need a full zero-shot path, since we generate vocabularies independently
 
     # Vocabulary paths
-    VOCABULARIES_DIR: vocabularies/proteinfer
-    GO_ANNOTATIONS_PATH: annotations/go_annotations_2019_07_01_updated.pkl # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
+    VOCABULARIES_DIR: 'vocabularies/proteinfer'
+    GO_ANNOTATIONS_PATH: 'annotations/go_annotations_2019_07_01_updated.pkl' # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
 
     # Embeddings paths (if using frozen pre-trained models)
-    BASE_LABEL_EMBEDDING_PATH: embeddings/frozen_BioGPT_label_embeddings.pt # this is the base path which is modified by POOLING_METHOD
+    BASE_LABEL_EMBEDDING_PATH: 'embeddings/frozen_BioGPT_label_embeddings.pt' # this is the base path which is modified by POOLING_METHOD
 
     # ProteInfer paths
-    PARENTHOOD_LIB_PATH: vocabularies/parenthood.json.gz
-    PROTEINFER_WEIGHTS_PATH: models/proteinfer/GO_model_weights.pkl
+    PARENTHOOD_LIB_PATH: 'vocabularies/parenthood.json.gz'
+    PROTEINFER_WEIGHTS_PATH: 'models/proteinfer/GO_model_weights.pkl'
     
   # Paths referenced relative to OUTPUT_PATH (will have OUTPUT_PATH prepended)
   output_paths:

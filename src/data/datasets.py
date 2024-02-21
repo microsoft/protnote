@@ -58,8 +58,7 @@ class ProteinDataset(Dataset):
         
         # Initialize data augmentation parameters
         self.augment_residue_probability = config["params"]["AUGMENT_RESIDUE_PROBABILITY"]
-        self.augment_labels = config["params"]["LABEL_AUGMENTATION_DESCRIPTIONS"] is not None
-        self.label_augmentation_descriptions = config["params"]["LABEL_AUGMENTATION_DESCRIPTIONS"].split('+') if self.augment_labels else []
+        self.label_augmentation_descriptions = config["params"]["LABEL_AUGMENTATION_DESCRIPTIONS"].split('+')
         
         # Load the BLOSUM62 matrix and convert to defaultdict using dictionary comprehension
         blosum62 = bl.BLOSUM(62)
@@ -67,6 +66,9 @@ class ProteinDataset(Dataset):
         
         # Initialize class variables and pre-computed embedding matrices
         self.data = read_fasta(data_paths["data_path"])
+        
+        # Parameter for noising the label embeddings
+        self.label_embedding_noising_alpha = config['params']['LABEL_EMBEDDING_NOISING_ALPHA']
         
         # Flag to know how Dataset indexing will be handled
         self.require_label_idxs = require_label_idxs
@@ -78,9 +80,8 @@ class ProteinDataset(Dataset):
                 f"Subsetting {subset_fraction*100}% of the {self.dataset_type} set..."
             )
             self.data = self.data[:int(subset_fraction * len(self.data))]
-
         
-        #Define description types used for inference. Can be 1 or more. If more than 1, then predictions 
+        # Define description types used for inference. Can be 1 or more. If more than 1, then predictions 
         # will be ensembled per go term
         self.inference_go_descriptions = config['params']['INFERENCE_GO_DESCRIPTIONS'].split('+') 
 
@@ -106,10 +107,12 @@ class ProteinDataset(Dataset):
         # TODO: This path could be constructed in get_setup
         INDEX_OUTPUT_PATH = config['LABEL_EMBEDDING_PATH'].split('.')
         INDEX_OUTPUT_PATH = '_'.join([INDEX_OUTPUT_PATH[0] ,'index']) + '.'+ INDEX_OUTPUT_PATH[1]
-        self.label_embeddings_index,self.label_embeddings = self._process_label_embedding_mapping(mapping=torch.load(INDEX_OUTPUT_PATH),
-                                                                                                  embeddings = torch.load(config['LABEL_EMBEDDING_PATH']))
+        index_mapping = torch.load(INDEX_OUTPUT_PATH)
+        self.label_embeddings_index, self.label_embeddings, self.label_token_counts, self.label_descriptions = self._process_label_embedding_mapping(mapping = index_mapping,
+                                                                                                                                                     embeddings = torch.load(config['LABEL_EMBEDDING_PATH']))
         logging.info('Number of unique labels in the label embeddings index: %s', len(self.label_embeddings_index))
         logging.info('Total number of label embeddings: %s', len(self.label_embeddings))
+        logging.info('Total number of label token counts: %s', len(self.label_token_counts))
         
     def _preprocess_data(self,deduplicate,max_sequence_length,remove_unrepresented_labels):
         """
@@ -232,7 +235,7 @@ class ProteinDataset(Dataset):
         self.logger.info("Processing label embeddings...")
         descriptions_considered = self.label_augmentation_descriptions if self.dataset_type=='train' else self.inference_go_descriptions
 
-        #Select only desires description types and ids from label vocabulary
+        # Select only desired description types and ids from label vocabulary
         mask = (mapping['description_type'].isin(descriptions_considered))\
                &(mapping['id'].isin(self.label_vocabulary))\
                 .values
@@ -245,15 +248,20 @@ class ProteinDataset(Dataset):
 
         #For safety 
         assert len(embeddings) == len(mapping)
-
+        
+        # Extract number of tokens for each label
+        token_counts = mapping['token_count'].values
+        
+        # Descriptions
+        descriptions = mapping['description'].values
+        
         # And filtering the tensor as well.
         mapping = mapping.groupby('id').agg(min_idx=('index','min'),max_idx=('index','max')).to_dict(orient='index')
 
         self.logger.info("Done")
-        return mapping, embeddings
+        return mapping, embeddings, token_counts, descriptions
         
     def _sample_label_embeddings(self):
-
         label_embedding_idxs_list = []
         
         for go_term in self.label_vocabulary:    
@@ -263,7 +271,7 @@ class ProteinDataset(Dataset):
                                     )
             label_embedding_idxs_list.append(idx)
 
-        return self.label_embeddings[label_embedding_idxs_list]
+        return self.label_embeddings[label_embedding_idxs_list], self.label_token_counts[label_embedding_idxs_list]
 
     def process_example(self, sequence: str, sequence_id_alphanumeric: str, labels: list[str], label_idxs:list[int] = None) -> dict:
 
@@ -298,12 +306,32 @@ class ProteinDataset(Dataset):
             label_idxs = torch.tensor(label_idxs)
 
         # Augment label descriptions by sampling from synonyms (if available)
-        #NOTE: WE AUGMENT LABELS PER SEQUENCE, BUT INSIDE COLLATOR ONLY USE THE LABELS FROM FIRST SEQUENCE IN BATCh
-        if self.augment_labels & (self.dataset_type == "train"):
-            label_embeddings = self._sample_label_embeddings()
+        # NOTE: WE AUGMENT LABELS PER SEQUENCE, BUT INSIDE COLLATOR ONLY USE THE LABELS FROM FIRST SEQUENCE IN BATCh
+        if self.dataset_type == "train" and len(self.label_augmentation_descriptions) > 1:
+            # Use the augmentation pipeline, which is O(n) where n is the number of labels
+            label_embeddings, label_token_counts = self._sample_label_embeddings()
         else:
-            label_embeddings = self._get_base_label_embeddings()
+            # Use the original label embeddings and token counts, which is O(1)
+            label_embeddings = self.label_embeddings
+            label_token_counts = self.label_token_counts
+            
+        # Noise the label embedding during training
+        if self.dataset_type == "train" and self.label_embedding_noising_alpha > 0:
+            # scaling the entire noise vector by a factor of α/√(Ld)
+            # L is the sequence length, d is the embedding dimension, and α is a tunable parameter
+            denominator = torch.sqrt(torch.tensor(label_token_counts, dtype=torch.float32) * label_embeddings.shape[1])
+            scalars = self.label_embedding_noising_alpha / denominator
 
+            # Generate random noise of the same shape as label_embeddings
+            # Adjust values to be in the range [-1, 1)
+            noise = 2 * torch.rand_like(label_embeddings) - 1
+
+            # Reshape for broadcasting and scale the noise
+            scaled_noise = noise * scalars.view(-1, 1)
+
+            # Add the scaled noise to the original label embeddings
+            label_embeddings = label_embeddings + scaled_noise
+            
         # Return a dict containing the processed example
         return {
             "sequence_onehots": sequence_onehots,
@@ -351,27 +379,40 @@ class ProteinDataset(Dataset):
         self.logger.info(f"Calculated bce_pos_weight= {pos_weight.item()}")
         return pos_weight
 
+    # def calculate_label_frequency(self):
+    #     if self.label_frequency is None:
+    #         self.logger.info("Calculating label frequency...")
+    #         def count_labels(chunk):
+    #             label_freq = Counter()
+    #             for _, _, labels in chunk:
+    #                 label_freq.update(labels)
+    #             return label_freq
+
+    #         # Adjust chunk size if necessary.
+    #         chunk_size = max(len(self.data) // cpu_count(), 1)
+
+    #         # Count labels in parallel
+    #         results = Parallel(n_jobs=-1)(
+    #             delayed(count_labels)(self.data[i:i+chunk_size]) for i in range(0, len(self.data), chunk_size)
+    #         )
+
+    #         #Label frequency
+    #         self.label_frequency = Counter()
+    #         for result in results:
+    #             self.label_frequency.update(result)
     def calculate_label_frequency(self):
         if self.label_frequency is None:
             self.logger.info("Calculating label frequency...")
-            def count_labels(chunk):
-                label_freq = Counter()
-                for _, _, labels in chunk:
-                    label_freq.update(labels)
-                return label_freq
 
-            # Adjust chunk size if necessary.
-            chunk_size = max(len(self.data) // cpu_count(), 1)
+            # Initialize a Counter object for counting label frequencies
+            label_freq = Counter()
 
-            # Count labels in parallel
-            results = Parallel(n_jobs=-1)(
-                delayed(count_labels)(self.data[i:i+chunk_size]) for i in range(0, len(self.data), chunk_size)
-            )
+            # Directly iterate over the data to count labels
+            for _, _, labels in self.data:
+                label_freq.update(labels)
 
-            #Label frequency
-            self.label_frequency = Counter()
-            for result in results:
-                self.label_frequency.update(result)
+            # Update the instance's label frequency with the calculated frequencies
+            self.label_frequency = label_freq
         
 
     def calculate_label_weights(self, inv_freq= True, power=0.3, normalize = True,return_list=False):
@@ -409,34 +450,43 @@ class ProteinDataset(Dataset):
 
 
 
+# def calculate_sequence_weights(data: list, label_inv_freq: dict):
+#     """
+#     Calculate the sequence weights for weighted sampling. 
+#     The sequence weights are the sum of the inverse frequencies of the labels in the sequence.
+#     """
+#     def sum_label_inverse_freqs(chunk):
+#         sequence_weights = []
+#         for _, _, labels in chunk:
+#             labels = labels[1:]
+#             sequence_weight = sum([label_inv_freq[label] for label in labels])
+#             sequence_weights.append(sequence_weight)
+#         return sequence_weights
+
+#     # Adjust chunk size if necessary.
+#     chunk_size = max(len(data) // cpu_count(), 1)
+
+#     results = Parallel(n_jobs=-1)(
+#         delayed(sum_label_inverse_freqs)(data[i:i+chunk_size]) for i in range(0, len(data), chunk_size)
+#     )
+
+#     sequence_weights = []
+#     for result in results:
+#         sequence_weights.extend(result)
+
+#     return sequence_weights
+
 def calculate_sequence_weights(data: list, label_inv_freq: dict):
     """
-    Calculate the sequence weights for weighted sampling. 
+    Calculate the sequence weights for weighted sampling.
     The sequence weights are the sum of the inverse frequencies of the labels in the sequence.
     """
-    # TODO: Convert inverse frequencies into a more normal distribution
-    
-    def sum_label_inverse_freqs(chunk):
-        sequence_weights = []
-        for _, _, labels in chunk:
-            labels = labels[1:]
-            sequence_weight = sum([label_inv_freq[label] for label in labels])
-            sequence_weights.append(sequence_weight)
-        return sequence_weights
-
-    # Adjust chunk size if necessary.
-    chunk_size = max(len(data) // cpu_count(), 1)
-
-    results = Parallel(n_jobs=-1)(
-        delayed(sum_label_inverse_freqs)(data[i:i+chunk_size]) for i in range(0, len(data), chunk_size)
-    )
-
     sequence_weights = []
-    for result in results:
-        sequence_weights.extend(result)
-
+    for _, _, labels in data:
+        labels = labels[1:]  # Assuming the first element is not a label
+        sequence_weight = sum([label_inv_freq.get(label, 0) for label in labels])
+        sequence_weights.append(sequence_weight)
     return sequence_weights
-
 
 def set_padding_to_sentinel(
     padded_representations: torch.Tensor,

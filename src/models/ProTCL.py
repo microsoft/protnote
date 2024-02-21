@@ -151,7 +151,7 @@ class ProTCL(nn.Module):
             label_embeddings (optional): Tensor of pre-trained label embeddings.
         """
         
-        # TODO: Remove sequence_embeddings and tokenized_labels from this code. They are not used.
+        # TODO: Remove sequence_embeddings and tokenized_labels from this code. They are not used. We always use the label_embeddings and sequence_onehots.
       
         #---------------------- LABEL EMBEDDING ----------------------# 
         if label_embeddings is not None and (self.label_encoder_num_trainable_layers == 0 or not self.training):
@@ -199,9 +199,7 @@ class ProTCL(nn.Module):
 
         
         if self.label_embedding_pooling_method=='all':
-            print('attention')
             L_f = self.additive_attention(L_f,tokenized_labels['attention_mask'])
-            print('attention done')
 
         # Project protein and label embeddings to common latent space.
         P_e = self.W_p(P_f)
@@ -232,7 +230,7 @@ class ProTCL(nn.Module):
             logits = logits.reshape(num_sequences, num_labels)
         else:
             assert not self.training, "label ensembling shouldn't be done during training"
-            #Get equivalent logit of averaging in probability space
+            # Get equivalent logit of averaging in probability space
 
             logits = torch.special.logit(torch.sigmoid(logits)\
                 .reshape(num_sequences,
