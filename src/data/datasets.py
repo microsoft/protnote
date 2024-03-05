@@ -67,9 +67,6 @@ class ProteinDataset(Dataset):
         # Initialize class variables and pre-computed embedding matrices
         self.data = read_fasta(data_paths["data_path"])
         
-        # Parameter for noising the label embeddings
-        self.label_embedding_noising_alpha = config['params']['LABEL_EMBEDDING_NOISING_ALPHA']
-        
         # Flag to know how Dataset indexing will be handled
         self.require_label_idxs = require_label_idxs
 
@@ -315,31 +312,16 @@ class ProteinDataset(Dataset):
             label_embeddings = self.label_embeddings
             label_token_counts = self.label_token_counts
             
-        # Noise the label embedding during training
-        if self.dataset_type == "train" and self.label_embedding_noising_alpha > 0:
-            # scaling the entire noise vector by a factor of α/√(Ld)
-            # L is the sequence length, d is the embedding dimension, and α is a tunable parameter
-            denominator = torch.sqrt(torch.tensor(label_token_counts, dtype=torch.float32) * label_embeddings.shape[1])
-            scalars = self.label_embedding_noising_alpha / denominator
-
-            # Generate random noise of the same shape as label_embeddings
-            # Adjust values to be in the range [-1, 1)
-            noise = 2 * torch.rand_like(label_embeddings) - 1
-
-            # Reshape for broadcasting and scale the noise
-            scaled_noise = noise * scalars.view(-1, 1)
-
-            # Add the scaled noise to the original label embeddings
-            label_embeddings = label_embeddings + scaled_noise
-            
         # Return a dict containing the processed example
+        # NOTE: In the collator, we will use the label token counts for only the first sequence in the batch
         return {
             "sequence_onehots": sequence_onehots,
             "sequence_id": sequence_id_alphanumeric,
             "sequence_length": sequence_length,
             "label_multihots": label_multihots,
             "label_embeddings": label_embeddings,
-            "label_idxs": label_idxs
+            "label_idxs": label_idxs,
+            "label_token_counts": torch.tensor(label_token_counts),
         }
 
     def __getitem__(self, idx) -> tuple:

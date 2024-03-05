@@ -4,6 +4,7 @@ import torch
 from src.utils.models import get_label_embeddings
 import os
 from torchvision.ops import MLP
+import math
 
 class ProTCL(nn.Module):
     def __init__(
@@ -24,6 +25,7 @@ class ProTCL(nn.Module):
         dropout=0.0,
         sequence_embedding_dropout=0.0,
         label_embedding_dropout=0.0,
+        label_embedding_noising_alpha=0.0,
         projection_head_num_layers=1,
         projection_head_hidden_dim_scale_factor = 1,
         label_batch_size_limit=float("inf"),
@@ -47,6 +49,7 @@ class ProTCL(nn.Module):
         self.temperature = temperature
         self.label_embedding_pooling_method = label_embedding_pooling_method
         self.latent_dim = latent_dim
+        self.label_embedding_noising_alpha = label_embedding_noising_alpha
 
         # Projection heads
         self.W_p = MLP(protein_embedding_dim,
@@ -138,7 +141,8 @@ class ProTCL(nn.Module):
         sequence_embeddings=None,
         sequence_lengths=None,
         tokenized_labels=None,
-        label_embeddings=None
+        label_embeddings=None,
+        label_token_counts=None,
     ):
         """
         Forward pass of the model.
@@ -178,7 +182,33 @@ class ProTCL(nn.Module):
                     )
         else:
             raise ValueError(
-                "Incompatible label parameters passed to forward method.")
+                "Incompatible label parameters passed to forward method.")            
+        # Noise the label embedding during training
+        if self.training and label_token_counts is not None and self.label_embedding_noising_alpha > 0:
+            # scaling the entire noise vector by a factor of α/√(Ld)
+            # L is the sequence length, d is the embedding dimension, and α is a tunable parameter
+            # denominator = torch.sqrt(label_token_counts * L_f.shape[1])
+            denominator = torch.tensor(math.sqrt(L_f.shape[1]), device=L_f.device, dtype=L_f.dtype)
+            scalars = self.label_embedding_noising_alpha / denominator
+
+            # Generate random noise of the same shape as L_f (the label embeddings)
+            # Adjust values to be in the range [-1, 1)
+            noise = 2 * torch.rand_like(L_f) - 1
+            
+            # Scale the noise
+            scaled_noise = noise * scalars.unsqueeze(-1)
+            
+            # # Calculate the Frobenius norm of the scaled noise
+            # noise_norm = torch.norm(scaled_noise, p='fro')
+            # # Calculate the Frobenius norm of the original label embeddings
+            # L_f_norm = torch.norm(L_f, p='fro')
+
+            # # Calculate the percentage of noise added
+            # noise_percentage = (noise_norm / L_f_norm) * 100
+            # print(f'Noise added: {noise_percentage:.2f}%')
+
+            # Add the scaled noise to the original label embeddings
+            L_f = L_f + scaled_noise
 
         #---------------------- SEQUENCE EMBEDDINGS ----------------------# 
         if sequence_embeddings is not None and (not self.train_sequence_encoder or not self.training):
@@ -199,7 +229,7 @@ class ProTCL(nn.Module):
 
         
         if self.label_embedding_pooling_method=='all':
-            L_f = self.additive_attention(L_f,tokenized_labels['attention_mask'])
+            L_f = self.additive_attention(L_f, tokenized_labels['attention_mask'])
 
         # Project protein and label embeddings to common latent space.
         P_e = self.W_p(P_f)

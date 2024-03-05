@@ -55,7 +55,7 @@ params:
   PROJECTION_HEAD_NUM_LAYERS: 2
   PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 2
   FEATURE_FUSION: concatenation # Select from concatenation, concatenation_diff, concatenation_prod, similarity
-  LABEL_EMBEDDING_POOLING_METHOD: 'last_token' # Select from mean, last_token, all
+  LABEL_EMBEDDING_POOLING_METHOD: 'mean' # Select from mean, last_token, all
   EXTRACT_VOCABULARIES_FROM: FULL_DATA_PATH # Can be any predefined path (e.g., FULL_DATA_PATH) or null. Null means generate vocab from scratch with dataset. Must set to null for zero-shot
   OPTIMIZATION_METRIC_NAME: f1_macro # Only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_micro
@@ -131,11 +131,15 @@ paths:
     VAL_DATA_PATH: 'swissprot/proteinfer_splits/random/dev_GO.fasta'
     TEST_DATA_PATH: 'swissprot/proteinfer_splits/random/test_GO.fasta'
     FULL_DATA_PATH: 'swissprot/proteinfer_splits/random/full_GO.fasta' # used to generate vocabularies
-  
+
+    # Zero-shot data paths 
     TRAIN_DATA_PATH_ZERO_SHOT: 'swissprot/proteinfer_splits/random/2024-02-17_train_GO_zero_shot.fasta'
     VAL_DATA_PATH_ZERO_SHOT: 'swissprot/proteinfer_splits/random/2024-02-17_dev_GO_zero_shot.fasta'
     TEST_DATA_PATH_ZERO_SHOT: 'swissprot/proteinfer_splits/random/2024-02-17_test_GO_zero_shot.fasta'
     # We don't need a full zero-shot path, since we generate vocabularies independently
+
+    # Data path for true zero-shot
+    UNSEEN_DATA_PATH_ZERO_SHOT: 'zero_shot/SwissProt_2023_unseen_sequences_and_labels.fasta'
 
     # Vocabulary paths
     VOCABULARIES_DIR: 'vocabularies/proteinfer'

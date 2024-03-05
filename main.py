@@ -295,6 +295,7 @@ def train_validate_test(gpu, args):
         label_embedding_pooling_method=params["LABEL_EMBEDDING_POOLING_METHOD"],
         sequence_embedding_dropout=params["SEQUENCE_EMBEDDING_DROPOUT"],
         label_embedding_dropout=params["LABEL_EMBEDDING_DROPOUT"],
+        label_embedding_noising_alpha=params["LABEL_EMBEDDING_NOISING_ALPHA"],
 
         # Encoders
         label_encoder=label_encoder,

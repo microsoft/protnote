@@ -37,6 +37,7 @@ def collate_variable_sequence_length(batch: List[Tuple],
               - 'sequence_lengths': Tensor, lengths of sequences.
               - 'label_multihots': Tensor, multihot encoded labels (possibly sampled).
               - 'label_embeddings': Tensor, label embeddings if provided. Otherwise None.
+              - 'label_token_counts': Tensor, token counts for each label.
 
     """
 
@@ -48,6 +49,7 @@ def collate_variable_sequence_length(batch: List[Tuple],
     processed_sequence_ids = []
     processed_sequence_lengths = []
     processed_label_multihots = []
+    processed_label_token_counts = []
     processed_label_embeddings = None
     
     if grid_sampler:
@@ -82,7 +84,11 @@ def collate_variable_sequence_length(batch: List[Tuple],
         sampled_label_indices=torch.where(sum(i['label_multihots'] for i in batch)>0)[0]
     
     # Apply the sampled labels to the label embeddings
+    # We only use the first sequence in the batch to get the label embeddings to minimize complexity
     label_embeddings = batch[0]["label_embeddings"]
+    
+    # Likewise, we only use the first sequence in the batch to get the label token counts
+    label_token_counts = batch[0]["label_token_counts"]
 
     if sampled_label_indices is not None:
         # Create a new tensor of embeddings with only the sampled labels
@@ -126,6 +132,7 @@ def collate_variable_sequence_length(batch: List[Tuple],
         "sequence_ids": processed_sequence_ids,
         "sequence_lengths": torch.stack(processed_sequence_lengths),
         "label_embeddings": processed_label_embeddings,
+        "label_token_counts": label_token_counts,
     }
 
     if return_label_multihots:

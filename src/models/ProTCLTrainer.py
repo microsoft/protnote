@@ -451,22 +451,25 @@ class ProTCLTrainer:
             self.training_step += 1
 
             # Unpack the training batch
-            sequence_onehots, sequence_lengths, label_multihots, label_embeddings = (
+            # In training, we use label_token_counts, but in validation and testing, we don't
+            sequence_onehots, sequence_lengths, label_multihots, label_embeddings, label_token_counts = (
                 batch["sequence_onehots"],
                 batch["sequence_lengths"],
                 batch["label_multihots"],
-                batch["label_embeddings"]
+                batch["label_embeddings"],
+                batch["label_token_counts"]
             )
 
             # Move all unpacked batch elements to GPU, if available
-            sequence_onehots, sequence_lengths, label_multihots, label_embeddings = self._to_device(
-                sequence_onehots, sequence_lengths, label_multihots, label_embeddings)
+            sequence_onehots, sequence_lengths, label_multihots, label_embeddings, label_token_counts = self._to_device(
+                sequence_onehots, sequence_lengths, label_multihots, label_embeddings, label_token_counts)
 
             # Forward pass
             inputs = {
                 "sequence_onehots": sequence_onehots,
                 "sequence_lengths": sequence_lengths,
-                "label_embeddings": label_embeddings
+                "label_embeddings": label_embeddings,
+                "label_token_counts": label_token_counts
             }
 
             with autocast():
