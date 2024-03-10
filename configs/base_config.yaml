@@ -84,7 +84,7 @@ params:
   LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 0
   DISTRIBUTE_LABELS: False
   TRAIN_PROJECTION_HEAD: True
-  LABEL_ENCODER_CHECKPOINT: microsoft/biogpt
+  LABEL_ENCODER_CHECKPOINT: intfloat/e5-large-v2 #microsoft/biogpt, intfloat/e5-large-v2
 
   # Data processing and metrics
   DEDUPLICATE: True
@@ -146,7 +146,7 @@ paths:
     GO_ANNOTATIONS_PATH: 'annotations/go_annotations_2019_07_01_updated.pkl' # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
 
     # Embeddings paths (if using frozen pre-trained models)
-    BASE_LABEL_EMBEDDING_PATH: 'embeddings/frozen_BioGPT_label_embeddings.pt' # this is the base path which is modified by POOLING_METHOD
+    BASE_LABEL_EMBEDDING_PATH: 'embeddings/frozen_label_embeddings.pt' # this is the base path which is modified by POOLING_METHOD
 
     # ProteInfer paths
     PARENTHOOD_LIB_PATH: 'vocabularies/parenthood.json.gz'

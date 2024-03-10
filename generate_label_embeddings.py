@@ -53,6 +53,13 @@ def main():
         help="How to pool embeddings. mean, last_token, or all",
     )
 
+    parser.add_argument(
+        "--account-for-sos",
+        type=bool,
+        default=True,
+        help="Whether to ignore the SOS token. Set to True for BioGPT and False for E5. Doesn't make any difference if pooling method = last_token"
+    )
+
     args = parser.parse_args()
     
     ROOT_PATH = os.path.dirname(__file__)
@@ -115,6 +122,7 @@ def main():
         pooling_method=args.pooling_method,
         batch_size_limit=CONFIG["params"]["LABEL_BATCH_SIZE_LIMIT_NO_GRAD"],
         append_in_cpu=False,
+        account_for_sos=args.account_for_sos
     ).to('cpu')
 
     #Convert to indexed pandas df

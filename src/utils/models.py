@@ -128,27 +128,29 @@ def compute_mean_hidden_states(last_hidden_states, attention_mask):
     # Compute the mean of the last hidden state
     return sum_hidden_states / num_relevant_tokens
 
-def pool_embeddings(last_hidden_states,attention_mask,method):
+def pool_embeddings(last_hidden_states,attention_mask,method,account_for_sos = True):
     '''
     '''
-    sequence_length = attention_mask.sum(dim=1, keepdim=True) #includind SOS token
-    last_token_indices = sequence_length - 1
+    sequence_length_raw = attention_mask.sum(dim=1, keepdim=True) #includind SOS token
+
+    sequence_length = sequence_length_raw - 1*account_for_sos
 
  
     if method=='mean':
         #Account for SOS token
         adjusted_attention_mask = attention_mask.clone()
-        adjusted_attention_mask[:,0]=0
+        if account_for_sos:
+            adjusted_attention_mask[:,0]=0
  
         # Mask the last_hidden_state tensor and compute the sum
         sum_hidden_states = (last_hidden_states *
                                 adjusted_attention_mask.unsqueeze(-1)).sum(dim=1)
  
         # Compute the mean of the last hidden state
-        sequence_embedding = sum_hidden_states / (sequence_length-1) #subtract -1 for SOS token
+        sequence_embedding = sum_hidden_states / (sequence_length) 
  
     elif method == 'last_token':
-        last_token_indices = last_token_indices\
+        last_token_indices = (sequence_length_raw - 1)\
             .unsqueeze(-1)\
             .expand(-1, -1, last_hidden_states.size(-1))
  
@@ -159,7 +161,7 @@ def pool_embeddings(last_hidden_states,attention_mask,method):
  
     return sequence_embedding
 
-def get_label_embeddings(tokenized_labels, model, method, batch_size_limit=1000, append_in_cpu = False):
+def get_label_embeddings(tokenized_labels, model, method, batch_size_limit=1000, append_in_cpu = False,account_for_sos=True):
     """
     Get embeddings for a list of tokenized labels.
     Assumes that tokenized_labels and model are on the same device, ideally GPU.
@@ -174,7 +176,7 @@ def get_label_embeddings(tokenized_labels, model, method, batch_size_limit=1000,
                 attention_mask=tokenized_labels["attention_mask"]
             ).last_hidden_state
         sequence_embeddings = pool_embeddings(
-            sequence_embeddings, tokenized_labels["attention_mask"],method)
+            sequence_embeddings, tokenized_labels["attention_mask"],method,account_for_sos=account_for_sos)
         
         
         return sequence_embeddings
@@ -208,7 +210,13 @@ def get_label_embeddings(tokenized_labels, model, method, batch_size_limit=1000,
         model.train()
         return torch.cat(all_label_embeddings, dim=0)
 
-def generate_label_embeddings_from_text(label_annotations, label_tokenizer, label_encoder, pooling_method, batch_size_limit=1000, append_in_cpu=False):
+def generate_label_embeddings_from_text(label_annotations,
+                                        label_tokenizer,
+                                        label_encoder,
+                                        pooling_method,
+                                        batch_size_limit=1000,
+                                        append_in_cpu=False,
+                                        account_for_sos=True):
     """Tokenize the labels and generate label embeddings."""
     tokenized_labels = tokenize_labels(label_annotations, label_tokenizer)
 
@@ -223,7 +231,8 @@ def generate_label_embeddings_from_text(label_annotations, label_tokenizer, labe
                                 model = label_encoder,
                                 method = pooling_method,
                                 batch_size_limit=batch_size_limit,
-                                append_in_cpu=append_in_cpu)
+                                append_in_cpu=append_in_cpu,
+                                account_for_sos=account_for_sos)
 
 def sigmoid_bias_from_prob(prior_prob):
     return -np.log((1 - prior_prob) / prior_prob)

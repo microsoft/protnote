@@ -48,11 +48,19 @@ def generate_label_embedding_path(params:dict,
     ways of pooling embeddings, different types of go descriptions and other paramters. 
     This way we can store different versions/types of label embeddings for caching
     '''
+    MODEL_NAME_2_NICKNAME = {"microsoft/biogpt":"BioGPT",
+                             "intfloat/e5-large-v2":"E5"}
+
     label_embedding_path=base_label_embedding_path.split('/')
     temp=label_embedding_path[-1].split('.')
 
+    
+
+    base_model = temp[0].split('_')
+    base_model = "_".join([base_model[0]] + [MODEL_NAME_2_NICKNAME[params["LABEL_ENCODER_CHECKPOINT"]]] + base_model[1:])
+
     label_embedding_path[-1] = \
-        temp[0] \
+        base_model \
         + '_' \
         + params["LABEL_EMBEDDING_POOLING_METHOD"] \
         + '.' + temp[1]
