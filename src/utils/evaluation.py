@@ -260,24 +260,34 @@ def save_evaluation_results(results, label_vocabulary, run_name,output_dir,data_
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    label_df = pd.DataFrame(results['labels'],
-                            columns=label_vocabulary,
-                            index=results['sequence_ids'])
+
+    if len(label_vocabulary)!=results['logits'].shape[-1]:
+        logits_df_cols = list(range(results['logits'].shape[-1]))
+    else:
+        logits_df_cols = label_vocabulary
 
     logits_df = pd.DataFrame(results['logits'],
-                                    columns=label_vocabulary,
-                                    index=results['sequence_ids'])
-
-    # Convert all float16 columns to float32
-    label_df = convert_float16_to_float32(label_df)
+                                    columns=logits_df_cols,
+                                    index=results['sequence_ids']) 
     logits_df = convert_float16_to_float32(logits_df)
+    logits_df_output_path = os.path.join(
+        output_dir, f'{data_split_name}_logits_{run_name}.parquet')
+    print(f"saving results to {logits_df_output_path}")
+    logits_df.to_parquet(logits_df_output_path)
 
-    # Save the DataFrame to Parquet
-    label_df.to_parquet(os.path.join(
-        output_dir, f'{data_split_name}_labels_{run_name}.parquet'))
+    
+    label_df = pd.DataFrame(results['labels'],
+                    columns=label_vocabulary,
+                    index=results['sequence_ids'])
+    label_df = convert_float16_to_float32(label_df)
+    label_df_output_path = os.path.join(
+        output_dir, f'{data_split_name}_labels_{run_name}.parquet')
+    
+    print(f"saving results to {label_df_output_path}")
+    label_df.to_parquet(label_df_output_path)
+    
 
-    logits_df.to_parquet(os.path.join(
-        output_dir, f'{data_split_name}_logits_{run_name}.parquet'))
+        
 
 
 def metrics_per_label_df(label_df:pd.DataFrame,pred_df:pd.DataFrame,device:str,threshold:None)->pd.DataFrame:

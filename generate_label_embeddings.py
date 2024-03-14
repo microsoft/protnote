@@ -60,10 +60,20 @@ def main():
         help="Whether to ignore the SOS token. Set to True for BioGPT and False for E5. Doesn't make any difference if pooling method = last_token"
     )
 
+    parser.add_argument(
+        "--add-instruction",
+        action='store_true',
+        help="Whether to format for instruction tuned model"
+    )
+
+    def get_detailed_instruct(task_description: str, query: str) -> str:
+        return f'Instruct: {task_description}\nQuery: {query}'
+    
     args = parser.parse_args()
     
     ROOT_PATH = os.path.dirname(__file__)
     CONFIG = read_yaml(os.path.join(ROOT_PATH, args.config))
+    TASK = "Identify the main categories, themes, or topics described in the following Gene Ontology (GO) term, which is used to detail a protein's function"
     
     # Overwrite config pooling method
     CONFIG["params"]["LABEL_EMBEDDING_POOLING_METHOD"] = args.pooling_method
@@ -108,11 +118,16 @@ def main():
     ):
         for desription_type, desription_set in desriptions.items():
             for description in ensure_list(desription_set):
-                embeddings_idx['description'].append(remove_obsolete_from_string(description))
+                description = remove_obsolete_from_string(description)
+
+                if args.add_instruction:
+                    description = get_detailed_instruct(TASK,description)
+
+                embeddings_idx['description'].append(description)
                 embeddings_idx['id'].append(go_term)
                 embeddings_idx['description_type'].append(desription_type)
                 embeddings_idx['token_count'].append(len(label_tokenizer.tokenize(description))) # We need the token count for embedding normalization (longer descriptions will have more feature-rich embeddings)
-
+        print(description)
     # Remove Obsolete/Deprecated texts
     logging.info("Extracting embeddings...")
     embeddings = generate_label_embeddings_from_text(

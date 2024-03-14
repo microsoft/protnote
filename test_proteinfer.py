@@ -1,12 +1,8 @@
 from src.data.datasets import ProteinDataset, create_multiple_loaders
-from src.utils.main_utils import get_or_generate_vocabularies
 from src.utils.configs import get_setup
 from src.models.protein_encoders import ProteInfer
-from src.utils.proteinfer import transfer_tf_weights_to_torch
 from src.utils.evaluation import EvalMetrics,save_evaluation_results
-from torchmetrics.classification import F1Score
-from src.utils.data import read_json, load_gz_json
-from src.utils.proteinfer import normalize_confidences
+from src.utils.data import load_gz_json
 import torch
 import numpy as np
 from tqdm import tqdm
@@ -48,13 +44,6 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--full-path-name",
-    type=str,
-    default=None,
-    help="Specify the desired full path name to define the vocabularies. Defaults to the full path name in the config file.",
-)
-
-parser.add_argument(
     "--name",
     type=str,
     default="ProteInfer",
@@ -73,14 +62,15 @@ parser.add_argument(
     default=0.5
 )
 
-parser.add_argument(
-    "--normalize-probabilities",
-    action="store_true",
-    help="Normalize probabilities using the label vocabulary and applicable label dictionary."
-)
+parser.add_argument("--override", nargs="*",
+                    help="Override config parameters in key-value pairs.")
+
 
 parser.add_argument("--save-prediction-results", action="store_true", default=False,
                     help="Save predictions and ground truth dataframe for validation and/or test")
+
+parser.add_argument("--only-inference", action="store_true", default=False,
+                    help="Whether to only predict without testing and computing metrics")
 
 # TODO: Add an option to serialize and save config with a name corresponding to the model save path
 
@@ -89,6 +79,10 @@ args = parser.parse_args()
 def to_device(device, *args):
     return [item.to(device) if isinstance(item,torch.Tensor) else None for item in args]
 
+if args.override:
+    args.override+=["WEIGHTED_SAMPLING","False","TEST_BATCH_SIZE",128]
+else:
+    args.override=["WEIGHTED_SAMPLING","False","TEST_BATCH_SIZE",128]
 
 config = get_setup(
     config_path=args.config,
@@ -98,7 +92,7 @@ config = get_setup(
     test_paths_names=args.test_paths_names,
     amlt=False,
     is_master=True,
-    overrides=[]
+    overrides=args.override
 )
 params, paths, timestamp, logger = (config["params"],
                                     config["paths"],
@@ -106,16 +100,49 @@ params, paths, timestamp, logger = (config["params"],
                                     config["logger"])
 
 
-vocabularies = get_or_generate_vocabularies(
-    paths["FULL_DATA_PATH"], paths["VOCABULARIES_DIR"], logger)
-
 # Create datasets
-datasets = ProteinDataset.create_multiple_datasets(paths_list=config['dataset_paths_list'],
-                                                   vocabularies=vocabularies,
-                                                   config=config,
-                                                   logger=logger,
-                                                   deduplicate=params["DEDUPLICATE"])
+train_dataset = ProteinDataset(
+    data_paths=config['dataset_paths']['train'][0], 
+    config=config,
+    logger=logger,
+    require_label_idxs=params['GRID_SAMPLER'],
+    label_tokenizer=None,
+) if args.train_path_name is not None else None
 
+validation_dataset = ProteinDataset(
+    data_paths=config['dataset_paths']['validation'][0], 
+    config=config,
+    logger=logger,
+    require_label_idxs=False,  # Label indices are not required for validation. 
+    label_tokenizer=None,
+) if args.validation_path_name is not None else None
+
+test_dataset = ProteinDataset(
+    data_paths=config['dataset_paths']['test'][0], 
+    config=config,
+    logger=logger,
+    require_label_idxs=False,  # Label indices are not required for testing
+    label_tokenizer=None,
+) if args.test_paths_names is not None else None
+
+# Add datasets to a dictionary
+# TODO: This does not support multiple datasets. But I think we should remove that support anyway. Too complicated.
+datasets = {
+    "train": [train_dataset],
+    "validation": [validation_dataset],
+    "test": [test_dataset]
+}
+
+#Remove empty datasets. May happen in cases like only validating a model.
+datasets = {k:v for k,v in datasets.items() if v[0] is not None}
+
+# Define label sample sizes for train, validation, and test loaders
+label_sample_sizes = {
+    "train": params["TRAIN_LABEL_SAMPLE_SIZE"],
+    "validation": params["VALIDATION_LABEL_SAMPLE_SIZE"],
+    "test": None,  # No sampling for the test set
+}
+    
 # Initialize new run
 logger.info(f"################## {timestamp} RUNNING train.py ##################")
 
@@ -149,15 +176,17 @@ model.to(device)
 model = model.eval()
 
 label_normalizer = load_gz_json(paths["PARENTHOOD_LIB_PATH"])
+# Initialize EvalMetrics
+eval_metrics = EvalMetrics(device=device)
+label_sample_sizes = {k:(v if v is not None else len(datasets[k][0].label_vocabulary)) 
+                        for k,v in label_sample_sizes.items() if k in datasets.keys()}
 
 for loader_name, loader in loaders.items():
-    # Initialize EvalMetrics
-    eval_metrics = EvalMetrics(device=device)
 
     test_metrics = eval_metrics\
                 .get_metric_collection_with_regex(pattern='f1_m.*',
                                     threshold=args.threshold,
-                                    num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"]
+                                    num_labels=label_sample_sizes["test"] if (params['IN_BATCH_SAMPLING'] or params['GRID_SAMPLER']) is False else None
                                     )
    
     bce_loss = torch.nn.BCEWithLogitsLoss(reduction='mean')
@@ -174,52 +203,46 @@ for loader_name, loader in loaders.items():
             enumerate(loader[0]), total=len(loader[0])
         ):
 
-            sequence_onehots, sequence_lengths, sequence_ids, label_multihots = (
+            # Unpack the validation or testing batch
+            sequence_onehots, sequence_lengths, sequence_ids, label_multihots, label_embeddings = (
                 batch["sequence_onehots"],
                 batch["sequence_lengths"],
                 batch["sequence_ids"],
-                batch["label_multihots"]
+                batch["label_multihots"],
+                batch["label_embeddings"]
             )
-
             sequence_onehots, sequence_lengths, label_multihots = to_device(device,
                 sequence_onehots, sequence_lengths, label_multihots)
                 
             logits = model(sequence_onehots, sequence_lengths)
             probabilities = torch.sigmoid(logits)
-            if args.normalize_probabilities:
-                probabilities = torch.tensor(
-                    normalize_confidences(
-                        predictions=probabilities.detach().cpu().numpy(),
-                        label_vocab=vocabularies["GO_label_vocab"],
-                        applicable_label_dict=label_normalizer,
-                    ),
-                    device=probabilities.device,
-                )
 
-            test_metrics(probabilities, label_multihots)
+            if not args.only_inference:
+                test_metrics(probabilities, label_multihots)
 
-            if loader_name in ['validation','test']:
-                mAP_micro.update(probabilities.cpu().flatten(), label_multihots.cpu().flatten())
-                mAP_macro.update(probabilities.cpu(), label_multihots.cpu())
-                                
-            total_bce_loss += bce_loss(logits, label_multihots.float())
-            total_focal_loss += focal_loss(logits, label_multihots.float())
-            
+                if loader_name in ['validation','test']:
+                    mAP_micro.update(probabilities.cpu().flatten(), label_multihots.cpu().flatten())
+                    mAP_macro.update(probabilities.cpu(), label_multihots.cpu())
+                                    
+                total_bce_loss += bce_loss(logits, label_multihots.float())
+                total_focal_loss += focal_loss(logits, label_multihots.float())
+                
             if args.save_prediction_results:
                 test_results["sequence_ids"].append(sequence_ids)
                 test_results["logits"].append(logits)
                 test_results["labels"].append(label_multihots)
 
-        test_metrics = test_metrics.compute()
-        test_metrics.update({"bce_loss": total_bce_loss/len(loader[0])})
-        test_metrics.update({"focal_loss": total_focal_loss/len(loader[0])})
+        if not args.only_inference:
+            test_metrics = test_metrics.compute()
+            test_metrics.update({"bce_loss": total_bce_loss/len(loader[0])})
+            test_metrics.update({"focal_loss": total_focal_loss/len(loader[0])})
 
-        if loader_name in ['validation','test']:
-            test_metrics.update({
-                                  "map_micro":mAP_micro.compute(),
-                                  "map_macro":mAP_macro.compute()
-                                  })
-        
+            if loader_name in ['validation','test']:
+                test_metrics.update({
+                                    "map_micro":mAP_micro.compute(),
+                                    "map_macro":mAP_macro.compute()
+                                    })
+            
 
         print("\n\n","="*20)
         print(f"##{loader_name}##")
@@ -239,7 +262,7 @@ for loader_name, loader in loaders.items():
                     )
 
             save_evaluation_results(results=test_results,
-                                                    label_vocabulary=vocabularies["GO_label_vocab"],
+                                                    label_vocabulary=loader[0].dataset.label_vocabulary,
                                                     run_name="proteinfer",
                                                     output_dir=config["paths"]["RESULTS_DIR"],
                                                     data_split_name = loader_name

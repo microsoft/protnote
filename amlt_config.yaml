@@ -1,5 +1,5 @@
 # For field details: https://amulet-docs.azurewebsites.net/config_file.html
-description: Test E5 label embeddings #test regularization strategies for zero shot
+description: Test E5 multilingual instruct label embeddings #test regularization strategies for zero shot
 
 target:
   service: amlk8s
@@ -19,7 +19,44 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-- name: '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{E5}' 
+# - name: '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{E5_multiling_inst}' 
+#   sku: G8
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
+#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
+#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
+#     --name '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{E5_multiling_inst}'
+#     --override EXTRACT_VOCABULARIES_FROM null LABEL_EMBEDDING_POOLING_METHOD mean
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+
+# - name: '{normal}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{E5_multiling_inst}' 
+#   sku: G8
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --test-paths-names TEST_DATA_PATH
+#     --name '{normal}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{E5_multiling_inst}'
+#     --override LABEL_EMBEDDING_POOLING_METHOD mean
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+- name: '{zero shot}{medium MLP}{labels}{mean}{sequence augmentations 0.1}{label noise 0}{E5_multiling_inst}' 
   sku: G8
   priority: high
   preemptible: False
@@ -30,15 +67,15 @@ jobs:
     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-    --name '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{E5}'
-    --override EXTRACT_VOCABULARIES_FROM null LABEL_EMBEDDING_POOLING_METHOD mean
+    --name '{zero shot}{medium MLP}{labels}{mean}{sequence augmentations 0.1}{label noise 0}{E5_multiling_inst}'
+    --override EXTRACT_VOCABULARIES_FROM null LABEL_EMBEDDING_POOLING_METHOD mean LABEL_AUGMENTATION_DESCRIPTIONS label INFERENCE_GO_DESCRIPTIONS label
     --amlt
     --use-wandb
   submit_args:
     env:
       WANDB_API_KEY: "$WANDB_API_KEY"
 
-- name: '{normal}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{E5}' 
+- name: '{normal}{medium MLP}{labels}{mean}{sequence augmentations 0.1}{label noise 0}{E5_multiling_inst}' 
   sku: G8
   priority: high
   preemptible: False
@@ -49,14 +86,13 @@ jobs:
     --train-path-name TRAIN_DATA_PATH
     --validation-path-name VAL_DATA_PATH
     --test-paths-names TEST_DATA_PATH
-    --name '{normal}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{E5}'
-    --override LABEL_EMBEDDING_POOLING_METHOD mean
+    --name '{normal}{medium MLP}{labels}{mean}{sequence augmentations 0.1}{label noise 0}{E5_multiling_inst}'
+    --override LABEL_EMBEDDING_POOLING_METHOD mean LABEL_AUGMENTATION_DESCRIPTIONS label INFERENCE_GO_DESCRIPTIONS label
     --amlt
     --use-wandb
   submit_args:
     env:
       WANDB_API_KEY: "$WANDB_API_KEY"
-
 # - name: '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{wDecay 0.001}' 
 #   sku: G8
 #   priority: high

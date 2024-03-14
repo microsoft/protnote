@@ -9,7 +9,7 @@ import warnings
  
 def validate_arguments(args, parser):
     # Ensure the full data path is provided, or we are using the zero shot model        
-    if args.full_path_name is None and "zero" not in args.train_path_name.lower():
+    if args.full_path_name is None and "zero" not in str(args.train_path_name).lower():
         warnings.warn(
             "The full path name is not provided and the train path name does not contain the word 'zero'. Please ensure this is intentional."
         )

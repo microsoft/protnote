@@ -44,16 +44,16 @@ params:
   PROTEIN_EMBEDDING_DIM: 1100
   LABEL_EMBEDDING_DIM: 1024
   LATENT_EMBEDDING_DIM: 1024
-  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 2 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
-  OUTPUT_MLP_NUM_LAYERS: 2
+  OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR: 3 # Scale MLP hidden state with respect to LATENT_EMBEDDING_DIM
+  OUTPUT_MLP_NUM_LAYERS: 3
   OUTPUT_NEURON_PROBABILITY_BIAS: null
   OUTPUT_MLP_BATCHNORM: True
   SYNC_BN: False
   OUTPUT_MLP_DROPOUT: 0.0
   LABEL_EMBEDDING_DROPOUT: 0.0
   SEQUENCE_EMBEDDING_DROPOUT: 0.0
-  PROJECTION_HEAD_NUM_LAYERS: 2
-  PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 2
+  PROJECTION_HEAD_NUM_LAYERS: 4
+  PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 3
   FEATURE_FUSION: concatenation # Select from concatenation, concatenation_diff, concatenation_prod, similarity
   LABEL_EMBEDDING_POOLING_METHOD: 'mean' # Select from mean, last_token, all
   EXTRACT_VOCABULARIES_FROM: FULL_DATA_PATH # Can be any predefined path (e.g., FULL_DATA_PATH) or null. Null means generate vocab from scratch with dataset. Must set to null for zero-shot
@@ -84,7 +84,7 @@ params:
   LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 0
   DISTRIBUTE_LABELS: False
   TRAIN_PROJECTION_HEAD: True
-  LABEL_ENCODER_CHECKPOINT: intfloat/e5-large-v2 #microsoft/biogpt, intfloat/e5-large-v2
+  LABEL_ENCODER_CHECKPOINT: microsoft/biogpt #microsoft/biogpt, intfloat/e5-large-v2, intfloat/multilingual-e5-large-instruct
 
   # Data processing and metrics
   DEDUPLICATE: True
