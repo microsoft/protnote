@@ -32,6 +32,7 @@ def collate_variable_sequence_length(batch: List[Tuple],
 
     Returns:
         Dict: A dictionary containing the processed batch data. Keys include:
+              - 'sequence': List, strings of sequences.
               - 'sequence_onehots': Tensor, padded one-hot encoded sequences.
               - 'sequence_ids': List, sequence IDs.
               - 'sequence_lengths': Tensor, lengths of sequences.
@@ -45,11 +46,11 @@ def collate_variable_sequence_length(batch: List[Tuple],
     max_length = max(item["sequence_length"] for item in batch)
 
     # Initialize lists to store the processed values
+    processed_sequences = []
     processed_sequence_onehots = []
     processed_sequence_ids = []
     processed_sequence_lengths = []
     processed_label_multihots = []
-    processed_label_token_counts = []
     processed_label_embeddings = None
     
     if grid_sampler:
@@ -100,6 +101,7 @@ def collate_variable_sequence_length(batch: List[Tuple],
     # Loop through the batch
     for row in batch:
         # Get the sequence onehots, sequence length, sequence id, and label multihots
+        sequence = row["sequence"]
         sequence_onehots = row["sequence_onehots"]
         sequence_id = row["sequence_id"]
         sequence_length = row["sequence_length"]
@@ -123,11 +125,13 @@ def collate_variable_sequence_length(batch: List[Tuple],
             label_multihots = label_multihots[sampled_label_indices]
 
         # Append the other values to the processed lists
+        processed_sequences.append(sequence)
         processed_sequence_ids.append(sequence_id)
         processed_sequence_lengths.append(sequence_length)
         processed_label_multihots.append(label_multihots)
     
     processed_batch = {
+        "sequences": processed_sequences,
         "sequence_onehots": torch.stack(processed_sequence_onehots),
         "sequence_ids": processed_sequence_ids,
         "sequence_lengths": torch.stack(processed_sequence_lengths),

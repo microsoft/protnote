@@ -99,6 +99,8 @@ target/
 
 # amulet
 /amlt/
+/amlt-results/
+/notebooks/
 .amltconfig
 
 # runs

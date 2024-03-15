@@ -137,6 +137,7 @@ class ProTCL(nn.Module):
 
     def forward(
         self,
+        sequences=None,
         sequence_onehots=None,
         sequence_embeddings=None,
         sequence_lengths=None,
@@ -218,11 +219,19 @@ class ProTCL(nn.Module):
             # Otherwise, compute them on the fly (with or without gradients, depending on self.train_sequence_encoder).
             if self.train_sequence_encoder and self.training:
                 # Compute embeddings with gradient calculations enabled
-                P_f = self.sequence_encoder.get_embeddings(sequence_onehots, sequence_lengths)
+                P_f = self.sequence_encoder.get_embeddings(
+                    sequences=sequences,
+                    sequence_onehots=sequence_onehots,
+                    sequence_lengths=sequence_lengths
+                )
             else:
                 # Compute embeddings with gradient calculations disabled
                 with torch.no_grad():
-                    P_f = self.sequence_encoder.get_embeddings(sequence_onehots, sequence_lengths)
+                    P_f = self.sequence_encoder.get_embeddings(
+                        sequences=sequences,
+                        sequence_onehots=sequence_onehots,
+                        sequence_lengths=sequence_lengths
+                    )
         else:
             raise ValueError(
                 "Incompatible sequence parameters passed to forward method.")

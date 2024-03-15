@@ -6,7 +6,6 @@ from src.utils.main_utils import validate_arguments
 from src.data.datasets import ProteinDataset, create_multiple_loaders, calculate_sequence_weights
 from src.models.ProTCLTrainer import ProTCLTrainer
 from src.models.ProTCL import ProTCL
-from src.models.protein_encoders import ProteInfer
 from src.utils.losses import get_loss
 from src.utils.evaluation import EvalMetrics
 from src.utils.models import count_parameters_by_layer, sigmoid_bias_from_prob,load_model
@@ -21,9 +20,9 @@ import wandb
 import os
 import argparse
 import json
-import pandas as pd
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModel 
 from src.data.collators import collate_variable_sequence_length
+from src.models.protein_encoders import SequenceEncoder
 
 ### SETUP ###
 torch.cuda.empty_cache()
@@ -169,6 +168,7 @@ def train_validate_test(gpu, args):
     label_encoder = AutoModel.from_pretrained(
         params['LABEL_ENCODER_CHECKPOINT'],
     )
+    
     if params["GRADIENT_CHECKPOINTING"]:
         raise NotImplementedError(
             "Gradient checkpointing is not yet implemented.")
@@ -262,30 +262,13 @@ def train_validate_test(gpu, args):
         # Move the label encoder to CPU
         label_encoder = label_encoder.cpu()
 
-    # Initialize ProteInfer
-    if params['PRETRAINED_SEQUENCE_ENCODER']: 
-        sequence_encoder = ProteInfer.from_pretrained(
-            weights_path=paths["PROTEINFER_WEIGHTS_PATH"],
-            num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"],
-            input_channels=config["embed_sequences_params"]["INPUT_CHANNELS"],
-            output_channels=config["embed_sequences_params"]["OUTPUT_CHANNELS"],
-            kernel_size=config["embed_sequences_params"]["KERNEL_SIZE"],
-            activation=torch.nn.ReLU,
-            dilation_base=config["embed_sequences_params"]["DILATION_BASE"],
-            num_resnet_blocks=config["embed_sequences_params"]["NUM_RESNET_BLOCKS"],
-            bottleneck_factor=config["embed_sequences_params"]["BOTTLENECK_FACTOR"],
-        )
-    else:
-        sequence_encoder = ProteInfer(
-            num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"],
-            input_channels=config["embed_sequences_params"]["INPUT_CHANNELS"],
-            output_channels=config["embed_sequences_params"]["OUTPUT_CHANNELS"],
-            kernel_size=config["embed_sequences_params"]["KERNEL_SIZE"],
-            activation=torch.nn.ReLU,
-            dilation_base=config["embed_sequences_params"]["DILATION_BASE"],
-            num_resnet_blocks=config["embed_sequences_params"]["NUM_RESNET_BLOCKS"],
-            bottleneck_factor=config["embed_sequences_params"]["BOTTLENECK_FACTOR"],
-        )
+    # Initialize sequence encoder
+    sequence_encoder = SequenceEncoder(
+        encoder_type=params['SEQUENCE_ENCODER_IDENTIFIER'],
+        pretrained=params['PRETRAINED_SEQUENCE_ENCODER'],
+        paths=paths,
+        config=config
+    )
 
     model = ProTCL(
         # Parameters
@@ -387,13 +370,14 @@ def train_validate_test(gpu, args):
     # Load the model weights if --load-model argument is provided (using the DATA_PATH directory as the root)
     # TODO: Process model loading in the get_setup function
     if args.load_model:
+        logger.info(
+            f"Loading model checkpoint from {os.path.join(config['DATA_PATH'], args.load_model)}. If training, will continue from epoch {Trainer.epoch+1}.\n")
+        
         load_model(
             trainer=Trainer,
             checkpoint_path=os.path.join(config["DATA_PATH"], args.load_model),
             from_checkpoint=args.from_checkpoint
         )
-        logger.info(
-            f"Loading model checkpoing from {os.path.join(config['DATA_PATH'], args.load_model)}. If training, will continue from epoch {Trainer.epoch+1}.\n")
 
     # Initialize EvalMetrics
     eval_metrics = EvalMetrics(device=device)
@@ -421,29 +405,13 @@ def train_validate_test(gpu, args):
     else:
         logger.info("Skipping training...")
 
-    ####### TESTING LOOP #######
+    ####### FINAL VALIDATION AND TESTING LOOP #######
     all_test_metrics = {}
     all_metrics = {}
-
 
     # Setup for validation
     if args.validation_path_name:
         # Reinitialize the validation loader with all the data, in case we were using a subset to expedite training
-        full_val_loader = DataLoader(
-            datasets["validation"][0],
-            batch_size=params["TEST_BATCH_SIZE"],
-            shuffle=False,
-            collate_fn=collate_variable_sequence_length,
-            num_workers=params["NUM_WORKERS"],
-            pin_memory=True,
-            sampler=DistributedSampler(
-                datasets["validation"][0],
-                num_replicas=args.world_size,
-                rank=rank,
-                shuffle=True
-            )
-        )
-
         logger.info(
             f"\n{'='*100}\nTesting on validation set\n{'='*100}")
 
@@ -456,7 +424,7 @@ def train_validate_test(gpu, args):
         torch.cuda.empty_cache()
 
         validation_metrics = Trainer.evaluate(
-            data_loader=full_val_loader,
+            data_loader=loaders["validation"][0],
             eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*",
                                                                     threshold=0.5,
                                                                     num_labels=label_sample_sizes["validation"]

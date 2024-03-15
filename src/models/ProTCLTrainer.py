@@ -156,7 +156,8 @@ class ProTCLTrainer:
         """
 
         # Unpack the validation or testing batch
-        sequence_onehots, sequence_lengths, sequence_ids, label_multihots, label_embeddings = (
+        sequences, sequence_onehots, sequence_lengths, sequence_ids, label_multihots, label_embeddings = (
+            batch["sequences"],
             batch["sequence_onehots"],
             batch["sequence_lengths"],
             batch["sequence_ids"],
@@ -164,16 +165,18 @@ class ProTCLTrainer:
             batch["label_embeddings"]
         )
 
-        # Move all unpacked batch elements to GPU, if available
+        # Move all unpacked batch elements to GPU, if available (except sequences, which is a list of strings, not a tensor)
         sequence_onehots, sequence_lengths, label_multihots, label_embeddings = self._to_device(
             sequence_onehots, sequence_lengths, label_multihots, label_embeddings)
 
         # Forward pass
         inputs = {
+            "sequences": sequences,
             "sequence_onehots": sequence_onehots,
             "sequence_lengths": sequence_lengths,
             "label_embeddings": label_embeddings
         }
+
         with autocast():
             logits = self.model(**inputs)
             # Compute validation loss for the batch
@@ -181,28 +184,28 @@ class ProTCLTrainer:
 
         return loss.item(), logits, label_multihots, sequence_ids
     
-    def test_zero_shot(self,
-                       zero_shot_loader: torch.utils.data.DataLoader,
-                       eval_metrics: MetricCollection,
-                       ):
+    # def test_zero_shot(self,
+    #                    zero_shot_loader: torch.utils.data.DataLoader,
+    #                    eval_metrics: MetricCollection,
+    #                    ):
         
         
-        prefix = 'zero_shot'
+    #     prefix = 'zero_shot'
 
-        zero_shot_metrics = self.evaluate(data_loader=zero_shot_loader,
-                                       eval_metrics=eval_metrics,
-                                       metrics_prefix=prefix)
+    #     zero_shot_metrics = self.evaluate(data_loader=zero_shot_loader,
+    #                                    eval_metrics=eval_metrics,
+    #                                    metrics_prefix=prefix)
 
-        if self.use_wandb and self.is_master:
-            try:
-                if self.use_wandb and self.is_master:
-                    wandb.log(zero_shot_metrics,
-                                step=self.training_step
-                                )
+    #     if self.use_wandb and self.is_master:
+    #         try:
+    #             if self.use_wandb and self.is_master:
+    #                 wandb.log(zero_shot_metrics,
+    #                             step=self.training_step
+    #                             )
 
-            except Exception as e:
-                self.logger.warning(
-                    f"Failed to log validation metrics to wandb: {e}")
+    #         except Exception as e:
+    #             self.logger.warning(
+    #                 f"Failed to log validation metrics to wandb: {e}")
 
     def validate(self,
                  val_loader: torch.utils.data.DataLoader,
@@ -452,7 +455,8 @@ class ProTCLTrainer:
 
             # Unpack the training batch
             # In training, we use label_token_counts, but in validation and testing, we don't
-            sequence_onehots, sequence_lengths, label_multihots, label_embeddings, label_token_counts = (
+            sequences, sequence_onehots, sequence_lengths, label_multihots, label_embeddings, label_token_counts = (
+                batch["sequences"],
                 batch["sequence_onehots"],
                 batch["sequence_lengths"],
                 batch["label_multihots"],
@@ -460,12 +464,13 @@ class ProTCLTrainer:
                 batch["label_token_counts"]
             )
 
-            # Move all unpacked batch elements to GPU, if available
+            # Move all unpacked batch elements to GPU, if available (except sequences, which is a list of strings, not a tensor)
             sequence_onehots, sequence_lengths, label_multihots, label_embeddings, label_token_counts = self._to_device(
                 sequence_onehots, sequence_lengths, label_multihots, label_embeddings, label_token_counts)
 
             # Forward pass
             inputs = {
+                "sequences": sequences,
                 "sequence_onehots": sequence_onehots,
                 "sequence_lengths": sequence_lengths,
                 "label_embeddings": label_embeddings,
@@ -522,7 +527,7 @@ class ProTCLTrainer:
                 self.logger.info("+----------------- Train GPU Memory Usage -----------------+")
                 log_gpu_memory_usage(self.logger, 0)
                 self.logger.info("+----------------------------------------------------------+")
-                
+           
             # Print progress every 10%
             if batch_idx % (len(train_loader) // 10) == 0:
                 self.logger.info(f"[Train] Epoch {self.epoch}: Processed {batch_idx} out of {len(train_loader)} batches ({batch_idx / len(train_loader) * 100:.2f}%).")  

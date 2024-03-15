@@ -4,12 +4,11 @@
 # Run script with: ./run.sh
 
 python main.py \
-    --name '{A100}{Small MLP}{Sequence Augmentations [0.15, No Masking]}{Frozen Label Encoder}' \
-    --full-path-name FULL_DATA_PATH \
-    --train-path-name TRAIN_DATA_PATH \
-    --validation-path-name VAL_DATA_PATH \
-    --test-paths-names TEST_DATA_PATH \
-    --use-wandb
+    --name 'Test Unseen Sequences' \
+    --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT \
+    --override EXTRACT_VOCABULARIES_FROM null \
+    --load-model '/home/ncorley/proteins/ProteinFunctions/data/models/zero_shot/2024-03-05_16-43-59_{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 40}.pt'
 
 # Sleep for 10 seconds to allow everything to cleanly exit
 sleep 10
+# --override EXTRACT_VOCABULARIES_FROM null OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR 3 OUTPUT_MLP_NUM_LAYERS 3 PROJECTION_HEAD_NUM_LAYERS 4 PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR 3 \

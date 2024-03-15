@@ -104,9 +104,10 @@ class ProteinDataset(Dataset):
         # TODO: This path could be constructed in get_setup
         INDEX_OUTPUT_PATH = config['LABEL_EMBEDDING_PATH'].split('.')
         INDEX_OUTPUT_PATH = '_'.join([INDEX_OUTPUT_PATH[0] ,'index']) + '.'+ INDEX_OUTPUT_PATH[1]
-        index_mapping = torch.load(INDEX_OUTPUT_PATH)
-        self.label_embeddings_index, self.label_embeddings, self.label_token_counts, self.label_descriptions = self._process_label_embedding_mapping(mapping = index_mapping,
-                                                                                                                                                     embeddings = torch.load(config['LABEL_EMBEDDING_PATH']))
+        self.index_mapping = torch.load(INDEX_OUTPUT_PATH)
+        embeddings = torch.load(config['LABEL_EMBEDDING_PATH'])
+        self.label_embeddings_index, self.label_embeddings, self.label_token_counts, self.label_descriptions = self._process_label_embedding_mapping(mapping = self.index_mapping,
+                                                                                                                                                     embeddings = embeddings)
         logging.info('Number of unique labels in the label embeddings index: %s', len(self.label_embeddings_index))
         logging.info('Total number of label embeddings: %s', len(self.label_embeddings))
         logging.info('Total number of label token counts: %s', len(self.label_token_counts))
@@ -309,12 +310,15 @@ class ProteinDataset(Dataset):
             label_embeddings, label_token_counts = self._sample_label_embeddings()
         else:
             # Use the original label embeddings and token counts, which is O(1)
-            label_embeddings = self.label_embeddings
-            label_token_counts = self.label_token_counts
+            # TODO: Include code in the constructor that orders all tensors by the label vocabulary
+            label_embeddings, label_token_counts = self._sample_label_embeddings()
+            # label_embeddings = self.label_embeddings
+            # label_token_counts = self.label_token_counts
             
         # Return a dict containing the processed example
         # NOTE: In the collator, we will use the label token counts for only the first sequence in the batch
         return {
+            "sequence": sequence,
             "sequence_onehots": sequence_onehots,
             "sequence_id": sequence_id_alphanumeric,
             "sequence_length": sequence_length,
@@ -382,6 +386,7 @@ class ProteinDataset(Dataset):
     #         self.label_frequency = Counter()
     #         for result in results:
     #             self.label_frequency.update(result)
+    
     def calculate_label_frequency(self):
         if self.label_frequency is None:
             self.logger.info("Calculating label frequency...")
@@ -428,9 +433,6 @@ class ProteinDataset(Dataset):
             label_weights = {self.int2label[k]:v for k,v in label_weights.items()}
 
         return label_weights
-
-
-
 
 # def calculate_sequence_weights(data: list, label_inv_freq: dict):
 #     """

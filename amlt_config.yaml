@@ -1,5 +1,5 @@
 # For field details: https://amulet-docs.azurewebsites.net/config_file.html
-description: test label noising
+description: train large models
 
 target:
   service: amlk8s
@@ -19,7 +19,61 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-# - name: '{normal}{large MLP}{names}{last_token}{sequence augmentations 0.1}'
+# - name: '{zero shot}{large MLP}{default}{esm-2}{label noise 10}'
+#   sku: G8
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py 
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
+#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
+#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT 
+#     --name '{zero shot}{large MLP}{default}{esm-2}{label noise 10}'
+#     --override SEQUENCE_ENCODER_IDENTIFIER esm-2 PROTEIN_EMBEDDING_DIM 320 LABEL_EMBEDDING_NOISING_ALPHA 10 NUM_EPOCHS 64 LABEL_EMBEDDING_POOLING_METHOD mean EXTRACT_VOCABULARIES_FROM null OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR 3 OUTPUT_MLP_NUM_LAYERS 3 PROJECTION_HEAD_NUM_LAYERS 4 PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR 3
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: '{zero shot}{large MLP}{default}{esm-2}{label noise 20}'
+#   sku: G8
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py 
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
+#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
+#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT 
+#     --name '{zero shot}{large MLP}{default}{esm-2}{label noise 20}'
+#     --override SEQUENCE_ENCODER_IDENTIFIER esm-2 PROTEIN_EMBEDDING_DIM 320 LABEL_EMBEDDING_NOISING_ALPHA 20 NUM_EPOCHS 64 LABEL_EMBEDDING_POOLING_METHOD mean EXTRACT_VOCABULARIES_FROM null OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR 3 OUTPUT_MLP_NUM_LAYERS 3 PROJECTION_HEAD_NUM_LAYERS 4 PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR 3
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+- name: '{zero shot}{large MLP}{default}{proteinfer}{label noise 40}'
+  sku: G8
+  priority: high
+  preemptible: False
+  command:
+  - python main.py 
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
+    --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
+    --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT 
+    --name '{zero shot}{large MLP}{default}{proteinfer}{label noise 40}'
+    --override LABEL_EMBEDDING_NOISING_ALPHA 40 NUM_EPOCHS 32 LABEL_EMBEDDING_POOLING_METHOD mean EXTRACT_VOCABULARIES_FROM null OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR 3 OUTPUT_MLP_NUM_LAYERS 3 PROJECTION_HEAD_NUM_LAYERS 4 PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR 4
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: '{normal}{medium MLP}{default}{esm-2}{label noise 10}'
 #   sku: G8
 #   priority: high
 #   preemptible: False
@@ -31,8 +85,27 @@ jobs:
 #     --validation-path-name VAL_DATA_PATH 
 #     --test-paths-names TEST_DATA_PATH 
 #     --full-path-name FULL_DATA_PATH
-#     --name '{normal}{large MLP}{names}{last_token}{sequence augmentations 0.1}'
-#     --override NUM_EPOCHS 64 LABEL_EMBEDDING_POOLING_METHOD last_token EXTRACT_VOCABULARIES_FROM FULL_DATA_PATH OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR 3 OUTPUT_MLP_NUM_LAYERS 3 PROJECTION_HEAD_NUM_LAYERS 4 PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR 3
+#     --name '{normal}{medium MLP}{default}{esm-2}{label noise 10}'
+#     --override LABEL_EMBEDDING_NOISING_ALPHA 10 SEQUENCE_ENCODER_IDENTIFIER esm-2 PROTEIN_EMBEDDING_DIM 320
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: '{normal}{large MLP}{default}{esm-2}{label noise 0}'
+#   sku: G8
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py 
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH 
+#     --validation-path-name VAL_DATA_PATH 
+#     --test-paths-names TEST_DATA_PATH 
+#     --full-path-name FULL_DATA_PATH
+#     --name '{normal}{large MLP}{default}{esm-2}{label noise 0}'
+#     --override LABEL_EMBEDDING_NOISING_ALPHA 0 SEQUENCE_ENCODER_IDENTIFIER esm-2 PROTEIN_EMBEDDING_DIM 320 OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR 3 OUTPUT_MLP_NUM_LAYERS 3 PROJECTION_HEAD_NUM_LAYERS 4 PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR 4
 #     --amlt
 #     --use-wandb
 #   submit_args:
@@ -76,129 +149,57 @@ jobs:
 #   submit_args:
 #     env:
 #       WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0.0}'
-  sku: G8
-  priority: high
-  preemptible: False
-  command:
-  - python main.py 
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
-    --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
-    --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT 
-    --name '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0.0}'
-    --override EXTRACT_VOCABULARIES_FROM null LABEL_EMBEDDING_POOLING_METHOD mean AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 0.0 
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 1}'
-  sku: G8
-  priority: high
-  preemptible: False
-  command:
-  - python main.py 
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
-    --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
-    --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT 
-    --name '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 1}'
-    --override EXTRACT_VOCABULARIES_FROM null LABEL_EMBEDDING_POOLING_METHOD mean AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 1
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 5}'
-  sku: G8
-  priority: high
-  preemptible: False
-  command:
-  - python main.py 
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
-    --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
-    --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT 
-    --name '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 5}'
-    --override EXTRACT_VOCABULARIES_FROM null LABEL_EMBEDDING_POOLING_METHOD mean AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 5 
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 10}' 
-  sku: G8
-  priority: high
-  preemptible: False
-  command:
-  - python main.py 
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
-    --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
-    --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT 
-    --name '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 10}'
-    --override EXTRACT_VOCABULARIES_FROM null LABEL_EMBEDDING_POOLING_METHOD mean AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 10 
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 20}' 
-  sku: G8
-  priority: high
-  preemptible: False
-  command:
-  - python main.py 
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
-    --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
-    --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT 
-    --name '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 20}'
-    --override EXTRACT_VOCABULARIES_FROM null LABEL_EMBEDDING_POOLING_METHOD mean AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 40}' 
-  sku: G8
-  priority: high
-  preemptible: False
-  command:
-  - python main.py 
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
-    --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
-    --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT 
-    --name '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 40}'
-    --override EXTRACT_VOCABULARIES_FROM null LABEL_EMBEDDING_POOLING_METHOD mean AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 40 
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 100}' 
-  sku: G8
-  priority: high
-  preemptible: False
-  command:
-  - python main.py 
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
-    --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
-    --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT 
-    --name '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 100}'
-    --override EXTRACT_VOCABULARIES_FROM null LABEL_EMBEDDING_POOLING_METHOD mean AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 100
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 10}' 
+#   sku: G8
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py 
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
+#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
+#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT 
+#     --name '{zero shot}{medium MLP}{names}{mean}{sequence augmentations 0.1}{label noise 10}'
+#     --override EXTRACT_VOCABULARIES_FROM null LABEL_EMBEDDING_NOISING_ALPHA 10 
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: '{zero shot}{medium MLP}{proteinfer}' 
+#   sku: G8
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py 
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
+#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
+#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT 
+#     --name '{zero shot}{medium MLP}{proteinfer}'
+#     --override EXTRACT_VOCABULARIES_FROM null LABEL_EMBEDDING_NOISING_ALPHA 0 SEQUENCE_ENCODER_IDENTIFIER proteinfer
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: '{zero shot}{medium MLP}{esm-2}' 
+#   sku: G8
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py 
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT 
+#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT 
+#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT 
+#     --name '{zero shot}{medium MLP}{esm-2}'
+#     --override EXTRACT_VOCABULARIES_FROM null LABEL_EMBEDDING_NOISING_ALPHA 0 SEQUENCE_ENCODER_IDENTIFIER esm-2 PROTEIN_EMBEDDING_DIM 320
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_API_KEY: "$WANDB_API_KEY"
