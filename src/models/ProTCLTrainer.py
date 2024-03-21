@@ -356,7 +356,7 @@ class ProTCLTrainer:
         if eval_metrics is not None:
             eval_metrics.reset()
 
-        if not self.use_amlt:
+        if not self.config["params"]["ESTIMATE_MAP"]:
             mAP_micro = BinaryAUPRC(device='cpu')
             mAP_macro = MultilabelAUPRC(device='cpu',
                                         num_labels=len(data_loader.dataset.label_vocabulary))

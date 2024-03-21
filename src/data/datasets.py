@@ -309,8 +309,9 @@ class ProteinDataset(Dataset):
             label_embeddings, label_token_counts = self._sample_label_embeddings()
         else:
             # Use the original label embeddings and token counts, which is O(1)
-            label_embeddings = self.label_embeddings
-            label_token_counts = self.label_token_counts
+            label_embeddings, label_token_counts = self._sample_label_embeddings()
+            # label_embeddings = self.label_embeddings
+            # label_token_counts = self.label_token_counts
             
         # Return a dict containing the processed example
         # NOTE: In the collator, we will use the label token counts for only the first sequence in the batch
