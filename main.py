@@ -70,7 +70,13 @@ def main():
     
     parser.add_argument("--save-prediction-results", action="store_true", default=False,
                         help="Save predictions and ground truth dataframe for validation and/or test")
+    
+    parser.add_argument("--save-val-test-metrics", action="store_true", default=False,
+                        help="Append val/test metrics to json")
 
+    parser.add_argument("--save-val-test-metrics-path", default = 'outputs/results/ablation_results.json',
+                        help=" Path to append val/test metrics to json",type=str) 
+    
     parser.add_argument('-n', '--nodes', default=1, type=int,
                         metavar='N', help='Number of nodes (default: 1)')
 
@@ -427,23 +433,12 @@ def train_validate_test(gpu, args):
 
 
     # Setup for validation
+    from src.utils.data import read_json, write_json
+    if args.save_val_test_metrics_path:
+        metrics_results = read_json(args.save_val_test_metrics_path)
+    
     if args.validation_path_name:
         # Reinitialize the validation loader with all the data, in case we were using a subset to expedite training
-        full_val_loader = DataLoader(
-            datasets["validation"][0],
-            batch_size=params["TEST_BATCH_SIZE"],
-            shuffle=False,
-            collate_fn=collate_variable_sequence_length,
-            num_workers=params["NUM_WORKERS"],
-            pin_memory=True,
-            sampler=DistributedSampler(
-                datasets["validation"][0],
-                num_replicas=args.world_size,
-                rank=rank,
-                shuffle=True
-            )
-        )
-
         logger.info(
             f"\n{'='*100}\nTesting on validation set\n{'='*100}")
 
@@ -456,7 +451,7 @@ def train_validate_test(gpu, args):
         torch.cuda.empty_cache()
 
         validation_metrics = Trainer.evaluate(
-            data_loader=full_val_loader,
+            data_loader=loaders["validation"][0],#full_val_loader,
             eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*",
                                                                     threshold=0.5,
                                                                     num_labels=label_sample_sizes["validation"]
@@ -466,6 +461,8 @@ def train_validate_test(gpu, args):
                     )
         all_metrics.update(validation_metrics)
         logger.info(json.dumps(validation_metrics, indent=4))
+        if args.save_val_test_metrics:
+            metrics_results.append({**validation_metrics,**{'name':args.name}})
         logger.info("Final validation complete.")
 
         
@@ -488,6 +485,8 @@ def train_validate_test(gpu, args):
             )
             all_test_metrics.update(test_metrics)
             logger.info(json.dumps(test_metrics, indent=4))
+            if args.save_val_test_metrics:
+                metrics_results.append({**test_metrics,**{'name':args.name}}) 
             logger.info("Testing complete.")
 
         all_metrics.update(test_metrics)
@@ -495,6 +494,7 @@ def train_validate_test(gpu, args):
 
 
     ####### CLEANUP #######
+    write_json(metrics_results,'outputs/results/ablation_results.json')#TODO: REMOVE METRICS RESULTS
     logger.info(
         f"\n{'='*100}\nTraining, validating, and testing COMPLETE\n{'='*100}\n")
     # W&B and MLFlow
