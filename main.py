@@ -11,8 +11,7 @@ from src.utils.losses import get_loss
 from src.utils.evaluation import EvalMetrics
 from src.utils.models import count_parameters_by_layer, sigmoid_bias_from_prob,load_model
 from src.utils.configs import get_setup
-from torch.utils.data import DataLoader
-from torch.utils.data.distributed import DistributedSampler
+from src.utils.data import read_json, write_json
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.multiprocessing as mp
 import torch.distributed as dist
@@ -21,9 +20,7 @@ import wandb
 import os
 import argparse
 import json
-import pandas as pd
 from transformers import AutoTokenizer, AutoModel
-from src.data.collators import collate_variable_sequence_length
 
 ### SETUP ###
 torch.cuda.empty_cache()
@@ -433,10 +430,10 @@ def train_validate_test(gpu, args):
 
 
     # Setup for validation
-    from src.utils.data import read_json, write_json
-    if args.save_val_test_metrics_path:
+    run_metrics = {'name':args.name}
+    if args.save_val_test_metrics & is_master :
         metrics_results = read_json(args.save_val_test_metrics_path)
-    
+        
     if args.validation_path_name:
         # Reinitialize the validation loader with all the data, in case we were using a subset to expedite training
         logger.info(
@@ -462,7 +459,7 @@ def train_validate_test(gpu, args):
         all_metrics.update(validation_metrics)
         logger.info(json.dumps(validation_metrics, indent=4))
         if args.save_val_test_metrics:
-            metrics_results.append({**validation_metrics,**{'name':args.name}})
+            run_metrics.update(validation_metrics)
         logger.info("Final validation complete.")
 
         
@@ -486,7 +483,7 @@ def train_validate_test(gpu, args):
             all_test_metrics.update(test_metrics)
             logger.info(json.dumps(test_metrics, indent=4))
             if args.save_val_test_metrics:
-                metrics_results.append({**test_metrics,**{'name':args.name}}) 
+                run_metrics.update(test_metrics)
             logger.info("Testing complete.")
 
         all_metrics.update(test_metrics)
@@ -494,11 +491,15 @@ def train_validate_test(gpu, args):
 
 
     ####### CLEANUP #######
-    write_json(metrics_results,'outputs/results/ablation_results.json')#TODO: REMOVE METRICS RESULTS
+    
     logger.info(
         f"\n{'='*100}\nTraining, validating, and testing COMPLETE\n{'='*100}\n")
-    # W&B and MLFlow
+    # W&B, MLFlow amd optional metric results saving
     if is_master:
+        #Optionally save val/test results in json
+        if args.save_val_test_metrics:
+            metrics_results.append(run_metrics)
+            write_json(metrics_results,args.save_val_test_metrics_path)
         # Log test metrics
         if args.test_paths_names:
             if args.use_wandb:
