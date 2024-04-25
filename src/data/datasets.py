@@ -82,6 +82,14 @@ class ProteinDataset(Dataset):
         # will be ensembled per go term
         self.inference_go_descriptions = config['params']['INFERENCE_GO_DESCRIPTIONS'].split('+') 
 
+        '''
+        if len(config["params"]["LABEL_AUGMENTATION_DESCRIPTIONS"].split('+'))>1 and self.dataset_type == 'train':
+            #During training we should not ensemble. We use the defaul descriptions for predictions
+            self.label_augmentation_descriptions = config["params"]["INFERENCE_GO_DESCRIPTIONS_DEFAULT"]
+        else:
+            self.label_augmentation_descriptions = config["params"]["LABEL_AUGMENTATION_DESCRIPTIONS"].split('+')
+        '''
+        
         # Set the vocabularies.
         # If extract_vocabularies is null, generate vocab from self.data
         self.extract_vocabularies_from = config["params"]["EXTRACT_VOCABULARIES_FROM"]
@@ -107,6 +115,7 @@ class ProteinDataset(Dataset):
         index_mapping = torch.load(INDEX_OUTPUT_PATH)
         self.label_embeddings_index, self.label_embeddings, self.label_token_counts, self.label_descriptions = self._process_label_embedding_mapping(mapping = index_mapping,
                                                                                                                                                      embeddings = torch.load(config['LABEL_EMBEDDING_PATH']))
+        self.sorted_label_embeddings,self.sorted_label_token_counts = self._sort_label_embeddings()
         logging.info('Number of unique labels in the label embeddings index: %s', len(self.label_embeddings_index))
         logging.info('Total number of label embeddings: %s', len(self.label_embeddings))
         logging.info('Total number of label token counts: %s', len(self.label_token_counts))
@@ -266,7 +275,21 @@ class ProteinDataset(Dataset):
             idx = np.random.randint(low=self.label_embeddings_index[go_term]['min_idx'],
                                     high=self.label_embeddings_index[go_term]['max_idx']+1
                                     )
+
             label_embedding_idxs_list.append(idx)
+
+
+        return self.label_embeddings[label_embedding_idxs_list], self.label_token_counts[label_embedding_idxs_list]
+    
+    def _sort_label_embeddings(self):
+        label_embedding_idxs_list = []
+        
+        for go_term in self.label_vocabulary:    
+        
+            idxs = list(range(self.label_embeddings_index[go_term]['min_idx'],
+                                        self.label_embeddings_index[go_term]['max_idx']+1))
+            
+            label_embedding_idxs_list.extend(idxs)
 
         return self.label_embeddings[label_embedding_idxs_list], self.label_token_counts[label_embedding_idxs_list]
 
@@ -309,7 +332,7 @@ class ProteinDataset(Dataset):
             label_embeddings, label_token_counts = self._sample_label_embeddings()
         else:
             # Use the original label embeddings and token counts, which is O(1)
-            label_embeddings, label_token_counts = self._sample_label_embeddings()
+            label_embeddings, label_token_counts = self.sorted_label_embeddings,self.sorted_label_token_counts
             # label_embeddings = self.label_embeddings
             # label_token_counts = self.label_token_counts
             

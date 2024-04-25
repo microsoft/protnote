@@ -30,9 +30,12 @@ for idx,job in enumerate(jobs):
     
     compatible_model_paths = glob.glob(f'data/models/ProTCL/*{extracted_string}*.pt')
 
-    assert len(glob.glob(f'data/models/ProTCL/*{extracted_string}*.pt'))==1, "More than 1 model found"
+    if len(compatible_model_paths)==0:
+        raise ValueError("No models found")
+    elif len(compatible_model_paths)>1:
+        raise ValueError("More than 1 model found")
 
-    model_path = glob.glob(f'data/models/ProTCL/*{extracted_string}*.pt')[0][5:]
+    model_path = compatible_model_paths[0][5:]
 
     print('='*20)
     print('Found model path:')

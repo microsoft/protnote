@@ -68,7 +68,7 @@ def process_tfrecords(input_dir: str,
 
 if __name__ == '__main__':
     """
-    Example usage: python make_dataset.py --input-dir data/swissprot/proteinfer_splits/random/ --output-dir data/swissprot/proteinfer_splits/random/ --annotation-types GO
+    Example usage: python make_proteinfer_dataset.py --input-dir data/swissprot/proteinfer_splits/random/ --output-dir data/swissprot/proteinfer_splits/random/ --annotation-types GO
     """
     logging.basicConfig(
         format='%(asctime)s | %(levelname)s: %(message)s', level=logging.NOTSET)

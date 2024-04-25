@@ -1,0 +1,56 @@
+# For field details: https://amulet-docs.azurewebsites.net/config_file.html
+description: Protein Functions Experiment
+
+target:
+  service: amlk8s
+  name: itplabrr1cl1
+  vc: mprr2
+
+environment:
+  image: azureml/openmpi4.1.0-cuda11.8-cudnn8-ubuntu22.04:latest # ex: microsoft_pytorch:v1.2.0_gpu_cuda9.0_py36_release_gpuenv_hvd0.16.2
+  conda_yaml_file: $CONFIG_DIR/environment.yml
+
+code:
+  local_dir: $CONFIG_DIR/ 
+
+data:
+  local_dir: $CONFIG_DIR/data
+  remote_dir: data
+
+# SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
+search:
+  job_template:
+    name: "{experiment_name:s}_{auto:3s}"
+    sku: G8
+    priority: high
+    preemptible: False
+    command:
+    - python main.py 
+      --nodes 1
+      --gpus 8
+      --train-path-name TRAIN_DATA_PATH 
+      --validation-path-name VAL_DATA_PATH 
+      --full-path-name FULL_DATA_PATH 
+      --override FOCAL_LOSS_GAMMA {FOCAL_LOSS_GAMMA} FOCAL_LOSS_ALPHA {FOCAL_LOSS_ALPHA} LATENT_EMBEDDING_DIM {LATENT_EMBEDDING_DIM} OUTPUT_MLP_NUM_LAYERS {OUTPUT_MLP_NUM_LAYERS} OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR {OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR}
+      --amlt
+      --use-wandb
+    submit_args:
+      env:
+        WANDB_API_KEY: "$WANDB_API_KEY"
+  type: hyperdrive
+  sampling: random
+  max_trials: 2
+  parallel_trials: 2
+  #metrics here optional
+  #max_duration_hours here optional
+  params:
+    - name: FOCAL_LOSS_GAMMA
+      values: uniform(1,3)
+    - name: FOCAL_LOSS_ALPHA
+      values: uniform(0.1,.9)
+    - name: LATENT_EMBEDDING_DIM
+      values: choice(256,512,1024,2048,4096)
+    - name: OUTPUT_MLP_NUM_LAYERS
+      values: choice(2,3,4,5)
+    - name: OUTPUT_MLP_HIDDEN_DIM_SCALE_FACTOR
+      values: choice(0.5,1,2)
