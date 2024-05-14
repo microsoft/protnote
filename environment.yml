@@ -17,7 +17,6 @@ dependencies:
   - transformers=4.32.1
   - torchmetrics=1.2.0
   - biopython=1.79
-  - python-wget=3.2
   - torchdata=0.4.1
   - wandb=0.15.11
   - sacremoses=0.0.53
@@ -25,9 +24,10 @@ dependencies:
   - torchmetrics=1.2.0
   - pip:
     - pip
+    - torcheval==0.0.7
+    - wget==3.2
     - azureml-mlflow==1.53.0
     - loralib==0.1.2
-    - torcheval==0.0.7
     - tensorboard==2.15.1
     - obonet==1.0.0
     - blosum==2.0.2

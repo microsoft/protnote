@@ -72,6 +72,12 @@ parser.add_argument("--save-prediction-results", action="store_true", default=Fa
 parser.add_argument("--only-inference", action="store_true", default=False,
                     help="Whether to only predict without testing and computing metrics")
 
+parser.add_argument("--annotations-path-name", type=str, default="GO_ANNOTATIONS_PATH",
+                    help="Name of the annotation path. Defaults to GO.")
+
+parser.add_argument("--base-label-embedding-name", type=str, default="GO_BASE_LABEL_EMBEDDING_PATH",
+                    help="Name of the base label embedding path. Defaults to GO.")
+
 # TODO: Add an option to serialize and save config with a name corresponding to the model save path
 
 args = parser.parse_args()
@@ -84,12 +90,16 @@ if args.override:
 else:
     args.override=["WEIGHTED_SAMPLING","False","TEST_BATCH_SIZE",128]
 
+
+task = args.annotations_path_name.split('_')[0]
 config = get_setup(
     config_path=args.config,
     run_name=args.name,
     train_path_name=args.train_path_name,
     val_path_name=args.validation_path_name,
     test_paths_names=args.test_paths_names,
+    annotations_path_name = args.annotations_path_name,
+    base_label_embedding_name = args.base_label_embedding_name,
     amlt=False,
     is_master=True,
     overrides=args.override
@@ -161,7 +171,7 @@ loaders = create_multiple_loaders(
 print(loaders)
 
 model = ProteInfer.from_pretrained(
-    weights_path=paths["PROTEINFER_WEIGHTS_PATH"],
+    weights_path=paths[f"PROTEINFER_{task}_WEIGHTS_PATH"],
     num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"],
     input_channels=config["embed_sequences_params"]["INPUT_CHANNELS"],
     output_channels=config["embed_sequences_params"]["OUTPUT_CHANNELS"],
@@ -263,7 +273,7 @@ for loader_name, loader in loaders.items():
 
             save_evaluation_results(results=test_results,
                                                     label_vocabulary=loader[0].dataset.label_vocabulary,
-                                                    run_name="proteinfer",
+                                                    run_name=f"{task}_proteinfer",
                                                     output_dir=config["paths"]["RESULTS_DIR"],
                                                     data_split_name = loader_name
                                                     )

@@ -1,7 +1,6 @@
 import torch
 import logging
 import random
-import blosum as bl
 from collections import defaultdict
 from joblib import Parallel, delayed, cpu_count
 from functools import partial
@@ -9,6 +8,7 @@ from collections import Counter
 from typing import List
 import pandas as pd
 import numpy as np
+import blosum as bl
 from torch.utils.data import Dataset, DataLoader
 from src.data.collators import collate_variable_sequence_length
 from src.utils.data import read_fasta, get_vocab_mappings
@@ -98,7 +98,7 @@ class ProteinDataset(Dataset):
         vocabularies = generate_vocabularies(file_path = vocabulary_path)
         
         self.amino_acid_vocabulary = vocabularies["amino_acid_vocab"]
-        self.label_vocabulary = vocabularies["GO_label_vocab"]
+        self.label_vocabulary = vocabularies["label_vocab"]
         self.sequence_id_vocabulary = vocabularies["sequence_id_vocab"]
 
         # Preprocess dataset
@@ -115,6 +115,8 @@ class ProteinDataset(Dataset):
         index_mapping = torch.load(INDEX_OUTPUT_PATH)
         self.label_embeddings_index, self.label_embeddings, self.label_token_counts, self.label_descriptions = self._process_label_embedding_mapping(mapping = index_mapping,
                                                                                                                                                      embeddings = torch.load(config['LABEL_EMBEDDING_PATH']))
+    
+
         self.sorted_label_embeddings,self.sorted_label_token_counts = self._sort_label_embeddings()
         logging.info('Number of unique labels in the label embeddings index: %s', len(self.label_embeddings_index))
         logging.info('Total number of label embeddings: %s', len(self.label_embeddings))
@@ -590,6 +592,7 @@ def create_multiple_loaders(
             else:
                 # No sampling in validation and test sets
                 sequence_sampler = None
+                drop_last = False
 
             loader = DataLoader(
                 dataset,

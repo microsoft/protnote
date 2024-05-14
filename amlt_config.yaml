@@ -1,13 +1,20 @@
 # For field details: https://amulet-docs.azurewebsites.net/config_file.html
-description: Zero shot ablations label augmentation #test regularization strategies for zero shot
+description: Noarmal training with augmentations #Zero shot ablations v2.2
 
 target:
   service: sing
-  name: kings01
+  name: barlow01
   workspace_name: msrresrchws
 environment:
   image: amlt-sing/acpt-2.0.1-py3.10-cuda11.8 #azureml/openmpi4.1.0-cuda11.8-cudnn8-ubuntu22.04:latest 
   conda_yaml_file: $CONFIG_DIR/environment.yml
+  skip_conda_packages_on_sing:
+  - tensorflow
+  - cudatoolkit
+  - deepspeed
+  - pip
+  - python\b
+
 
 code:
   local_dir: $CONFIG_DIR/ 
@@ -18,42 +25,105 @@ data:
 
 # SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
 jobs:
-- name: '{zero_shot}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}' 
-  sku: G8
-  priority: high
-  preemptible: False
-  command:
-  - python main.py
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-    --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-    --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-    --name '{zero_shot}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}' 
-    --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{zero_shot}{MLP Large}{descriptions names+label}{ensemble False}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}' 
-  sku: G8-V100
-  priority: high
-  preemptible: False
-  command:
-  - python main.py
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-    --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-    --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-    --name '{zero_shot}{MLP Large}{descriptions names+label}{ensemble False}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}' 
-    --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 LABEL_AUGMENTATION_DESCRIPTIONS name+label
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: '{zero_shot}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}{weighted_sampling False}' 
+#   sku: G8
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
+#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
+#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
+#     --name '{zero_shot}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}{weighted_sampling False}' 
+#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label WEIGHTED_SAMPLING False
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: '{zero_shot}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}{loss_fn BCE}' 
+#   sku: G8
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
+#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
+#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
+#     --name '{zero_shot}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}{loss_fn BCE}' 
+#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label LOSS_FN BCE
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: '{zero_shot}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder biogpt}' 
+#   sku: G8
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
+#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
+#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
+#     --name '{zero_shot}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder biogpt}' 
+#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT microsoft/biogpt AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: '{zero_shot}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 0}{label_encoder E5_multiling_inst}' 
+#   sku: G8
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
+#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
+#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
+#     --name '{zero_shot}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 0}{label_encoder E5_multiling_inst}' 
+#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 0 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: '{zero_shot}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0}{label_noise 20}{label_encoder E5_multiling_inst}' 
+#   sku: G8
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
+#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
+#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
+#     --name '{zero_shot}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0}{label_noise 20}{label_encoder E5_multiling_inst}' 
+#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0 LABEL_EMBEDDING_NOISING_ALPHA 20 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+
+
+
+
 
 
 - name: '{normal}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}' 
@@ -66,36 +136,17 @@ jobs:
     --gpus 8
     --train-path-name TRAIN_DATA_PATH
     --validation-path-name VAL_DATA_PATH
-    --test-paths-names UNSEEN_DATA_PATH
+    --test-paths-names TEST_DATA_PATH
     --name '{normal}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}' 
-    --override ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label
+    --override ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 VALIDATION_BATCH_SIZE 8 TEST_BATCH_SIZE 8 NUM_EPOCHS 100 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label
     --amlt
     --use-wandb
   submit_args:
     env:
+      WANDB_BASE_URL: "https://microsoft-research.wandb.io"
       WANDB_API_KEY: "$WANDB_API_KEY"
-- name: '{normal}{MLP Large}{descriptions names+label}{ensemble False}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}' 
-  sku: G8-V100
-  priority: high
-  preemptible: False
-  command:
-  - python main.py
-    --nodes 1
-    --gpus 8
-    --train-path-name TRAIN_DATA_PATH
-    --validation-path-name VAL_DATA_PATH
-    --test-paths-names UNSEEN_DATA_PATH
-    --name '{normal}{MLP Large}{descriptions names+label}{ensemble False}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}' 
-    --override ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 LABEL_AUGMENTATION_DESCRIPTIONS name+label
-    --amlt
-    --use-wandb
-  submit_args:
-    env:
-      WANDB_API_KEY: "$WANDB_API_KEY"
-
-
-# - name: '{normal}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}' 
-#   sku: G8
+# - name: '{normal}{MLP Large}{descriptions names}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}' 
+#   sku: G8-V100
 #   priority: high
 #   preemptible: False
 #   command:
@@ -105,335 +156,78 @@ jobs:
 #     --train-path-name TRAIN_DATA_PATH
 #     --validation-path-name VAL_DATA_PATH
 #     --test-paths-names TEST_DATA_PATH
-#     --name '{normal}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}' 
-#     --override ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label
+#     --name '{normal}{MLP Large}{descriptions names}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}' 
+#     --override ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 VALIDATION_BATCH_SIZE 8 TEST_BATCH_SIZE 8 NUM_EPOCHS 64
 #     --amlt
 #     --use-wandb
 #   submit_args:
 #     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
 #       WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{zero_shot}{MLP Large}{descriptions names}{pooling mean}{sequence_augmentations 0.1}{label_noise 40}{label_encoder E5_multiling_inst}' 
-#   sku: G8
+
+# - name: '{normal}{MLP Large}{descriptions names}{pooling mean}{sequence_augmentations 0.1}{label_noise 10}{label_encoder E5_multiling_inst}' 
+#   sku: G8-V100
 #   priority: high
 #   preemptible: False
 #   command:
 #   - python main.py
 #     --nodes 1
 #     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero_shot}{MLP Large}{descriptions names}{pooling mean}{sequence_augmentations 0.1}{label_noise 40}{label_encoder E5_multiling_inst}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 40
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --test-paths-names TEST_DATA_PATH
+#     --name '{normal}{MLP Large}{descriptions names}{pooling mean}{sequence_augmentations 0.1}{label_noise 10}{label_encoder E5_multiling_inst}' 
+#     --override ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 10 VALIDATION_BATCH_SIZE 8 TEST_BATCH_SIZE 8 NUM_EPOCHS 64
 #     --amlt
 #     --use-wandb
 #   submit_args:
 #     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+
+# - name: '{normal}{MLP Large}{descriptions names}{pooling mean}{sequence_augmentations 0.1}{label_noise 0}{label_encoder E5_multiling_inst}' 
+#   sku: G8-V100
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --test-paths-names TEST_DATA_PATH
+#     --name '{normal}{MLP Large}{descriptions names}{pooling mean}{sequence_augmentations 0.1}{label_noise 0}{label_encoder E5_multiling_inst}' 
+#     --override ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 0 VALIDATION_BATCH_SIZE 8 TEST_BATCH_SIZE 8 NUM_EPOCHS 64
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+
+# - name: '{normal}{MLP Large}{descriptions names}{pooling mean}{sequence_augmentations 0.1}{label_noise 0}{label_encoder biogpt}' 
+#   sku: G8-V100
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --test-paths-names TEST_DATA_PATH
+#     --name '{normal}{MLP Large}{descriptions names}{pooling mean}{sequence_augmentations 0.1}{label_noise 0}{label_encoder biogpt}' 
+#     --override ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT microsoft/biogpt AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 0 VALIDATION_BATCH_SIZE 8 TEST_BATCH_SIZE 8 NUM_EPOCHS 64
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
 #       WANDB_API_KEY: "$WANDB_API_KEY"
 
 
 
 
-# - name: '{zero_shot}{MLP Large}{descriptions names+label}{pooling mean}{sequence_augmentations 0.1}{label_noise 30}{label_encoder E5_multiling_inst}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero_shot}{MLP Large}{descriptions name+label}{pooling mean}{sequence_augmentations 0.1}{label_noise 30}{label_encoder E5_multiling_inst}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 30  LABEL_AUGMENTATION_DESCRIPTIONS name+label
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{zero_shot}{MLP Large}{descriptions names+label}{pooling mean}{sequence_augmentations 0.1}{label_noise 10}{label_encoder E5_multiling_inst}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero_shot}{MLP Large}{descriptions names+label}{pooling mean}{sequence_augmentations 0.1}{label_noise 10}{label_encoder E5_multiling_inst}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 10  LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
 
-
-
-# - name: '{zero_shot}{MLP Large}{descriptions names+label}{ensemble true}{pooling mean}{sequence_augmentations 0.1}{label_noise 30}{label_encoder E5_multiling_inst}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero_shot}{MLP Large}{descriptions name+label}{ensemble true}{pooling mean}{sequence_augmentations 0.1}{label_noise 30}{label_encoder E5_multiling_inst}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 30  LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{zero_shot}{MLP Large}{descriptions names+label}{ensemble true}{pooling mean}{sequence_augmentations 0.1}{label_noise 10}{label_encoder E5_multiling_inst}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero_shot}{MLP Large}{descriptions names+label}{ensemble true}{pooling mean}{sequence_augmentations 0.1}{label_noise 10}{label_encoder E5_multiling_inst}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 10  LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0}{label noise 0}{BioGPT}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0}{label noise 0}{BioGPT}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro AUGMENT_RESIDUE_PROBABILITY 0
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0}{label noise 0}{E5}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0}{label noise 0}{E5}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/e5-large-v2 AUGMENT_RESIDUE_PROBABILITY 0
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0}{label noise 0}{E5_multiling_inst}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0}{label noise 0}{E5_multiling_inst}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-
-
-# - name: '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{BioGPT}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{BioGPT}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro AUGMENT_RESIDUE_PROBABILITY 0.1
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{E5}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{E5}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/e5-large-v2 AUGMENT_RESIDUE_PROBABILITY 0.1
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{E5_multiling_inst}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.1}{label noise 0}{E5_multiling_inst}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-
-
-
-
-# - name: '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.2}{label noise 0}{BioGPT}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.2}{label noise 0}{BioGPT}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro AUGMENT_RESIDUE_PROBABILITY 0.2
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.2}{label noise 0}{E5}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.2}{label noise 0}{E5}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/e5-large-v2 AUGMENT_RESIDUE_PROBABILITY 0.2
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.2}{label noise 0}{E5_multiling_inst}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.2}{label noise 0}{E5_multiling_inst}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.2
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-
-
-
-  
-# - name: '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.3}{label noise 0}{BioGPT}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.3}{label noise 0}{BioGPT}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro AUGMENT_RESIDUE_PROBABILITY 0.3
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.3}{label noise 0}{E5}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.3}{label noise 0}{E5}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/e5-large-v2 AUGMENT_RESIDUE_PROBABILITY 0.3
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
-# - name: '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.3}{label noise 0}{E5_multiling_inst}' 
-#   sku: G8
-#   priority: high
-#   preemptible: False
-#   command:
-#   - python main.py
-#     --nodes 1
-#     --gpus 8
-#     --train-path-name TRAIN_DATA_PATH_ZERO_SHOT
-#     --validation-path-name VAL_DATA_PATH_ZERO_SHOT
-#     --test-paths-names UNSEEN_DATA_PATH_ZERO_SHOT
-#     --name '{zero shot}{Large MLP}{names}{mean}{sequence augmentations 0.3}{label noise 0}{E5_multiling_inst}' 
-#     --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.3
-#     --amlt
-#     --use-wandb
-#   submit_args:
-#     env:
-#       WANDB_API_KEY: "$WANDB_API_KEY"
 
 

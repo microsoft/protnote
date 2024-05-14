@@ -111,17 +111,22 @@ class ProTCLTrainer:
                 processed_args.append(item)
         return processed_args
 
+    def _get_model(self):
+        if hasattr(self.model,'module'):
+            return self.model.module
+        return self.model
+
     def _set_optimizer(self, opt_name, lr):
         trainable_params = []
         trainable_params_names = []
 
         # Use to unfreeze last n layers. 0 means entire model frozen.
-        biogpt_train_last_n_layers(self.model.module.label_encoder,
+        biogpt_train_last_n_layers(self._get_model().label_encoder,
                                    self.label_encoder_num_trainable_layers,
                                    lora_params=self.lora_params
                                    )
         
-        for name, param in self.model.module.named_parameters():
+        for name, param in self._get_model().named_parameters():
             if name.startswith('sequence_encoder') and (not self.train_sequence_encoder):
                 param.requires_grad = False
 
@@ -356,15 +361,20 @@ class ProTCLTrainer:
         if eval_metrics is not None:
             eval_metrics.reset()
 
-        if not self.config["params"]["ESTIMATE_MAP"]:
+        if self.config["params"]["ESTIMATE_MAP"] == False:
             mAP_micro = BinaryAUPRC(device='cpu')
             mAP_macro = MultilabelAUPRC(device='cpu',
                                         num_labels=len(data_loader.dataset.label_vocabulary))
-        else:
+        
+        elif self.config["params"]["ESTIMATE_MAP"] == True:
             mAP_micro = BinaryBinnedAUPRC(device='cpu',threshold=50)
             mAP_macro = MultilabelBinnedAUPRC(device='cpu',
                                             num_labels=len(data_loader.dataset.label_vocabulary),
                                             threshold=50)
+        
+        elif self.config["params"]["ESTIMATE_MAP"] is None:
+            self.logger.info("Not computing mAP metrics")
+            mAP_macro = mAP_micro = None
 
         with torch.no_grad():
             
@@ -380,8 +390,9 @@ class ProTCLTrainer:
                     # Update eval metrics
                     eval_metrics(probabilities, labels)
 
-                    mAP_micro.update(probabilities.cpu().flatten(), labels.cpu().flatten())
-                    mAP_macro.update(probabilities.cpu(), labels.cpu())
+                    if (mAP_macro is not None)&(mAP_micro is not None):
+                        mAP_micro.update(probabilities.cpu().flatten(), labels.cpu().flatten())
+                        mAP_macro.update(probabilities.cpu(), labels.cpu())
 
                     # No need to save results everytime. Only need it for final evaluation.
                     if save_results:
@@ -389,8 +400,11 @@ class ProTCLTrainer:
                         test_results["logits"].append(logits.cpu())
                         test_results["labels"].append(labels.cpu())
 
+                
                 # Print progress every 25%
-                if batch_idx % (len(data_loader) // 4) == 0:
+                progress_chunk = 20
+                if batch_idx % (max(len(data_loader),progress_chunk) // progress_chunk) == 0:
+                    
                     self.logger.info(f"[Evaluation] Epoch {self.epoch}: Processed {batch_idx} out of {len(data_loader)} batches ({batch_idx / len(data_loader) * 100:.2f}%).")  
 
 
@@ -424,8 +438,8 @@ class ProTCLTrainer:
 
             final_metrics = eval_metrics.compute() if eval_metrics is not None else {}
             final_metrics.update({"loss": avg_loss,
-                                  "map_micro":mAP_micro.compute(),
-                                  "map_macro":mAP_macro.compute()
+                                  "map_micro":mAP_micro.compute() if mAP_micro is not None else None,
+                                  "map_macro":mAP_macro.compute() if mAP_macro is not None else None
                                   })
 
             final_metrics = metric_collection_to_dict_float(
@@ -489,7 +503,7 @@ class ProTCLTrainer:
                 
                 # Apply gradient clipping
                 if self.clip_value is not None:
-                    clip_grad_norm_(self.model.module.parameters(),
+                    clip_grad_norm_(self._get_model().parameters(),
                                     max_norm=self.clip_value)
                 
                 self.scaler.step(self.optimizer)
@@ -498,7 +512,7 @@ class ProTCLTrainer:
                 '''
                 # Log at this point to TB to have weights and gradients after a full epoch
                 if (batch_idx + 1 == len(train_loader)) & self.is_master:
-                    for name, weight in self.model.module.named_parameters():
+                    for name, weight in self._get_model().named_parameters():
                         if weight.requires_grad:
                             self.tb.add_histogram(name,weight, self.epoch)
                             self.tb.add_histogram(f'{name}.grad',weight.grad, self.epoch)
@@ -607,12 +621,12 @@ class ProTCLTrainer:
                             checkpoint_path=self.model_path)
 
             # Broadcast model state to other processes
-            for param in self.model.module.parameters():
+            for param in self._get_model().parameters():
                 # src=0 means source is the master process
                 torch.distributed.broadcast(param.data, src=0)
         else:
             # For non-master processes, just receive the broadcasted data
-            for param in self.model.module.parameters():
+            for param in self._get_model().parameters():
                 torch.distributed.broadcast(param.data, src=0)
         
         #self.tb.close()

@@ -40,6 +40,12 @@ def main():
 
     parser.add_argument("--test-paths-names", nargs="+", type=str, default=None,
                         help="Specify all the desired test paths names to test the model using names from config file to test. If not provided, model will not be tested.")
+    
+    parser.add_argument("--annotations-path-name", type=str, default="GO_ANNOTATIONS_PATH",
+                        help="Name of the annotation path. Defaults to GO.")
+    
+    parser.add_argument("--base-label-embedding-name", type=str, default="GO_BASE_LABEL_EMBEDDING_PATH",
+                        help="Name of the base label embedding path. Defaults to GO.")
 
     parser.add_argument("--use-wandb", action="store_true", default=False,
                         help="Use Weights & Biases for logging. Default is False.")
@@ -91,7 +97,7 @@ def main():
     # Distributed computing
     args.world_size = args.gpus * args.nodes
     if args.amlt:
-        os.environ['MASTER_ADDR'] = os.environ['MASTER_IP']
+        # os.environ['MASTER_ADDR'] = os.environ['MASTER_IP']
         args.nr = int(os.environ['NODE_RANK'])
     else:
         os.environ['MASTER_ADDR'] = 'localhost'
@@ -118,6 +124,7 @@ def train_validate_test(gpu, args):
     is_master = rank == 0
 
     # Unpack and process the config file
+    task = args.annotations_path_name.split('_')[0]
     config = get_setup(
         config_path=args.config,
         run_name=args.name,
@@ -125,6 +132,8 @@ def train_validate_test(gpu, args):
         train_path_name=args.train_path_name,
         val_path_name=args.validation_path_name,
         test_paths_names=args.test_paths_names,
+        annotations_path_name = args.annotations_path_name,
+        base_label_embedding_name = args.base_label_embedding_name,
         amlt=args.amlt,
         is_master=is_master,
     )
@@ -268,7 +277,7 @@ def train_validate_test(gpu, args):
     # Initialize ProteInfer
     if params['PRETRAINED_SEQUENCE_ENCODER']: 
         sequence_encoder = ProteInfer.from_pretrained(
-            weights_path=paths["PROTEINFER_WEIGHTS_PATH"],
+            weights_path=paths[f"PROTEINFER_{task}_WEIGHTS_PATH"],
             num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"],
             input_channels=config["embed_sequences_params"]["INPUT_CHANNELS"],
             output_channels=config["embed_sequences_params"]["OUTPUT_CHANNELS"],
@@ -434,6 +443,7 @@ def train_validate_test(gpu, args):
     if args.save_val_test_metrics & is_master :
         metrics_results = read_json(args.save_val_test_metrics_path)
         
+    best_th = None
     if args.validation_path_name:
         # Reinitialize the validation loader with all the data, in case we were using a subset to expedite training
         logger.info(
@@ -447,10 +457,15 @@ def train_validate_test(gpu, args):
         # Final validation using all labels
         torch.cuda.empty_cache()
 
+        
+        if params['DECISION_TH'] is None:
+            best_th, _ = Trainer.find_optimal_threshold(data_loader=loaders["validation"][0],
+                                        optimization_metric_name=params["OPTIMIZATION_METRIC_NAME"])
+            
         validation_metrics = Trainer.evaluate(
             data_loader=loaders["validation"][0],#full_val_loader,
             eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*",
-                                                                    threshold=0.5,
+                                                                    threshold=best_th if best_th is not None else params["DECISION_TH"],
                                                                     num_labels=label_sample_sizes["validation"]
                                                             ),
             save_results=args.save_prediction_results,
@@ -462,7 +477,7 @@ def train_validate_test(gpu, args):
             run_metrics.update(validation_metrics)
         logger.info("Final validation complete.")
 
-        
+
     # Setup for testing
     if args.test_paths_names:
         for idx, test_loader in enumerate(loaders["test"]):
@@ -475,7 +490,7 @@ def train_validate_test(gpu, args):
             test_metrics = Trainer.evaluate(
                 data_loader=test_loader,
                 eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*",
-                                                                          threshold=0.5,
+                                                                          threshold=best_th if best_th is not None else params["DECISION_TH"],
                                                                           num_labels=label_sample_sizes["test"]),
                 save_results=args.save_prediction_results,
                 metrics_prefix=f'test_{idx+1}'

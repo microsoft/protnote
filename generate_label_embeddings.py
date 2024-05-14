@@ -11,7 +11,7 @@ import pandas as pd
 from transformers import AutoTokenizer, AutoModel
 from src.utils.models import generate_label_embeddings_from_text
 from src.utils.configs import generate_label_embedding_path
-from src.utils.data import read_yaml, read_pickle
+from src.utils.data import read_yaml, read_pickle,remove_obsolete_from_string,ensure_list
 
 
 logging.basicConfig(level=logging.INFO)
@@ -19,21 +19,6 @@ logging.basicConfig(level=logging.INFO)
 ### SETUP ###
 torch.cuda.empty_cache()
 
-
-def ensure_list(value):
-    # Case 1: If the value is already a list
-    if isinstance(value, list):
-        return value
-    # Case 2: If the value is NaN
-    elif value is math.nan or (isinstance(value, float) and math.isnan(value)):
-        return []
-    # Case 3: For all other cases (including strings)
-    else:
-        return [value]
-
-def remove_obsolete_from_string(text):
-    pattern= r'(?i)\bobsolete\.?\s*'
-    return re.sub(pattern, '', text)
 
 def main():
     # ---------------------- HANDLE ARGUMENTS ----------------------#
@@ -53,6 +38,15 @@ def main():
         help="How to pool embeddings. mean, last_token, or all",
     )
 
+    parser.add_argument(
+        "--base-label-embedding-path",
+        type=str,
+        default="GO_BASE_LABEL_EMBEDDING_PATH",
+        help="the base label embedding path name from config. value must exist in config.",
+    )
+    parser.add_argument("--annotations-path-name", type=str, default="GO_ANNOTATIONS_PATH",
+                    help="Name of the annotation path. Defaults to GO.")
+    
     parser.add_argument(
         "--account-for-sos",
         type=bool,
@@ -84,22 +78,23 @@ def main():
         generate_label_embedding_path(
             params=CONFIG["params"],
             base_label_embedding_path=CONFIG["paths"]["data_paths"][
-                "BASE_LABEL_EMBEDDING_PATH"
+                args.base_label_embedding_path
             ],
         ),
     )
 
+    print(OUTPUT_PATH)
     INDEX_OUTPUT_PATH = OUTPUT_PATH.split('.')
     INDEX_OUTPUT_PATH = '_'.join([INDEX_OUTPUT_PATH[0] ,'index']) + '.'+ INDEX_OUTPUT_PATH[1]
 
-    GO_ANNOTATIONS_PATH = os.path.join(
-        DATA_PATH, CONFIG["paths"]["data_paths"]["GO_ANNOTATIONS_PATH"]
+    ANNOTATIONS_PATH = os.path.join(
+        DATA_PATH, CONFIG["paths"]["data_paths"][args.annotations_path_name]
     )
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     logging.info(f"Pooled embeddings will be saved to {OUTPUT_PATH}\n Pooled embeddings index will be saved to {INDEX_OUTPUT_PATH} \n Using pooling method: {args.pooling_method}")
 
-    go_descriptions = read_pickle(GO_ANNOTATIONS_PATH)
+    descriptions_file = read_pickle(ANNOTATIONS_PATH)
 
     # Initialize label tokenizer
     label_tokenizer = AutoTokenizer.from_pretrained(
@@ -114,7 +109,7 @@ def main():
 
     embeddings_idx = {'id': [],'description_type': [],'description': [], 'token_count': []}
     for go_term, desriptions in tqdm(
-        go_descriptions[['name','label','synonym_exact']].iterrows(), total=len(go_descriptions)
+        descriptions_file[['name','label','synonym_exact']].iterrows(), total=len(descriptions_file)
     ):
         for desription_type, desription_set in desriptions.items():
             for description in ensure_list(desription_set):

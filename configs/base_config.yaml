@@ -85,7 +85,7 @@ params:
   LABEL_ENCODER_NUM_TRAINABLE_LAYERS: 0
   DISTRIBUTE_LABELS: False
   TRAIN_PROJECTION_HEAD: True
-  LABEL_ENCODER_CHECKPOINT: microsoft/biogpt #microsoft/biogpt, intfloat/e5-large-v2, intfloat/multilingual-e5-large-instruct
+  LABEL_ENCODER_CHECKPOINT: intfloat/multilingual-e5-large-instruct #microsoft/biogpt, intfloat/e5-large-v2, intfloat/multilingual-e5-large-instruct
 
   # Data processing and metrics
   DEDUPLICATE: True
@@ -104,7 +104,7 @@ params:
   SEED: 42
   EPOCHS_PER_VALIDATION: 1 # Must be >= 1
   NUM_WORKERS: 3
-  DECISION_TH: null # Set to null if you want to use the best threshold from validation
+  DECISION_TH: 0.5 # Set to null if you want to use the best threshold from validation
 
   # Subset fractions (for rapid prototyping; set to 1 for final model)[s]
   TRAIN_SUBSET_FRACTION: 1 # Set to 1.0 if you want to use all data
@@ -132,6 +132,7 @@ paths:
     VAL_DATA_PATH: 'swissprot/proteinfer_splits/random/dev_GO.fasta'
     TEST_DATA_PATH: 'swissprot/proteinfer_splits/random/test_GO.fasta'
     FULL_DATA_PATH: 'swissprot/proteinfer_splits/random/full_GO.fasta' # used to generate vocabularies
+    ALL_SWISSPROT: 'swissprot/swissprot_2023.fasta'
 
     # Zero-shot data paths 
     TRAIN_DATA_PATH_ZERO_SHOT: 'swissprot/proteinfer_splits/random/2024-02-17_train_GO_zero_shot.fasta'
@@ -141,17 +142,29 @@ paths:
 
     # Data path for true zero-shot
     UNSEEN_DATA_PATH_ZERO_SHOT: 'zero_shot/SwissProt_2023_unseen_sequences_and_labels.fasta'
+    PINF_TEST_SET_UNSEEN: 'zero_shot/pinf_test_set_unseen.fasta'
+
+    #Other non-GO datasets to test zero shot
+    VAL_EC_DATA_PATH_ZERO_SHOT: 'zero_shot/dev_EC.fasta'
+    TEST_EC_DATA_PATH_ZERO_SHOT: 'zero_shot/test_EC.fasta'
+    FULL_EC_DATA_PATH: 'swissprot/proteinfer_splits/random/full_EC.fasta'
+    INFERENCE_DATA_PATH: 'zero_shot/inference.fasta'
 
     # Vocabulary paths
     VOCABULARIES_DIR: 'vocabularies/proteinfer'
     GO_ANNOTATIONS_PATH: 'annotations/go_annotations_2019_07_01_updated.pkl' # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
+    EC_ANNOTATIONS_PATH: 'annotations/ec_annotations.pkl'
+    INFERENCE_ANNOTATIONS_PATH: 'annotations/inference_annotations.pkl'
 
     # Embeddings paths (if using frozen pre-trained models)
-    BASE_LABEL_EMBEDDING_PATH: 'embeddings/frozen_label_embeddings.pt' # this is the base path which is modified by POOLING_METHOD
+    GO_BASE_LABEL_EMBEDDING_PATH: 'embeddings/frozen_label_embeddings.pt' # this is the base path which is modified by POOLING_METHOD
+    EC_BASE_LABEL_EMBEDDING_PATH: 'embeddings/ecv1_frozen_label_embeddings.pt' # this is the base path which is modified by POOLING_METHOD
+    INFERENCE_BASE_LABEL_EMBEDDING_PATH: 'embeddings/inference_frozen_label_embeddings.pt' 
 
     # ProteInfer paths
     PARENTHOOD_LIB_PATH: 'vocabularies/parenthood.json.gz'
-    PROTEINFER_WEIGHTS_PATH: 'models/proteinfer/GO_model_weights.pkl'
+    PROTEINFER_GO_WEIGHTS_PATH: 'models/proteinfer/GO_model_weights.pkl'
+    PROTEINFER_EC_WEIGHTS_PATH: 'models/proteinfer/EC_model_weights.pkl'
     
   # Paths referenced relative to OUTPUT_PATH (will have OUTPUT_PATH prepended)
   output_paths:

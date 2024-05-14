@@ -102,9 +102,13 @@ def count_parameters_by_layer(model):
 
 
 
-def tokenize_labels(text, tokenizer, max_length=1024):
+def tokenize_labels(text, tokenizer, max_length=510):
+
     """
+    E5 uses learned position embeddings up to position = 510.
+
     Tokenize a list of text strings.
+
 
     Args:
         text (list): The list of text strings.
@@ -305,7 +309,7 @@ def load_model(trainer, checkpoint_path, from_checkpoint=False):
         state_dict = new_state_dict
 
     # Load the state_dict into the model
-    trainer.model.module.load_state_dict(state_dict)
+    trainer._get_model().load_state_dict(state_dict)
 
     # Load the optimizer state and epoch number if they exist in the checkpoint
     if 'optimizer_state_dict' in checkpoint and from_checkpoint:

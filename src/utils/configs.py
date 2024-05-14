@@ -80,6 +80,8 @@ def get_setup(
     train_path_name: str = None,
     val_path_name: str = None,
     test_paths_names: list = None,
+    annotations_path_name: str = None,
+    base_label_embedding_name:str = None,
     amlt: bool = False,
     is_master: bool = True
 ):
@@ -122,7 +124,7 @@ def get_setup(
     train_paths_list = (
         [{"data_path": paths[train_path_name],
           "dataset_type": "train",
-          "go_annotations_path": paths['GO_ANNOTATIONS_PATH'],
+          "annotations_path": paths[annotations_path_name],
           "vocabularies_dir": paths["VOCABULARIES_DIR"]
           }]
         if train_path_name is not None
@@ -134,7 +136,7 @@ def get_setup(
             {
                 "data_path": paths[val_path_name],
                 "dataset_type": "validation",
-                "go_annotations_path": paths['GO_ANNOTATIONS_PATH'],
+                "annotations_path": paths[annotations_path_name],
                 "vocabularies_dir": paths["VOCABULARIES_DIR"]
             }
         ]
@@ -146,7 +148,7 @@ def get_setup(
         [
             {"data_path": paths[key],
              "dataset_type": "test",
-             "go_annotations_path": paths['GO_ANNOTATIONS_PATH'],
+             "annotations_path": paths[annotations_path_name],
              "vocabularies_dir": paths["VOCABULARIES_DIR"]
              }
             for key in test_paths_names
@@ -208,7 +210,7 @@ def get_setup(
 
     # Generate embeddings
     label_embedding_path = generate_label_embedding_path(params=params,
-                                                          base_label_embedding_path=paths['BASE_LABEL_EMBEDDING_PATH'])
+                                                          base_label_embedding_path=paths[base_label_embedding_name])
     
     # Return a dictionary
     return {

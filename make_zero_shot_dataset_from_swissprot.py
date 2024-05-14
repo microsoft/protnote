@@ -57,7 +57,7 @@ def process_data(data_file_path, sequence_embedding_file_path, label_embedding_f
 
     # Save df_2023 to a file
     df_2023.to_pickle(
-        "/home/ncorley/protein/ProteinFunctions/data/swissprot/swissprot_2023.pkl")
+        "/home/samirchar/ProteinFunctions/data/swissprot/swissprot_2023_full.pkl")
 
     # Load the sequence embeddings from the file and make a set of the sequence strings
     # TODO: Pass something other than the sequence embedding file path. Maybe the sequence embedding vocabulary, or even the ProteInfer data file?
