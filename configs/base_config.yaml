@@ -55,7 +55,7 @@ params:
   PROJECTION_HEAD_NUM_LAYERS: 4
   PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR: 3
   FEATURE_FUSION: concatenation # Select from concatenation, concatenation_diff, concatenation_prod, similarity
-  LABEL_EMBEDDING_POOLING_METHOD: 'mean' # Select from mean, last_token, all
+  LABEL_EMBEDDING_POOLING_METHOD: mean # Select from mean, last_token, all
   EXTRACT_VOCABULARIES_FROM: FULL_DATA_PATH # Can be any predefined path (e.g., FULL_DATA_PATH) or null. Null means generate vocab from scratch with dataset. Must set to null for zero-shot
   OPTIMIZATION_METRIC_NAME: f1_macro # Only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_macro
@@ -128,43 +128,43 @@ paths:
   # Paths referenced relative to DATA_PATH (will have DATA_PATH prepended)
   data_paths: 
     # ProteInfer data paths
-    TRAIN_DATA_PATH: 'swissprot/proteinfer_splits/random/train_GO.fasta'
-    VAL_DATA_PATH: 'swissprot/proteinfer_splits/random/dev_GO.fasta'
-    TEST_DATA_PATH: 'swissprot/proteinfer_splits/random/test_GO.fasta'
-    FULL_DATA_PATH: 'swissprot/proteinfer_splits/random/full_GO.fasta' # used to generate vocabularies
-    ALL_SWISSPROT: 'swissprot/swissprot_2023.fasta'
+    TRAIN_DATA_PATH: swissprot/proteinfer_splits/random/train_GO.fasta
+    VAL_DATA_PATH: swissprot/proteinfer_splits/random/dev_GO.fasta
+    TEST_DATA_PATH: swissprot/proteinfer_splits/random/test_GO.fasta
+    FULL_DATA_PATH: swissprot/proteinfer_splits/random/full_GO.fasta # used to generate vocabularies
+
+    TEST_2024_DATA_PATH: swissprot/proteinfer_splits/random/test_GO_may_2024.fasta
+    TEST_2024_PINF_VOCAB_DATA_PATH: swissprot/proteinfer_splits/random/test_GO_may_2024_pinf_vocab.fasta
+    
+    ALL_SWISSPROT: swissprot/swissprot_2023.fasta
 
     # Zero-shot data paths 
-    TRAIN_DATA_PATH_ZERO_SHOT: 'swissprot/proteinfer_splits/random/2024-02-17_train_GO_zero_shot.fasta'
-    VAL_DATA_PATH_ZERO_SHOT: 'swissprot/proteinfer_splits/random/2024-02-17_dev_GO_zero_shot.fasta'
-    TEST_DATA_PATH_ZERO_SHOT: 'swissprot/proteinfer_splits/random/2024-02-17_test_GO_zero_shot.fasta'
-    # We don't need a full zero-shot path, since we generate vocabularies independently
-
-    # Data path for true zero-shot
-    UNSEEN_DATA_PATH_ZERO_SHOT: 'zero_shot/SwissProt_2023_unseen_sequences_and_labels.fasta'
-    PINF_TEST_SET_UNSEEN: 'zero_shot/pinf_test_set_unseen.fasta'
+    TRAIN_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/2024-02-17_train_GO_zero_shot.fasta
+    VAL_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/2024-02-17_dev_GO_zero_shot.fasta
+    TEST_DATA_PATH_ZERO_SHOT: zero_shot/GO_swissprot_may_2024.fasta
+    TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES: zero_shot/GO_swissprot_leaf_nodes_may_2024.fasta
 
     #Other non-GO datasets to test zero shot
-    VAL_EC_DATA_PATH_ZERO_SHOT: 'zero_shot/dev_EC.fasta'
-    TEST_EC_DATA_PATH_ZERO_SHOT: 'zero_shot/test_EC.fasta'
-    FULL_EC_DATA_PATH: 'swissprot/proteinfer_splits/random/full_EC.fasta'
-    INFERENCE_DATA_PATH: 'zero_shot/inference.fasta'
+    VAL_EC_DATA_PATH_ZERO_SHOT: zero_shot/dev_EC.fasta
+    TEST_EC_DATA_PATH_ZERO_SHOT: zero_shot/test_EC.fasta
+    FULL_EC_DATA_PATH: swissprot/proteinfer_splits/random/full_EC.fasta
+    INFERENCE_DATA_PATH: zero_shot/inference.fasta
 
     # Vocabulary paths
-    VOCABULARIES_DIR: 'vocabularies/proteinfer'
-    GO_ANNOTATIONS_PATH: 'annotations/go_annotations_2019_07_01_updated.pkl' # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
-    EC_ANNOTATIONS_PATH: 'annotations/ec_annotations.pkl'
-    INFERENCE_ANNOTATIONS_PATH: 'annotations/inference_annotations.pkl'
+    VOCABULARIES_DIR: vocabularies/proteinfer
+    GO_ANNOTATIONS_PATH: annotations/go_annotations_may_2024.pkl #annotations/go_annotations_2019_07_01_updated.pkl # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
+    EC_ANNOTATIONS_PATH: annotations/ec_annotations.pkl
+    INFERENCE_ANNOTATIONS_PATH: annotations/inference_annotations.pkl
 
     # Embeddings paths (if using frozen pre-trained models)
-    GO_BASE_LABEL_EMBEDDING_PATH: 'embeddings/frozen_label_embeddings.pt' # this is the base path which is modified by POOLING_METHOD
-    EC_BASE_LABEL_EMBEDDING_PATH: 'embeddings/ecv1_frozen_label_embeddings.pt' # this is the base path which is modified by POOLING_METHOD
-    INFERENCE_BASE_LABEL_EMBEDDING_PATH: 'embeddings/inference_frozen_label_embeddings.pt' 
+    GO_BASE_LABEL_EMBEDDING_PATH: embeddings/frozen_label_embeddings.pt # this is the base path which is modified by POOLING_METHOD
+    GO_2024_BASE_LABEL_EMBEDDING_PATH: embeddings/2024_frozen_label_embeddings.pt
+    EC_BASE_LABEL_EMBEDDING_PATH: embeddings/ecv1_frozen_label_embeddings.pt # this is the base path which is modified by POOLING_METHOD
 
     # ProteInfer paths
-    PARENTHOOD_LIB_PATH: 'vocabularies/parenthood.json.gz'
-    PROTEINFER_GO_WEIGHTS_PATH: 'models/proteinfer/GO_model_weights.pkl'
-    PROTEINFER_EC_WEIGHTS_PATH: 'models/proteinfer/EC_model_weights.pkl'
+    PARENTHOOD_LIB_PATH: vocabularies/parenthood_may_2024.json
+    PROTEINFER_GO_WEIGHTS_PATH: models/proteinfer/GO_model_weights.pkl
+    PROTEINFER_EC_WEIGHTS_PATH: models/proteinfer/EC_model_weights.pkl
     
   # Paths referenced relative to OUTPUT_PATH (will have OUTPUT_PATH prepended)
   output_paths:

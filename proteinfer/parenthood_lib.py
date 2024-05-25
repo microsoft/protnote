@@ -43,7 +43,7 @@ EC_LEAF_NODE_METADATA_PATH = os.path.join(DATA_DIR, 'enzyme.dat')
 EC_NON_LEAF_NODE_METADATA_PATH = os.path.join(DATA_DIR, 'enzclass.txt')
 
 # From http://purl.obolibrary.org/obo/go.obo
-GO_METADATA_PATH = os.path.join(DATA_DIR, 'go.obo')
+GO_METADATA_PATH = os.path.join(DATA_DIR, 'go_may_2024.obo')
 
 # Labels that are implied by other labels.
 # Json is a map from string key (label) to list of applicable/implied

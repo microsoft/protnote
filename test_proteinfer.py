@@ -2,7 +2,7 @@ from src.data.datasets import ProteinDataset, create_multiple_loaders
 from src.utils.configs import get_setup
 from src.models.protein_encoders import ProteInfer
 from src.utils.evaluation import EvalMetrics,save_evaluation_results
-from src.utils.data import load_gz_json
+from src.utils.data import read_json
 import torch
 import numpy as np
 from tqdm import tqdm
@@ -64,7 +64,6 @@ parser.add_argument(
 
 parser.add_argument("--override", nargs="*",
                     help="Override config parameters in key-value pairs.")
-
 
 parser.add_argument("--save-prediction-results", action="store_true", default=False,
                     help="Save predictions and ground truth dataframe for validation and/or test")
@@ -171,7 +170,7 @@ loaders = create_multiple_loaders(
 print(loaders)
 
 model = ProteInfer.from_pretrained(
-    weights_path=paths[f"PROTEINFER_{task}_WEIGHTS_PATH"],
+    weights_path=paths[f"PROTEINFER_GO_WEIGHTS_PATH"],#TODO: replace GO with "{task}"
     num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"],
     input_channels=config["embed_sequences_params"]["INPUT_CHANNELS"],
     output_channels=config["embed_sequences_params"]["OUTPUT_CHANNELS"],
@@ -185,14 +184,16 @@ device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
 model.to(device)
 model = model.eval()
 
-label_normalizer = load_gz_json(paths["PARENTHOOD_LIB_PATH"])
+label_normalizer = read_json(paths["PARENTHOOD_LIB_PATH"])
 # Initialize EvalMetrics
 eval_metrics = EvalMetrics(device=device)
 label_sample_sizes = {k:(v if v is not None else len(datasets[k][0].label_vocabulary)) 
                         for k,v in label_sample_sizes.items() if k in datasets.keys()}
 
-for loader_name, loader in loaders.items():
 
+
+for loader_name, loader in loaders.items():
+    print(loader_name,len(loader[0].dataset.label_vocabulary))
     test_metrics = eval_metrics\
                 .get_metric_collection_with_regex(pattern='f1_m.*',
                                     threshold=args.threshold,
@@ -273,7 +274,7 @@ for loader_name, loader in loaders.items():
 
             save_evaluation_results(results=test_results,
                                                     label_vocabulary=loader[0].dataset.label_vocabulary,
-                                                    run_name=f"{task}_proteinfer",
+                                                    run_name=f"{task}_{args.name}",
                                                     output_dir=config["paths"]["RESULTS_DIR"],
                                                     data_split_name = loader_name
                                                     )

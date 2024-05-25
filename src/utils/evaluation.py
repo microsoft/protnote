@@ -260,11 +260,20 @@ def save_evaluation_results(results, label_vocabulary, run_name,output_dir,data_
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-
+    #This was created to do inference with proteinfer when the labels in the dataset are not in vocab..
     if len(label_vocabulary)!=results['logits'].shape[-1]:
-        logits_df_cols = list(range(results['logits'].shape[-1]))
+        logits_df_cols = list(map(str,range(results['logits'].shape[-1])))
     else:
         logits_df_cols = label_vocabulary
+        label_df = pd.DataFrame(results['labels'],
+                        columns=label_vocabulary,
+                        index=results['sequence_ids'])
+        label_df = convert_float16_to_float32(label_df)
+        label_df_output_path = os.path.join(
+            output_dir, f'{data_split_name}_labels_{run_name}.parquet')
+
+        print(f"saving results to {label_df_output_path}")
+        label_df.to_parquet(label_df_output_path)
 
     logits_df = pd.DataFrame(results['logits'],
                                     columns=logits_df_cols,
@@ -276,15 +285,7 @@ def save_evaluation_results(results, label_vocabulary, run_name,output_dir,data_
     logits_df.to_parquet(logits_df_output_path)
 
     
-    label_df = pd.DataFrame(results['labels'],
-                    columns=label_vocabulary,
-                    index=results['sequence_ids'])
-    label_df = convert_float16_to_float32(label_df)
-    label_df_output_path = os.path.join(
-        output_dir, f'{data_split_name}_labels_{run_name}.parquet')
-    
-    print(f"saving results to {label_df_output_path}")
-    label_df.to_parquet(label_df_output_path)
+
     
 
         

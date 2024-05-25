@@ -1,5 +1,5 @@
 # For field details: https://amulet-docs.azurewebsites.net/config_file.html
-description: Noarmal training with augmentations #Zero shot ablations v2.2
+description: Normal training with augmentations part2 v2 #Zero shot ablations v2.2
 
 target:
   service: sing
@@ -122,10 +122,6 @@ jobs:
 #       WANDB_API_KEY: "$WANDB_API_KEY"
 
 
-
-
-
-
 - name: '{normal}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}' 
   sku: G8-V100
   priority: high
@@ -136,11 +132,12 @@ jobs:
     --gpus 8
     --train-path-name TRAIN_DATA_PATH
     --validation-path-name VAL_DATA_PATH
-    --test-paths-names TEST_DATA_PATH
     --name '{normal}{MLP Large}{descriptions names+label}{ensemble True}{pooling mean}{sequence_augmentations 0.1}{label_noise 20}{label_encoder E5_multiling_inst}' 
     --override ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 VALIDATION_BATCH_SIZE 8 TEST_BATCH_SIZE 8 NUM_EPOCHS 100 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label
     --amlt
     --use-wandb
+    --load-model 'models/ProTCL/normal_test_label_aug_v4.pt'
+    --from-checkpoint
   submit_args:
     env:
       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
@@ -231,3 +228,4 @@ jobs:
 
 
 
+  

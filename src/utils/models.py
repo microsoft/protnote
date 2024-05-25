@@ -132,7 +132,7 @@ def compute_mean_hidden_states(last_hidden_states, attention_mask):
     # Compute the mean of the last hidden state
     return sum_hidden_states / num_relevant_tokens
 
-def pool_embeddings(last_hidden_states,attention_mask,method,account_for_sos = True):
+def pool_embeddings(last_hidden_states,attention_mask,method,account_for_sos):
     '''
     '''
     sequence_length_raw = attention_mask.sum(dim=1, keepdim=True) #includind SOS token
@@ -170,6 +170,7 @@ def get_label_embeddings(tokenized_labels, model, method, batch_size_limit=1000,
     Get embeddings for a list of tokenized labels.
     Assumes that tokenized_labels and model are on the same device, ideally GPU.
     """
+
     total_labels = tokenized_labels["input_ids"].shape[0]
     model.eval()
 
@@ -201,7 +202,7 @@ def get_label_embeddings(tokenized_labels, model, method, batch_size_limit=1000,
                 sequence_embeddings = model(
                     input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
             sequence_embeddings = pool_embeddings(
-                sequence_embeddings, attention_mask,method)
+                sequence_embeddings, attention_mask,method,account_for_sos=account_for_sos)
                         
             all_label_embeddings.append(sequence_embeddings.cpu() if append_in_cpu else sequence_embeddings)
             del sequence_embeddings
@@ -222,6 +223,7 @@ def generate_label_embeddings_from_text(label_annotations,
                                         append_in_cpu=False,
                                         account_for_sos=True):
     """Tokenize the labels and generate label embeddings."""
+    
     tokenized_labels = tokenize_labels(label_annotations, label_tokenizer)
 
     # Move to GPU
@@ -247,12 +249,10 @@ def print_checkpoint(checkpoint):
     For debugging
     '''
     
-    print("weights_sum",sum([i.sum() for i in checkpoint['model_state_dict'].values()]))
     print('epoch',checkpoint['epoch'])
     print('best_val_metric',checkpoint['best_val_metric'])
 
     max_step = max(checkpoint['optimizer_state_dict']['state'].keys())
-    print('optimizer param groups',checkpoint['optimizer_state_dict']['param_groups'])
     print('optimizer max step',checkpoint['optimizer_state_dict']['state'][max_step])
 
 def save_checkpoint(model, optimizer, epoch, best_val_metric, model_path):
@@ -295,6 +295,8 @@ def load_model(trainer, checkpoint_path, from_checkpoint=False):
 
     # Load the entire checkpoint
     checkpoint = torch.load(checkpoint_path)
+
+    print_checkpoint(checkpoint)
     
     # Extract the state_dict from the checkpoint
     state_dict = checkpoint['model_state_dict']
@@ -316,48 +318,11 @@ def load_model(trainer, checkpoint_path, from_checkpoint=False):
         trainer.optimizer.load_state_dict(
             checkpoint['optimizer_state_dict'])
     if 'epoch' in checkpoint and from_checkpoint:
-        trainer.epoch = checkpoint['epoch']
+        trainer.starting_epoch = checkpoint['epoch']
+        trainer.epoch = trainer.starting_epoch
     if 'best_val_metric' in checkpoint and from_checkpoint:
         trainer.best_val_metric = checkpoint['best_val_metric']
 
-    # Delete the checkpoint to save memory
+    
+    # Delete the checkpoint to save memoryload_checkpoint[]
     del checkpoint
-
-def load_checkpoint(trainer, checkpoint_path):
-    """
-    Load the model's state dict, optimizer's state, and epoch number from the checkpoint.
-
-    This function handles both DDP-wrapped and non-DDP checkpoints.
-
-    :param model: The model into which the checkpoint's state dict should be loaded.
-    :param trainer: The trainer instance containing the optimizer and epoch attributes.
-    :param checkpoint_path: Path to the checkpoint file.
-    """
-
-    # Load the entire checkpoint
-    checkpoint = torch.load(checkpoint_path)
-
-    # Extract the state_dict from the checkpoint
-    model_state_dict = checkpoint['model_state_dict']
-
-    # Check if the state_dict is from a DDP-wrapped model
-    if list(model_state_dict.keys())[0].startswith('module.'):
-        # Remove the "module." prefix
-        new_model_state_dict = OrderedDict()
-        for k, v in model_state_dict.items():
-            name = k[7:]  # remove 'module.' prefix
-            new_model_state_dict[name] = v
-        model_state_dict = new_model_state_dict
-
-    # Load the state_dict into the model
-    trainer.model.module.load_state_dict(model_state_dict)
-
-    # Load the optimizer state and epoch number if they exist in the checkpoint
-    if 'optimizer_state_dict' in checkpoint:
-        trainer.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    if 'epoch' in checkpoint:
-        trainer.epoch = checkpoint['epoch']
-    if 'best_val_metric' in checkpoint:
-        trainer.best_val_metric = checkpoint['best_val_metric']
-
-

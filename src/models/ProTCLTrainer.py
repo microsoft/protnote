@@ -1,5 +1,5 @@
 import logging
-from src.utils.data import load_gz_json, log_gpu_memory_usage
+from src.utils.data import log_gpu_memory_usage,read_json
 from src.utils.evaluation import EvalMetrics,metric_collection_to_dict_float,save_evaluation_results
 from src.utils.losses import BatchWeightedBCE, FocalLoss, RGDBCE, WeightedBCE,SupCon, CBLoss
 from torchmetrics import MetricCollection, Metric
@@ -66,7 +66,7 @@ class ProTCLTrainer:
         self.EPOCHS_PER_VALIDATION = config["params"]["EPOCHS_PER_VALIDATION"]
         self.gradient_accumulation_steps = config["params"]["GRADIENT_ACCUMULATION_STEPS"]
         self.clip_value = config["params"]["CLIP_VALUE"]
-        self.label_normalizer = load_gz_json(
+        self.label_normalizer = read_json(
             config["paths"]["PARENTHOOD_LIB_PATH"]
         )
         self.output_model_dir = config["paths"]["OUTPUT_MODEL_DIR"]

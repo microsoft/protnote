@@ -49,8 +49,7 @@ def main():
     
     parser.add_argument(
         "--account-for-sos",
-        type=bool,
-        default=True,
+        action='store_true',
         help="Whether to ignore the SOS token. Set to True for BioGPT and False for E5. Doesn't make any difference if pooling method = last_token"
     )
 
@@ -106,7 +105,7 @@ def main():
     ).to(DEVICE)
 
     logging.info("Flattening descriptions for batch processing and calculating sequence token lengths...")
-
+    print('SOS = ',args.account_for_sos,args.account_for_sos==False)
     embeddings_idx = {'id': [],'description_type': [],'description': [], 'token_count': []}
     for go_term, desriptions in tqdm(
         descriptions_file[['name','label','synonym_exact']].iterrows(), total=len(descriptions_file)
@@ -122,9 +121,9 @@ def main():
                 embeddings_idx['id'].append(go_term)
                 embeddings_idx['description_type'].append(desription_type)
                 embeddings_idx['token_count'].append(len(label_tokenizer.tokenize(description))) # We need the token count for embedding normalization (longer descriptions will have more feature-rich embeddings)
-        print(description)
     # Remove Obsolete/Deprecated texts
     logging.info("Extracting embeddings...")
+
     embeddings = generate_label_embeddings_from_text(
         label_annotations=embeddings_idx['description'],
         label_tokenizer=label_tokenizer,

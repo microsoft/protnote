@@ -220,19 +220,23 @@ class Blossum62Mutations:
         blosum62 = bl.BLOSUM(62)
         self.blosum62 = defaultdict(dict, {aa1: {aa2: blosum62[aa1][aa2] for aa2 in blosum62.keys()} for aa1 in blosum62.keys()})
 
-    def get_aa_scores(self,amino_acid: str,mutation_type:Literal['conservative','non-conservative']):
+    def get_aa_scores(self,amino_acid: str):
 
         # Get the substitutions for the amino acid, ensuring only amino acids within the vocabulary are considered
         substitutions = self.blosum62[amino_acid]
-        multiplier = -1 if mutation_type=='non-conservative'else 1
-        substitutions = {aa: score*multiplier for aa, score in substitutions.items() if aa in self.amino_acid_vocabulary}
+        substitutions = {aa: score for aa, score in substitutions.items() if aa in self.amino_acid_vocabulary}
         amino_acids, scores = zip(*substitutions.items())
         return amino_acids, scores
 
     def get_most_extreme_mutation(self,amino_acid:str,mutation_type:Literal['conservative','non-conservative']):
-        amino_acids, scores = self.get_aa_scores(amino_acid=amino_acid,
-                                                 mutation_type=mutation_type)    
-        fun = max if mutation_type == 'conservative' else min
+        amino_acids, scores = self.get_aa_scores(amino_acid=amino_acid)    
+        
+        if mutation_type == 'conservative':
+            fun = max
+            #TODO: fix to avoid always returning original aa
+        else:
+            fun = min
+
         return amino_acids[scores.index(fun(scores))]
 
     def corrupt_sequence(self,sequence:str,mutation_type:Literal['conservative','non-conservative'],sample:bool):
@@ -267,11 +271,10 @@ class Blossum62Mutations:
             str: The substituted amino acid.
         """
 
-        amino_acids, scores = self.get_aa_scores(amino_acid=amino_acid,
-                                                 mutation_type=mutation_type)
-        
+        amino_acids, scores = self.get_aa_scores(amino_acid=amino_acid)
+        multiplier = -1 if mutation_type=='non-conservative'else 1
         # Use only non-negative scores
-        probabilities = [max(0, score) for score in scores]
+        probabilities = [max(0, score*multiplier) for score in scores]
         total = sum(probabilities)
         
         # If all scores are negative, do not change the amino acid

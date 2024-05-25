@@ -15,6 +15,7 @@ from src.utils.data import (
     seed_everything,
     log_gpu_memory_usage
 )
+from src.utils.data import Blossum62Mutations
 from src.utils.main_utils import validate_arguments
 from src.data.datasets import ProteinDataset, create_multiple_loaders, calculate_sequence_weights
 from src.models.ProTCLTrainer import ProTCLTrainer
@@ -36,6 +37,13 @@ from Bio.SeqRecord import SeqRecord
 from Bio import SeqIO
 # ---------------------- HANDLE ARGUMENTS ----------------------#
 parser = argparse.ArgumentParser(description="Inference with mutations")
+
+parser.add_argument("--input-path", type=str, default='inference.json',
+                    help="The path to input data json")
+
+parser.add_argument("--window-size", type=int,
+                    help="The size of moving window for mutations")
+
 parser.add_argument("--config", type=str, default="configs/base_config.yaml",
                     help="(Relative) path to the configuration file.")
 
@@ -63,26 +71,9 @@ INDEX_OUTPUT_PATH = '_'.join([INDEX_OUTPUT_PATH[0] ,'index']) + '.'+ INDEX_OUTPU
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-labels_idxs = ['P1',
-               'P2',
-               'P3',
-               'N1',
-               'N2',
-               'P4',
-               'P5',
-               'P6'
-            ]
-
-names = ['External growth factor protein binding',
-         'EGF binding',
-         'Phosphoaminophosphonic acid-adenylate ester binding',
-         'Nucleic acid binding',
-         'Negative allosteric inhibition',
-         'catalytic activity, acting on a protein',
-         'protein binding',
-         'transferase activity']
-
-sequence = 'MRPSGTAGAALLALLAALCPASRALEEKKVCQGTSNKLTQLGTFEDHFLSLQRMFNNCEVVLGNLEITYVQRNYDLSFLKTIQEVAGYVLIALNTVERIPLENLQIIRGNMYYENSYALAVLSNYDANKTGLKELPMRNLQEILHGAVRFSNNPALCNVESIQWRDIVSSDFLSNMSMDFQNHLGSCQKCDPSCPNGSCWGAGEENCQKLTKIICAQQCSGRCRGKSPSDCCHNQCAAGCTGPRESDCLVCRKFRDEATCKDTCPPLMLYNPTTYQMDVNPEGKYSFGATCVKKCPRNYVVTDHGSCVRACGADSYEMEEDGVRKCKKCEGPCRKVCNGIGIGEFKDSLSINATNIKHFKNCTSISGDLHILPVAFRGDSFTHTPPLDPQELDILKTVKEITGFLLIQAWPENRTDLHAFENLEIIRGRTKQHGQFSLAVVSLNITSLGLRSLKEISDGDVIISGNKNLCYANTINWKKLFGTSGQKTKIISNRGENSCKATGQVCHALCSPEGCWGPEPRDCVSCRNVSRGRECVDKCNLLEGEPREFVENSECIQCHPECLPQAMNITCTGRGPDNCIQCAHYIDGPHCVKTCPAGVMGENNTLVWKYADAGHVCHLCHPNCTYGCTGPGLEGCPTNGPKIPSIATGMVGALLLLLVVALGIGLFMRRRHIVRKRTLRRLLQERELVEPLTPSGEAPNQALLRILKETEFKKIKVLGSGAFGTVYKGLWIPEGEKVKIPVAIKELREATSPKANKEILDEAYVMASVDNPHVCRLLGICLTSTVQLITQLMPFGCLLDYVREHKDNIGSQYLLNWCVQIAKGMNYLEDRRLVHRDLAARNVLVKTPQHVKITDFGLAKLLGAEEKEYHAEGGKVPIKWMALESILHRIYTHQSDVWSYGVTVWELMTFGSKPYDGIPASEISSILEKGERLPQPPICTIDVYMIMVKCWMIDADSRPKFRELIIEFSKMARDPQRYLVIQGDERMHLPSPTDSNFYRALMDEEDMDDVVDADEYLIPQQGFFSSPSTSRTPLLSSLSATSNNSTVACIDRNGLQSCPIKEDSFLQRYSSDPTGALTEDSIDDTFLPVPEYINQSVPKRPAGSVQNPVYHNQPLNPAPSRDPHYQDPHSTAVGNPEYLNTVQPTCVNSTFDSPAHWAQKGSHQISLDNPDYQQDFFPKEAKPNGIFKGSTAENAEYLRVAPQSSEFIGA'
+data = read_json(args.input_path)
+names,labels_idxs = list(zip(*data['labels']))
+sequence = data['sequence']
 
 labels=synonym_exact=names
 
@@ -124,12 +115,19 @@ torch.save(embeddings, OUTPUT_PATH)
 torch.save(embeddings_idx, INDEX_OUTPUT_PATH)
 
 
-
+BM = Blossum62Mutations()
 # Create DataSet
 records=[]
-for i in range(10):
-    sampled_sequence = sequence
-    records.append(SeqRecord(Seq(sampled_sequence),id=str(i),description=" ".join(labels_idxs)))
+
+#Add original sequence first
+records.append(SeqRecord(Seq(sequence),id='none',description=" ".join(labels_idxs)))
+
+for window_start in range(len(sequence)-args.window_size+1):
+    window_end = window_start+args.window_size-1
+    locations = set(range(window_start,window_end+1))
+    sampled_sequence = BM.corrupt_sequence_at_locations(sequence,locations,'non-conservative',sample=False)
+    id=f'{window_start}-{window_end}:{sequence[window_start:window_end+1]}->{sampled_sequence[window_start:window_end+1]}'
+    records.append(SeqRecord(Seq(sampled_sequence),id=id,description=" ".join(labels_idxs)))
 
 SeqIO.write(records, 'data/zero_shot/inference.fasta' , "fasta")
 
@@ -275,4 +273,6 @@ test_metrics = Trainer.evaluate(
                                                                 threshold=0.3,
                                                                 num_labels=label_sample_sizes["test"]),
     save_results=True,
+    metrics_prefix=f'window_{args.window_size}'
 )
+

@@ -275,7 +275,7 @@ def train_validate_test(gpu, args):
         label_encoder = label_encoder.cpu()
 
     # Initialize ProteInfer
-    if params['PRETRAINED_SEQUENCE_ENCODER']: 
+    if params['PRETRAINED_SEQUENCE_ENCODER'] & (args.load_model is None): 
         sequence_encoder = ProteInfer.from_pretrained(
             weights_path=paths[f"PROTEINFER_{task}_WEIGHTS_PATH"],
             num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"],
@@ -407,6 +407,7 @@ def train_validate_test(gpu, args):
         logger.info(
             f"Loading model checkpoing from {os.path.join(config['DATA_PATH'], args.load_model)}. If training, will continue from epoch {Trainer.epoch+1}.\n")
 
+    
     # Initialize EvalMetrics
     eval_metrics = EvalMetrics(device=device)
     
