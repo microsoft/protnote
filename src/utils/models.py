@@ -275,7 +275,7 @@ def save_checkpoint(model, optimizer, epoch, best_val_metric, model_path):
 
     torch.save(checkpoint, model_path)
 
-def load_model(trainer, checkpoint_path, from_checkpoint=False):
+def load_model(trainer, checkpoint_path:str, rank:int, from_checkpoint=False):
     """
     Load the model's state from a given checkpoint.
 
@@ -292,9 +292,11 @@ def load_model(trainer, checkpoint_path, from_checkpoint=False):
     Note:
     The function assumes that the model in the trainer object is DDP-wrapped.
     """
+    torch.cuda.empty_cache()
 
     # Load the entire checkpoint
-    checkpoint = torch.load(checkpoint_path)
+    map_location = {'cuda:%d' % 0: 'cuda:%d' % rank}
+    checkpoint = torch.load(checkpoint_path,map_location=map_location)
 
     print_checkpoint(checkpoint)
     

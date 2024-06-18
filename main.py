@@ -74,6 +74,9 @@ def main():
     parser.add_argument("--save-prediction-results", action="store_true", default=False,
                         help="Save predictions and ground truth dataframe for validation and/or test")
     
+    parser.add_argument("--eval-only-represented-labels", action="store_true", default=False,
+                        help="Evaluate only the represented labels")
+    
     parser.add_argument("--save-val-test-metrics", action="store_true", default=False,
                         help="Append val/test metrics to json")
 
@@ -141,8 +144,8 @@ def train_validate_test(gpu, args):
         "paths"], config["timestamp"], config["logger"]
 
     # Set the GPU device, if using
-    torch.cuda.set_device(gpu)
-    device = torch.device('cuda:' + str(gpu)
+    torch.cuda.set_device(rank)
+    device = torch.device('cuda:' + str(rank)
                           if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
     
@@ -174,18 +177,16 @@ def train_validate_test(gpu, args):
 
     # Initialize label tokenizer
     label_tokenizer = AutoTokenizer.from_pretrained(
-        params['LABEL_ENCODER_CHECKPOINT'],
+        params['LABEL_ENCODER_CHECKPOINT'], force_download=True
     )
 
     # Initialize label encoder
     label_encoder = AutoModel.from_pretrained(
-        params['LABEL_ENCODER_CHECKPOINT'],
+        params['LABEL_ENCODER_CHECKPOINT'], force_download=True
     )
     if params["GRADIENT_CHECKPOINTING"]:
         raise NotImplementedError(
             "Gradient checkpointing is not yet implemented.")
-
-    label_encoder = label_encoder.to(device)
 
     #---------------------- DATASETS ----------------------# 
     # Create individual datasets
@@ -270,10 +271,6 @@ def train_validate_test(gpu, args):
         sequence_weights=sequence_weights
     )
 
-    if params["LABEL_ENCODER_NUM_TRAINABLE_LAYERS"]==0:
-        # Move the label encoder to CPU
-        label_encoder = label_encoder.cpu()
-
     # Initialize ProteInfer
     if params['PRETRAINED_SEQUENCE_ENCODER'] & (args.load_model is None): 
         sequence_encoder = ProteInfer.from_pretrained(
@@ -319,6 +316,7 @@ def train_validate_test(gpu, args):
         output_mlp_num_layers=params["OUTPUT_MLP_NUM_LAYERS"],
         output_neuron_bias=sigmoid_bias_from_prob(params["OUTPUT_NEURON_PROBABILITY_BIAS"]) if params["OUTPUT_NEURON_PROBABILITY_BIAS"] is not None else None,
         outout_mlp_add_batchnorm=params["OUTPUT_MLP_BATCHNORM"],
+        residual_connection=params["RESIDUAL_CONNECTION"],
         projection_head_num_layers=params["PROJECTION_HEAD_NUM_LAYERS"],
         dropout=params["OUTPUT_MLP_DROPOUT"],
         projection_head_hidden_dim_scale_factor=params["PROJECTION_HEAD_HIDDEN_DIM_SCALE_FACTOR"],
@@ -334,15 +332,14 @@ def train_validate_test(gpu, args):
         #Others
         feature_fusion=config["params"]["FEATURE_FUSION"],
         temperature=config["params"]["SUPCON_TEMP"]
-    ).to(device)
-
+    )
 
     # Wrap the model in DDP for distributed computing
     if config["params"]["SYNC_BN"]:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
 
-    model = DDP(model,
-                device_ids=[gpu],
+    model = DDP(model.to(rank),
+                device_ids=[rank],
                 find_unused_parameters=True)
 
     # Calculate bce_pos_weight based on the training set
@@ -402,6 +399,7 @@ def train_validate_test(gpu, args):
         load_model(
             trainer=Trainer,
             checkpoint_path=os.path.join(config["DATA_PATH"], args.load_model),
+            rank=rank,
             from_checkpoint=args.from_checkpoint
         )
         logger.info(
@@ -430,7 +428,9 @@ def train_validate_test(gpu, args):
             val_eval_metrics=eval_metrics.get_metric_collection_with_regex(pattern="f1_m.*", threshold=0.5,
                                                                 num_labels=label_sample_sizes["validation"]
                                                                 ),
-            val_optimization_metric_name=params["OPTIMIZATION_METRIC_NAME"])
+            val_optimization_metric_name=params["OPTIMIZATION_METRIC_NAME"],
+            only_represented_labels=args.eval_only_represented_labels
+            )
     else:
         logger.info("Skipping training...")
 

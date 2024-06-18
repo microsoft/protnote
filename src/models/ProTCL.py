@@ -22,6 +22,7 @@ class ProTCL(nn.Module):
         output_mlp_num_layers=2,
         output_neuron_bias=None,
         outout_mlp_add_batchnorm=True,
+        residual_connection = False,
         dropout=0.0,
         sequence_embedding_dropout=0.0,
         label_embedding_dropout=0.0,
@@ -50,6 +51,7 @@ class ProTCL(nn.Module):
         self.label_embedding_pooling_method = label_embedding_pooling_method
         self.latent_dim = latent_dim
         self.label_embedding_noising_alpha = label_embedding_noising_alpha
+        self.residual_connection = residual_connection
 
         # Projection heads
         self.W_p = MLP(protein_embedding_dim,
@@ -250,7 +252,19 @@ class ProTCL(nn.Module):
             joint_embeddings = self._get_joint_embeddings(
                 P_e, L_e, num_sequences, num_labels)
 
-            # Feed through MLP to get logits (which represent similarities)
+            # print(joint_embeddings.shape,L_e.shape,P_e.shape)
+            # if self.residual_connection == 'standard':
+            #     joint_embeddings += L_e + P_e
+            # elif self.residual_connection == 'pre_projection_outer':
+            #     joint_embeddings += torch.bmm(L_f.unsqueeze(-1),P_f.unsqueeze(1)).mean(axis=-1) #Outer product 
+            # elif self.residual_connection == 'post_projection_outer':
+            #     joint_embeddings += torch.bmm(P_e.unsqueeze(-1),L_e.unsqueeze(1)).mean(axis=-1) #Outer product 
+            # elif self.residual_connection == False:
+            #     pass
+            # else:
+            #     raise ValueError(f'residual connection: {self.residual_connection} not implemented')
+
+            # Feed through MLP to get logits 
             logits = self.output_layer(joint_embeddings)
         else:
             raise ValueError("feature fusion method not implemented")

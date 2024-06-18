@@ -13,6 +13,7 @@ import json
 from collections import defaultdict
 from src.utils.losses import FocalLoss
 from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC
+from src.utils.data import generate_vocabularies
 
 
 """
@@ -71,11 +72,15 @@ parser.add_argument("--save-prediction-results", action="store_true", default=Fa
 parser.add_argument("--only-inference", action="store_true", default=False,
                     help="Whether to only predict without testing and computing metrics")
 
+parser.add_argument("--only-represented-labels", action="store_true", default=False,
+                    help="Whether to only predict labels that are represented in the dataset")
+
 parser.add_argument("--annotations-path-name", type=str, default="GO_ANNOTATIONS_PATH",
                     help="Name of the annotation path. Defaults to GO.")
 
 parser.add_argument("--base-label-embedding-name", type=str, default="GO_BASE_LABEL_EMBEDDING_PATH",
                     help="Name of the base label embedding path. Defaults to GO.")
+
 
 # TODO: Add an option to serialize and save config with a name corresponding to the model save path
 
@@ -101,7 +106,7 @@ config = get_setup(
     base_label_embedding_name = args.base_label_embedding_name,
     amlt=False,
     is_master=True,
-    overrides=args.override
+    overrides=args.override + ['EXTRACT_VOCABULARIES_FROM','null'] if args.only_represented_labels else args.override
 )
 params, paths, timestamp, logger = (config["params"],
                                     config["paths"],
@@ -155,9 +160,6 @@ label_sample_sizes = {
 # Initialize new run
 logger.info(f"################## {timestamp} RUNNING train.py ##################")
 
-# Log the configuration and arguments
-logger.info(f"Configuration: {config}")
-logger.info(f"Arguments: {args}")
 
 # Define data loaders
 loaders = create_multiple_loaders(
@@ -166,8 +168,6 @@ loaders = create_multiple_loaders(
     num_workers=params["NUM_WORKERS"],
     pin_memory=True
 )
-
-print(loaders)
 
 model = ProteInfer.from_pretrained(
     weights_path=paths[f"PROTEINFER_GO_WEIGHTS_PATH"],#TODO: replace GO with "{task}"
@@ -185,15 +185,22 @@ model.to(device)
 model = model.eval()
 
 label_normalizer = read_json(paths["PARENTHOOD_LIB_PATH"])
+
+
+
 # Initialize EvalMetrics
 eval_metrics = EvalMetrics(device=device)
 label_sample_sizes = {k:(v if v is not None else len(datasets[k][0].label_vocabulary)) 
                         for k,v in label_sample_sizes.items() if k in datasets.keys()}
 
-
+PROTEINFER_VOCABULARY = generate_vocabularies(file_path = config['paths']['FULL_DATA_PATH'])['label_vocab']
 
 for loader_name, loader in loaders.items():
+
     print(loader_name,len(loader[0].dataset.label_vocabulary))
+
+    represented_labels = [label in loader[0].dataset.label_vocabulary for label in PROTEINFER_VOCABULARY]
+
     test_metrics = eval_metrics\
                 .get_metric_collection_with_regex(pattern='f1_m.*',
                                     threshold=args.threshold,
@@ -207,7 +214,7 @@ for loader_name, loader in loaders.items():
     test_results = defaultdict(list)
     
     mAP_micro = BinaryAUPRC(device='cpu')
-    mAP_macro = MultilabelAUPRC(device='cpu',num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"])
+    mAP_macro = MultilabelAUPRC(device='cpu',num_labels=label_sample_sizes["test"] )
 
     with torch.no_grad():
         for batch_idx, batch in tqdm(
@@ -225,7 +232,11 @@ for loader_name, loader in loaders.items():
             sequence_onehots, sequence_lengths, label_multihots = to_device(device,
                 sequence_onehots, sequence_lengths, label_multihots)
                 
+
             logits = model(sequence_onehots, sequence_lengths)
+            if args.only_represented_labels:
+                logits = logits[:,represented_labels]
+            
             probabilities = torch.sigmoid(logits)
 
             if not args.only_inference:

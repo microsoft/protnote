@@ -58,6 +58,14 @@ def main():
         action='store_true',
         help="Whether to format for instruction tuned model"
     )
+    
+    parser.add_argument(
+        "--label-encoder-checkpoint",
+        type=str,
+        default="intfloat/multilingual-e5-large-instruct",
+        help="The huggingface LLM to use. Others include microsoft/biogpt.",
+    )
+    
 
     def get_detailed_instruct(task_description: str, query: str) -> str:
         return f'Instruct: {task_description}\nQuery: {query}'
@@ -70,6 +78,7 @@ def main():
     
     # Overwrite config pooling method
     CONFIG["params"]["LABEL_EMBEDDING_POOLING_METHOD"] = args.pooling_method
+    CONFIG["params"]["LABEL_ENCODER_CHECKPOINT"] = args.label_encoder_checkpoint
     
     DATA_PATH = os.path.join(ROOT_PATH, "data")
     OUTPUT_PATH = os.path.join(
@@ -97,11 +106,11 @@ def main():
 
     # Initialize label tokenizer
     label_tokenizer = AutoTokenizer.from_pretrained(
-        CONFIG["params"]["LABEL_ENCODER_CHECKPOINT"],
+        args.label_encoder_checkpoint,
     )
     # Initialize label encoder
     label_encoder = AutoModel.from_pretrained(
-        CONFIG["params"]["LABEL_ENCODER_CHECKPOINT"],
+        args.label_encoder_checkpoint,
     ).to(DEVICE)
 
     logging.info("Flattening descriptions for batch processing and calculating sequence token lengths...")
@@ -137,27 +146,6 @@ def main():
     #Convert to indexed pandas df
     embeddings_idx = pd.DataFrame(embeddings_idx)
 
-    '''
-    #Map embeddings to dict
-    embeddings = {}
-    for (go_term, desription_type), embedding in zip(
-        flattend_go_terms_and_types, all_embeddings
-    ):  
-        if go_term not in embeddings:
-            embeddings[go_term] = {}
-        if desription_type not in embeddings[go_term]:
-            embeddings[go_term][desription_type] = []
-
-        embeddings[go_term][desription_type].append(embedding.cpu())
-    
-    
-    logging.info("Wrapping up...")
-    #Cast lists to np array and add description types
-    for idx,(k,v) in enumerate(embeddings.items()):
-        for k2,v2 in v.items():
-            embeddings[k][k2] = np.array([i.tolist() for i in v2])
-        embeddings[k]['description_types']=list(v.keys())
-    '''
     logging.info("Saving to a torch .pt...")
     torch.save(embeddings, OUTPUT_PATH)
     torch.save(embeddings_idx, INDEX_OUTPUT_PATH)

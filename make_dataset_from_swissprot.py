@@ -50,14 +50,14 @@ def process_data(data_file_path:str,
 
     # See https://biopython.org/docs/1.75/api/Bio.SwissProt.html and https://web.expasy.org/docs/userman.html
 
-    if not (os.path.exists("/home/samirchar/ProteinFunctions/data/swissprot/swissprot_2023_full.pkl") & cache):
+    if not (os.path.exists("/home/samirchar/ProteinFunctions/data/swissprot/swissprot_2024_full.pkl") & cache):
         with open(data_file_path, 'r') as f:
             data = []
 
             records = SwissProt.parse(f)
 
             print("Extracting data from SwissProt records... This may take a while...")
-            for record in tqdm(records,total=569793):
+            for record in tqdm(records,total=571609):
                 # Extract sequence ID
                 seq_id = record.accessions[0]
 
@@ -97,9 +97,9 @@ def process_data(data_file_path:str,
             lambda x: x.get('SUBCELLULAR LOCATION'))
 
         # Save df_2024 to a file
-        df_2024.to_pickle("/home/samirchar/ProteinFunctions/data/swissprot/swissprot_2023_full.pkl")
+        df_2024.to_pickle("/home/samirchar/ProteinFunctions/data/swissprot/swissprot_2024_full.pkl")
     else:
-        df_2024 = pd.read_pickle("/home/samirchar/ProteinFunctions/data/swissprot/swissprot_2023_full.pkl")
+        df_2024 = pd.read_pickle("/home/samirchar/ProteinFunctions/data/swissprot/swissprot_2024_full.pkl")
 
 
     # Make a set of the GO labels from the label embeddings

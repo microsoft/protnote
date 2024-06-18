@@ -20,8 +20,8 @@ params:
   ### V100 ###
   # Batch sizes
   TRAIN_BATCH_SIZE: 8 # 8 per GPU for V100 (64 if using 8 GPUs)
-  VALIDATION_BATCH_SIZE: 32 # 32 per GPU for V100 (256 if using 8 GPUs)
-  TEST_BATCH_SIZE: 32 # 32 per GPU for V100 (256 if using 8 GPUs)
+  VALIDATION_BATCH_SIZE: 8 # 32 per GPU for V100 (256 if using 8 GPUs)
+  TEST_BATCH_SIZE: 8 # 32 per GPU for V100 (256 if using 8 GPUs)
 
   # Sampling
   GRID_SAMPLER: False
@@ -48,6 +48,7 @@ params:
   OUTPUT_MLP_NUM_LAYERS: 3
   OUTPUT_NEURON_PROBABILITY_BIAS: null
   OUTPUT_MLP_BATCHNORM: True
+  RESIDUAL_CONNECTION: False
   SYNC_BN: False
   OUTPUT_MLP_DROPOUT: 0.0
   LABEL_EMBEDDING_DROPOUT: 0.0
@@ -131,6 +132,11 @@ paths:
     TRAIN_DATA_PATH: swissprot/proteinfer_splits/random/train_GO.fasta
     VAL_DATA_PATH: swissprot/proteinfer_splits/random/dev_GO.fasta
     TEST_DATA_PATH: swissprot/proteinfer_splits/random/test_GO.fasta
+
+    TRAIN_CLUSTERED_DATA_PATH: swissprot/proteinfer_splits/clustered/train_GO.fasta
+    VAL_CLUSTERED_DATA_PATH: swissprot/proteinfer_splits/clustered/dev_GO.fasta
+    TEST_CLUSTERED_DATA_PATH: swissprot/proteinfer_splits/clustered/test_GO.fasta
+
     FULL_DATA_PATH: swissprot/proteinfer_splits/random/full_GO.fasta # used to generate vocabularies
 
     TEST_2024_DATA_PATH: swissprot/proteinfer_splits/random/test_GO_may_2024.fasta

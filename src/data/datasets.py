@@ -82,31 +82,15 @@ class ProteinDataset(Dataset):
         # will be ensembled per go term
         self.inference_go_descriptions = config['params']['INFERENCE_GO_DESCRIPTIONS'].split('+') 
 
-        '''
-        if len(config["params"]["LABEL_AUGMENTATION_DESCRIPTIONS"].split('+'))>1 and self.dataset_type == 'train':
-            #During training we should not ensemble. We use the defaul descriptions for predictions
-            self.label_augmentation_descriptions = config["params"]["INFERENCE_GO_DESCRIPTIONS_DEFAULT"]
-        else:
-            self.label_augmentation_descriptions = config["params"]["LABEL_AUGMENTATION_DESCRIPTIONS"].split('+')
-        '''
-        
-        # Set the vocabularies.
-        # If extract_vocabularies is null, generate vocab from self.data
-        self.extract_vocabularies_from = config["params"]["EXTRACT_VOCABULARIES_FROM"]
-        vocabulary_path = config['paths'][self.extract_vocabularies_from] if self.extract_vocabularies_from is not None else self.data_path
-        logging.info(f"Extracting vocabularies for {self.dataset_type} from {vocabulary_path}")
-        vocabularies = generate_vocabularies(file_path = vocabulary_path)
-        
-        self.amino_acid_vocabulary = vocabularies["amino_acid_vocab"]
-        self.label_vocabulary = vocabularies["label_vocab"]
-        self.sequence_id_vocabulary = vocabularies["sequence_id_vocab"]
+        extract_vocabularies_from = config["params"]["EXTRACT_VOCABULARIES_FROM"]
+        vocabulary_path = config['paths'][extract_vocabularies_from] if extract_vocabularies_from is not None else self.data_path
 
         # Preprocess dataset
         self.label_frequency = None
         self._preprocess_data(
             deduplicate=config['params']["DEDUPLICATE"],
             max_sequence_length=config["params"]["MAX_SEQUENCE_LENGTH"],
-            remove_unrepresented_labels=config["params"]["REMOVE_UNREPRESENTED_LABELS"]
+            vocabulary_path=vocabulary_path
             )
 
         # TODO: This path could be constructed in get_setup
@@ -122,7 +106,7 @@ class ProteinDataset(Dataset):
         logging.info('Total number of label embeddings: %s', len(self.label_embeddings))
         logging.info('Total number of label token counts: %s', len(self.label_token_counts))
         
-    def _preprocess_data(self,deduplicate,max_sequence_length,remove_unrepresented_labels):
+    def _preprocess_data(self,deduplicate,max_sequence_length,vocabulary_path):
         """
         Remove duplicate sequences from self.data, keeping only the first instance of each sequence
         Use pandas to improve performance
@@ -154,12 +138,18 @@ class ProteinDataset(Dataset):
         # Calculate label frequency
         self.calculate_label_frequency()
 
-        # Process vocabulary
-        # TODO: remove unrepresented labels is depracted in favor of using extract_vocabularies_from = null
-        if (remove_unrepresented_labels) and (self.dataset_type == "train"):
-            self.logger.info("Removing unrepresented labels from the training set vocabulary")
+        # Set the vocabularies.
+        # If extract_vocabularies is null, generate vocab from self.data
 
-            self.label_vocabulary = [label for label in self.label_vocabulary if label in self.label_frequency]
+        logging.info(f"Extracting vocabularies for {self.dataset_type} from {vocabulary_path}")
+        vocabularies = generate_vocabularies(data = self.data)
+        
+        self.amino_acid_vocabulary = vocabularies["amino_acid_vocab"]
+        self.label_vocabulary = vocabularies["label_vocab"]
+        self.sequence_id_vocabulary = vocabularies["sequence_id_vocab"]
+        
+        # Save mask of represented vocab
+        self.represented_vocabulary_mask = [label in self.label_frequency for label in self.label_vocabulary]
         
         self._process_vocab()
 

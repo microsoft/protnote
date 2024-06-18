@@ -13,7 +13,7 @@ from collections import defaultdict
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from transformers import BatchEncoding
-from src.utils.models import generate_label_embeddings_from_text, biogpt_train_last_n_layers, save_checkpoint, load_model
+from src.utils.models import biogpt_train_last_n_layers, save_checkpoint, load_model
 from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC, BinaryBinnedAUPRC, MultilabelBinnedAUPRC
 #from torch.utils.tensorboard import SummaryWriter
 
@@ -185,34 +185,13 @@ class ProTCLTrainer:
             loss = self.loss_fn(logits, label_multihots.float())
 
         return loss.item(), logits, label_multihots, sequence_ids
-    
-    def test_zero_shot(self,
-                       zero_shot_loader: torch.utils.data.DataLoader,
-                       eval_metrics: MetricCollection,
-                       ):
-        
-        
-        prefix = 'zero_shot'
 
-        zero_shot_metrics = self.evaluate(data_loader=zero_shot_loader,
-                                       eval_metrics=eval_metrics,
-                                       metrics_prefix=prefix)
-
-        if self.use_wandb and self.is_master:
-            try:
-                if self.use_wandb and self.is_master:
-                    wandb.log(zero_shot_metrics,
-                                step=self.training_step
-                                )
-
-            except Exception as e:
-                self.logger.warning(
-                    f"Failed to log validation metrics to wandb: {e}")
 
     def validate(self,
                  val_loader: torch.utils.data.DataLoader,
                  eval_metrics: MetricCollection,
-                 val_optimization_metric_name: str
+                 val_optimization_metric_name: str,
+                 only_represented_labels: bool
                  ):
 
         self.logger.info("Running validation...")
@@ -221,7 +200,8 @@ class ProTCLTrainer:
 
         val_metrics = self.evaluate(data_loader=val_loader,
                                        eval_metrics=eval_metrics,
-                                       metrics_prefix=prefix)
+                                       metrics_prefix=prefix,
+                                       only_represented_labels=only_represented_labels)
         val_optimization_metric_name = f'{prefix}_{val_optimization_metric_name}'
 
         
@@ -344,7 +324,8 @@ class ProTCLTrainer:
         data_loader: torch.utils.data.DataLoader,
         eval_metrics: MetricCollection = None,
         save_results: bool = False,
-        metrics_prefix = None
+        metrics_prefix = None,
+        only_represented_labels: bool = False
     ) -> tuple[dict, dict]:
         """Evaluate the model on the given data loader.
         :param data_loader: pytorch data loader
@@ -358,18 +339,23 @@ class ProTCLTrainer:
         total_loss = 0
         test_results = defaultdict(list)
 
+        if only_represented_labels:
+            num_labels = sum(data_loader.dataset.represented_vocabulary_mask)
+        else:
+            num_labels = len(data_loader.dataset.label_vocabulary)
+
         if eval_metrics is not None:
             eval_metrics.reset()
 
         if self.config["params"]["ESTIMATE_MAP"] == False:
             mAP_micro = BinaryAUPRC(device='cpu')
             mAP_macro = MultilabelAUPRC(device='cpu',
-                                        num_labels=len(data_loader.dataset.label_vocabulary))
+                                        num_labels=num_labels)
         
         elif self.config["params"]["ESTIMATE_MAP"] == True:
             mAP_micro = BinaryBinnedAUPRC(device='cpu',threshold=50)
             mAP_macro = MultilabelBinnedAUPRC(device='cpu',
-                                            num_labels=len(data_loader.dataset.label_vocabulary),
+                                            num_labels=num_labels,
                                             threshold=50)
         
         elif self.config["params"]["ESTIMATE_MAP"] is None:
@@ -380,6 +366,12 @@ class ProTCLTrainer:
             
             for batch_idx, batch in enumerate(data_loader):
                 loss, logits, labels, sequence_ids = self.evaluation_step(batch=batch)
+
+                if only_represented_labels:
+                    logits = logits[:,data_loader.dataset.represented_vocabulary_mask]
+                    labels = labels[:,data_loader.dataset.represented_vocabulary_mask]
+
+
                 if eval_metrics is not None:
                     # Apply sigmoid to get the probabilities for multi-label classification
                     probabilities = torch.sigmoid(logits)
@@ -426,7 +418,7 @@ class ProTCLTrainer:
                 self.logger.info("Saving validation results...")
                 if self.is_master:
                     save_evaluation_results(results=test_results,
-                                            label_vocabulary=data_loader.dataset.label_vocabulary,
+                                            label_vocabulary=[i for i,mask in zip(data_loader.dataset.label_vocabulary,data_loader.dataset.represented_vocabulary_mask) if mask==True],
                                             run_name=self.run_name,
                                             output_dir=self.config["paths"]["RESULTS_DIR"],
                                             data_split_name=metrics_prefix
@@ -563,7 +555,8 @@ class ProTCLTrainer:
         val_loader: torch.utils.data.DataLoader,
         train_eval_metrics: MetricCollection,
         val_eval_metrics: MetricCollection,
-        val_optimization_metric_name: str
+        val_optimization_metric_name: str,
+        only_represented_labels: bool
     ):
         """Train model
         :param train_loader: training set dataloader
@@ -608,7 +601,8 @@ class ProTCLTrainer:
                 # Run validation
                 self.validate(val_loader=val_loader,
                               eval_metrics=val_eval_metrics,
-                              val_optimization_metric_name=val_optimization_metric_name
+                              val_optimization_metric_name=val_optimization_metric_name,
+                              only_represented_labels=only_represented_labels
                              )
 
                 self.logger.info(

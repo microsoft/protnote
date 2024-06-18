@@ -265,15 +265,15 @@ def save_evaluation_results(results, label_vocabulary, run_name,output_dir,data_
         logits_df_cols = list(map(str,range(results['logits'].shape[-1])))
     else:
         logits_df_cols = label_vocabulary
-        label_df = pd.DataFrame(results['labels'],
+        labels_df = pd.DataFrame(results['labels'],
                         columns=label_vocabulary,
                         index=results['sequence_ids'])
-        label_df = convert_float16_to_float32(label_df)
-        label_df_output_path = os.path.join(
+        labels_df = convert_float16_to_float32(labels_df)
+        labels_df_output_path = os.path.join(
             output_dir, f'{data_split_name}_labels_{run_name}.parquet')
 
-        print(f"saving results to {label_df_output_path}")
-        label_df.to_parquet(label_df_output_path)
+        print(f"saving results to {labels_df_output_path}")
+        labels_df.to_parquet(labels_df_output_path)
 
     logits_df = pd.DataFrame(results['logits'],
                                     columns=logits_df_cols,
@@ -284,22 +284,16 @@ def save_evaluation_results(results, label_vocabulary, run_name,output_dir,data_
     print(f"saving results to {logits_df_output_path}")
     logits_df.to_parquet(logits_df_output_path)
 
-    
 
-    
-
-        
-
-
-def metrics_per_label_df(label_df:pd.DataFrame,pred_df:pd.DataFrame,device:str,threshold:None)->pd.DataFrame:
+def metrics_per_label_df(logits_df:pd.DataFrame,labels_df:pd.DataFrame,device:str,threshold:None)->pd.DataFrame:
     """Calculate the following per label metrics: Average Precision,F1,Precision,Recall,label frequency
 
-    :param label_df: dataframe where each column is a label and every row an observation. element row=i,col=j is 1
+    :param labels_df: dataframe where each column is a label and every row an observation. element row=i,col=j is 1
         if observation i has label j, 0 otherwise
-    :type label_df: pd.DataFrame
-    :param pred_df: dataframe where each column is a label and every row an observation. element row=i,col=j is the prediction probability
+    :type labels_df: pd.DataFrame
+    :param logits_df: dataframe where each column is a label and every row an observation. element row=i,col=j is the prediction logits
         that observation i has label j.
-    :type pred_df: pd.DataFrame
+    :type logits_df: pd.DataFrame
     :param device: Device to make calculations (e.g., cuda)
     :type device: str
     :param threshold: Threshold to calculate threshold-dependent metrics like F1 Score
@@ -310,19 +304,17 @@ def metrics_per_label_df(label_df:pd.DataFrame,pred_df:pd.DataFrame,device:str,t
     """    
 
     rows = []
-    labels = label_df.columns
-    mask_at_least_one_label = label_df.sum()>0
-    labels_at_least_one_pos = label_df.columns[mask_at_least_one_label]
-    labels_undefined = label_df.columns[~mask_at_least_one_label]
+    labels = labels_df.columns
+    mask_at_least_one_label = labels_df.sum()>0
+    labels_at_least_one_pos = labels_df.columns[mask_at_least_one_label]
+    labels_undefined = labels_df.columns[~mask_at_least_one_label]
     threshold = threshold
     for col in tqdm(labels_at_least_one_pos):
         row = {}
-        preds = torch.tensor(pred_df[col].values,device=device)
-        ground_truth = torch.tensor(label_df[col].values,device=device)
+        preds = torch.sigmoid(torch.tensor(logits_df[col].values,device=device))
+        ground_truth = torch.tensor(labels_df[col].values,device=device)
         
         row['AUPRC'] = AveragePrecision(task="binary").to(device)(preds,ground_truth).item()
-        row['Frequency'] = ground_truth.sum().item()
-        row['Relative Frequency'] = row['Frequency']/len(ground_truth)
 
         if threshold is not None:
             row['Precision'] = Precision(task="binary",threshold=threshold).to(device)(preds,ground_truth).item()

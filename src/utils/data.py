@@ -12,6 +12,7 @@ import wget
 import hashlib
 import math
 import re
+from Bio.ExPASy import Enzyme
 import blosum as bl
 from typing import Union,List,Set,Literal
 import transformers
@@ -93,20 +94,22 @@ def get_vocab_mappings(vocabulary):
     int2term = {idx: term for term, idx in term2int.items()}
     return term2int, int2term
 
-def generate_vocabularies(file_path: str)->dict:
+def generate_vocabularies(file_path: str = None, data: list = None)->dict:
     """
     Generate vocabularies based on the provided data path.
     path must be .fasta file
     """
+    if not ((file_path is None) ^ (data is None)):
+        raise ValueError('Only one of file_path OR data must be passed, not both.')
     vocabs = {'amino_acid_vocab':set(),
               'label_vocab':set(),
               'sequence_id_vocab':set()
             }
-    
-    if isinstance(file_path,str):
-        data = read_fasta(file_path)
-    else:
-        raise TypeError("File not supported, vocabularies can only be generated from .fasta files.")
+    if file_path is not None:
+        if isinstance(file_path,str):
+            data = read_fasta(file_path)
+        else:
+            raise TypeError("File not supported, vocabularies can only be generated from .fasta files.")
 
     for sequence, sequence_id, labels in data:
         vocabs['sequence_id_vocab'].add(sequence_id)
@@ -284,3 +287,69 @@ class Blossum62Mutations:
             # Normalize the scores to sum to 1 and sample from the distribution
             probabilities = [p / total for p in probabilities]
             return random.choices(amino_acids, weights=probabilities, k=1)[0]
+        
+
+
+
+
+def ec_number_to_code(ec_number:str,depth:int=3)->tuple:
+    ec_code = [int(i) for i in re.findall('\d+',ec_number.strip())[:depth]]
+    return tuple(ec_code + [0]*(depth-len(ec_code)))
+
+
+def get_ec_class_descriptions(enzclass_path:str)->dict:
+    with open(enzclass_path) as handle:
+        ec_classes = handle.readlines()[11:-5]
+
+    # Dictionary to store the results
+    ec_classes_dict = {}
+
+    # Compile the regex pattern to identify the ID
+    pattern = re.compile(r'^(\d+\.\s*(\d+|-)\.\s*(\d+|-)\.-)')
+
+    #Contructs, description based on parents.. not the most efficient but doesn't matter for this case
+    def get_deep_label(code):
+        level_code = [0,0,0] 
+        label = ''
+        for level in range(3):
+            if code[level]>0:
+                level_code[level] = code[level]
+                raw_label = ec_classes_dict[tuple(level_code)]['raw_label'].rstrip('.')
+                if level>0:
+                    raw_label=raw_label[0].lower() + raw_label[1:]
+                    prefix = ', '
+                else:
+                    prefix = ''
+                label += prefix + raw_label
+        return label
+
+    # Process each line
+    for line in ec_classes:
+        # Find the ID using the regex
+        match = pattern.search(line)
+        if match:
+            # Extract the ID
+            ec_number = match.group(1).strip()
+            # Everything after the ID is considered the description
+            description = line[match.end():].strip()
+            code = ec_number_to_code(ec_number)
+            # Add to the dictionary, removing excess spaces and newlines
+
+            ec_classes_dict[code] = {'raw_label':description,'ec_number':ec_number.replace(' ','')}
+
+    # Output the result
+    for code in ec_classes_dict.keys():
+        ec_classes_dict[code]['label'] = get_deep_label(code)
+    
+    return ec_classes_dict
+
+
+def get_ec_number_description(enzyme_dat_path:str,ec_classes:dict)->list:
+    with open(enzyme_dat_path) as handle:
+        ec_leaf_nodes = Enzyme.parse(handle)
+        ec_leaf_nodes = [{'ec_number': record["ID"],'label':record["CA"],'parent_code':ec_number_to_code(record["ID"])} for record in ec_leaf_nodes]
+
+    for leaf_node in ec_leaf_nodes:
+        if leaf_node['label']=='':
+            leaf_node['label'] = ec_classes[leaf_node['parent_code']]['label']
+    return ec_leaf_nodes
