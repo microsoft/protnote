@@ -11,7 +11,7 @@ import pandas as pd
 import subprocess
 from src.utils.evaluation import EvalMetrics
 from src.utils.data import generate_vocabularies, read_yaml
-from test_model import TEST_COMMANDS,MODEL_PATH_TOKEN
+from test_model import TEST_COMMANDS,MODEL_PATH_TOKEN,MODEL_NAME_TOKEN
 
 def main(annotation_type:str, label_embedding_model:Literal['E5','BioGPT'], test_name:str, model_name:str, cache:bool):
     logger = logging.getLogger()
@@ -29,35 +29,34 @@ def main(annotation_type:str, label_embedding_model:Literal['E5','BioGPT'], test
 
     if label_embedding_model=='E5':
         label_embeddings = '2024_E5_multiling_inst_frozen_label_embeddings_mean' 
+
     elif label_embedding_model=='BioGPT':
         label_embeddings = '2024_BioGPT_frozen_label_embeddings_mean' 
-
 
     proteinfer_predictions_path = f'outputs/results/test_logits_{annotation_type}_{test_name}_proteinfer.parquet'
     
     if (not os.path.exists(proteinfer_predictions_path)) | (not cache):
-        logger.info('Running inference with Proteinfer...')
-        subprocess.run(f"python test_proteinfer.py --test-paths-names {test_name} --only-inference --override EXTRACT_VOCABULARIES_FROM null --save-prediction-results --name {test_name}_proteinfer --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH",shell=True)
+        if annotation_type == 'GO':
+            logger.info('Running inference with Proteinfer...')
+            subprocess.run(f"python test_proteinfer.py --test-paths-names {test_name} --only-inference --override EXTRACT_VOCABULARIES_FROM null --save-prediction-results --name {test_name}_proteinfer --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH",shell=True)
+        elif annotation_type == 'EC':
+            subprocess.run(f"python test_proteinfer.py --test-paths-names {test_name} --only-inference --override EXTRACT_VOCABULARIES_FROM null --save-prediction-results --name {test_name}_proteinfer --base-label-embedding-name EC_BASE_LABEL_EMBEDDING_PATH --annotations-path-name EC_ANNOTATIONS_PATH",shell=True)
     else:
         logger.info('Found existing proteinfer predictions... caching')
 
-    if (not os.path.exists(f'outputs/results/test_1_labels_{test_name}.parquet')) | (not cache):
+    if (not os.path.exists(f'outputs/results/test_1_labels_{test_name}_{model_name}.parquet')) | (not cache):
         logger.info('Running zero_shot model...')
-        subprocess.run(TEST_COMMANDS[test_name].replace(MODEL_PATH_TOKEN,f'models/ProTCL/{model_name}.pt'),shell=True)
+        subprocess.run(TEST_COMMANDS[test_name].replace(MODEL_PATH_TOKEN,f'models/ProTCL/{model_name}.pt').replace(MODEL_NAME_TOKEN,model_name),shell=True)
     else:
         logger.info('Found existing zero shot model predictions... caching')
 
-
-    if annotation_type=='EC':
-        label_embeddings = 'ecv1_E5_multiling_inst_frozen_label_embeddings_mean'
-
     zero_shot_pinf_logits = pd.read_parquet(proteinfer_predictions_path)
-    zero_shot_labels = pd.read_parquet(f'outputs/results/test_1_labels_{test_name}.parquet')
-    embeddings = torch.load(f'data/embeddings/{label_embeddings}.pt')
-    embeddings_idx = torch.load(f'data/embeddings/{label_embeddings}_index.pt')
+    zero_shot_labels = pd.read_parquet(f'outputs/results/test_1_labels_{test_name}_{model_name}.parquet')
     vocabularies = generate_vocabularies(file_path = f'data/swissprot/proteinfer_splits/random/full_GO.fasta')
     zero_shot_pinf_logits.columns = vocabularies['label_vocab']
 
+    embeddings = torch.load(f'data/embeddings/{label_embeddings}.pt')
+    embeddings_idx = torch.load(f'data/embeddings/{label_embeddings}_index.pt')
 
     #Select embeddings based on name / short definition
     embedding_mask = embeddings_idx['description_type']=='name'
@@ -69,11 +68,31 @@ def main(annotation_type:str, label_embedding_model:Literal['E5','BioGPT'], test
     train_embeddings_idx = embeddings_idx[train_embeddings_mask].reset_index(drop=True)
     train_embeddings = embeddings[train_embeddings_mask]
 
-    #Create embedding matrix of the new/unknown GO Term definitions
-    zero_shot_embeddings_mask = embeddings_idx['id'].isin(zero_shot_labels.columns)
-    zero_shot_embeddings_idx = embeddings_idx[zero_shot_embeddings_mask].reset_index(drop=True)
-    zero_shot_embeddings = embeddings[zero_shot_embeddings_mask]
+    if annotation_type=='GO':
 
+        #Create embedding matrix of the new/unknown GO Term definitions
+        zero_shot_embeddings_mask = embeddings_idx['id'].isin(zero_shot_labels.columns)
+        zero_shot_embeddings_idx = embeddings_idx[zero_shot_embeddings_mask].reset_index(drop=True)
+        zero_shot_embeddings = embeddings[zero_shot_embeddings_mask]
+
+    if annotation_type=='EC':
+        
+        if label_embedding_model == 'BioGPT':
+            label_embeddings_new = 'ecv1_BioGPT_frozen_label_embeddings_mean'
+        elif label_embedding_model == 'E5':
+            label_embeddings_new = 'ecv1_E5_multiling_inst_frozen_label_embeddings_mean'
+
+        embeddings_new = torch.load(f'data/embeddings/{label_embeddings_new}.pt')
+        embeddings_idx_new = torch.load(f'data/embeddings/{label_embeddings_new}_index.pt')
+
+        #Create embedding matrix of the new/unknown GO Term definitions
+        embedding_mask_new = embeddings_idx_new['description_type']=='name'
+        embeddings_idx_new = embeddings_idx_new[embedding_mask_new].reset_index(drop=True)
+        embeddings_new = embeddings_new[embedding_mask_new]
+
+        zero_shot_embeddings_mask = embeddings_idx_new['id'].isin(zero_shot_labels.columns)
+        zero_shot_embeddings_idx = embeddings_idx_new[zero_shot_embeddings_mask].reset_index(drop=True)
+        zero_shot_embeddings = embeddings_new[zero_shot_embeddings_mask]
 
     #Create description mapping from seen to new
     label_train_2_zero_shot_similarities = (torch.nn.functional.normalize(zero_shot_embeddings)@torch.nn.functional.normalize(train_embeddings).T)
@@ -129,3 +148,6 @@ if __name__ == "__main__":
          model_name = args.model_name,
          label_embedding_model=args.label_embedding_model,
          cache = args.cache)
+
+
+
