@@ -1,0 +1,470 @@
+# For field details: https://amulet-docs.azurewebsites.net/config_file.html
+description: ablations
+
+target:
+  service: sing
+  name: barlow01
+  workspace_name: bio0-ext
+environment:
+  image: amlt-sing/acpt-2.0.1-py3.10-cuda11.8 #singularitybase.azurecr.io/base/job/pytorch/acpt-2.0.1-py3.10-cuda11.8:20240730T135447136 #amlt-sing/acpt-2.0.1-py3.10-cuda11.8 #azureml/openmpi4.1.0-cuda11.8-cudnn8-ubuntu22.04:latest 
+  conda_yaml_file: $CONFIG_DIR/environment.yml
+  skip_conda_packages_on_sing:
+  - tensorflow
+  - cudatoolkit
+  - deepspeed
+  - pip
+  - python\b
+
+
+code:
+  local_dir: $CONFIG_DIR/ 
+
+data:
+  local_dir: $CONFIG_DIR/data
+  remote_dir: data
+
+# SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
+jobs:
+#SEED 12
+- name: 'ablations_OVERRIDE_LABEL_ENCODER_CHECKPOINT_biogpt_seed_12' 
+  sku: G8-V100
+  priority: high
+  preemptible: False
+  command:
+  - python main.py
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH
+    --validation-path-name VAL_DATA_PATH
+    --name "ablations_OVERRIDE_LABEL_ENCODER_CHECKPOINT_biogpt"
+    --override SEED 12 LABEL_ENCODER_CHECKPOINT microsoft/biogpt
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: 'ablations_OVERRIDE_WEIGHTED_SAMPLING_False_seed_12' 
+  sku: G8-V100
+  priority: high
+  preemptible: False
+  command:
+  - python main.py
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH
+    --validation-path-name VAL_DATA_PATH
+    --name "ablations_OVERRIDE_WEIGHTED_SAMPLING_False"
+    --override SEED 12 WEIGHTED_SAMPLING False
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: 'ablations_OVERRIDE_LOSS_FN_BCE_seed_12' 
+  sku: G8-V100
+  priority: high
+  preemptible: False
+  command:
+  - python main.py
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH
+    --validation-path-name VAL_DATA_PATH
+    --name "ablations_OVERRIDE_LOSS_FN_BCE"
+    --override SEED 12 LOSS_FN BCE
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: 'ablations_OVERRIDE_AUGMENT_RESIDUE_PROBABILITY_0_seed_12' 
+  sku: G8-V100
+  priority: high
+  preemptible: False
+  command:
+  - python main.py
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH
+    --validation-path-name VAL_DATA_PATH
+    --name "ablations_OVERRIDE_AUGMENT_RESIDUE_PROBABILITY_0"
+    --override SEED 12 AUGMENT_RESIDUE_PROBABILITY 0
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: 'ablations_OVERRIDE_LABEL_EMBEDDING_NOISING_ALPHA_0_seed_12' 
+  sku: G8-V100
+  priority: high
+  preemptible: False
+  command:
+  - python main.py
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH
+    --validation-path-name VAL_DATA_PATH
+    --name "ablations_OVERRIDE_LABEL_EMBEDDING_NOISING_ALPHA_0"
+    --override SEED 12 LABEL_EMBEDDING_NOISING_ALPHA 0
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: 'ablations_OVERRIDE_LABEL_AUGMENTATION_DESCRIPTIONS_name_seed_12' 
+  sku: G8-V100
+  priority: high
+  preemptible: False
+  command:
+  - python main.py
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH
+    --validation-path-name VAL_DATA_PATH
+    --name "ablations_OVERRIDE_LABEL_AUGMENTATION_DESCRIPTIONS_name"
+    --override SEED 12 LABEL_AUGMENTATION_DESCRIPTIONS name
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+      WANDB_API_KEY: "$WANDB_API_KEY"
+
+
+#SEED 22
+- name: 'ablations_OVERRIDE_LABEL_ENCODER_CHECKPOINT_biogpt_seed_22' 
+  sku: G8-V100
+  priority: high
+  preemptible: False
+  command:
+  - python main.py
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH
+    --validation-path-name VAL_DATA_PATH
+    --name "ablations_OVERRIDE_LABEL_ENCODER_CHECKPOINT_biogpt"
+    --override SEED 22 LABEL_ENCODER_CHECKPOINT microsoft/biogpt
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: 'ablations_OVERRIDE_WEIGHTED_SAMPLING_False_seed_22' 
+  sku: G8-V100
+  priority: high
+  preemptible: False
+  command:
+  - python main.py
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH
+    --validation-path-name VAL_DATA_PATH
+    --name "ablations_OVERRIDE_WEIGHTED_SAMPLING_False"
+    --override SEED 22 WEIGHTED_SAMPLING False
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: 'ablations_OVERRIDE_LOSS_FN_BCE_seed_22' 
+  sku: G8-V100
+  priority: high
+  preemptible: False
+  command:
+  - python main.py
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH
+    --validation-path-name VAL_DATA_PATH
+    --name "ablations_OVERRIDE_LOSS_FN_BCE"
+    --override SEED 22 LOSS_FN BCE
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: 'ablations_OVERRIDE_AUGMENT_RESIDUE_PROBABILITY_0_seed_22' 
+  sku: G8-V100
+  priority: high
+  preemptible: False
+  command:
+  - python main.py
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH
+    --validation-path-name VAL_DATA_PATH
+    --name "ablations_OVERRIDE_AUGMENT_RESIDUE_PROBABILITY_0"
+    --override SEED 22 AUGMENT_RESIDUE_PROBABILITY 0
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: 'ablations_OVERRIDE_LABEL_EMBEDDING_NOISING_ALPHA_0_seed_22' 
+  sku: G8-V100
+  priority: high
+  preemptible: False
+  command:
+  - python main.py
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH
+    --validation-path-name VAL_DATA_PATH
+    --name "ablations_OVERRIDE_LABEL_EMBEDDING_NOISING_ALPHA_0"
+    --override SEED 22 LABEL_EMBEDDING_NOISING_ALPHA 0
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+      WANDB_API_KEY: "$WANDB_API_KEY"
+- name: 'ablations_OVERRIDE_LABEL_AUGMENTATION_DESCRIPTIONS_name_seed_22' 
+  sku: G8-V100
+  priority: high
+  preemptible: False
+  command:
+  - python main.py
+    --nodes 1
+    --gpus 8
+    --train-path-name TRAIN_DATA_PATH
+    --validation-path-name VAL_DATA_PATH
+    --name "ablations_OVERRIDE_LABEL_AUGMENTATION_DESCRIPTIONS_name"
+    --override SEED 22 LABEL_AUGMENTATION_DESCRIPTIONS name
+    --amlt
+    --use-wandb
+  submit_args:
+    env:
+      WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+      WANDB_API_KEY: "$WANDB_API_KEY"
+
+
+# #SEED 32
+# - name: 'ablations_OVERRIDE_LABEL_ENCODER_CHECKPOINT_biogpt' 
+#   sku: G8-V100
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --name "ablations_OVERRIDE_LABEL_ENCODER_CHECKPOINT_biogpt"
+#     --override SEED 32 LABEL_ENCODER_CHECKPOINT microsoft/biogpt
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: 'ablations_OVERRIDE_WEIGHTED_SAMPLING_False' 
+#   sku: G8-V100
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --name "ablations_OVERRIDE_WEIGHTED_SAMPLING_False"
+#     --override SEED 32 WEIGHTED_SAMPLING False
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: 'ablations_OVERRIDE_LOSS_FN_BCE' 
+#   sku: G8-V100
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --name "ablations_OVERRIDE_LOSS_FN_BCE"
+#     --override SEED 32 LOSS_FN BCE
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: 'ablations_OVERRIDE_AUGMENT_RESIDUE_PROBABILITY_0' 
+#   sku: G8-V100
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --name "ablations_OVERRIDE_AUGMENT_RESIDUE_PROBABILITY_0"
+#     --override SEED 32 AUGMENT_RESIDUE_PROBABILITY 0
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: 'ablations_OVERRIDE_LABEL_EMBEDDING_NOISING_ALPHA_0' 
+#   sku: G8-V100
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --name "ablations_OVERRIDE_LABEL_EMBEDDING_NOISING_ALPHA_0"
+#     --override SEED 32 LABEL_EMBEDDING_NOISING_ALPHA 0
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: 'ablations_OVERRIDE_LABEL_AUGMENTATION_DESCRIPTIONS_name' 
+#   sku: G8-V100
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --name "ablations_OVERRIDE_LABEL_AUGMENTATION_DESCRIPTIONS_name"
+#     --override SEED 32 LABEL_AUGMENTATION_DESCRIPTIONS name
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+
+
+  
+#   #SEED 52
+# - name: 'ablations_OVERRIDE_LABEL_ENCODER_CHECKPOINT_biogpt' 
+#   sku: G8-V100
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --name "ablations_OVERRIDE_LABEL_ENCODER_CHECKPOINT_biogpt"
+#     --override SEED 52 LABEL_ENCODER_CHECKPOINT microsoft/biogpt
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: 'ablations_OVERRIDE_WEIGHTED_SAMPLING_False' 
+#   sku: G8-V100
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --name "ablations_OVERRIDE_WEIGHTED_SAMPLING_False"
+#     --override SEED 52 WEIGHTED_SAMPLING False
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: 'ablations_OVERRIDE_LOSS_FN_BCE' 
+#   sku: G8-V100
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --name "ablations_OVERRIDE_LOSS_FN_BCE"
+#     --override SEED 52 LOSS_FN BCE
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: 'ablations_OVERRIDE_AUGMENT_RESIDUE_PROBABILITY_0' 
+#   sku: G8-V100
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --name "ablations_OVERRIDE_AUGMENT_RESIDUE_PROBABILITY_0"
+#     --override SEED 52 AUGMENT_RESIDUE_PROBABILITY 0
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: 'ablations_OVERRIDE_LABEL_EMBEDDING_NOISING_ALPHA_0' 
+#   sku: G8-V100
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --name "ablations_OVERRIDE_LABEL_EMBEDDING_NOISING_ALPHA_0"
+#     --override SEED 52 LABEL_EMBEDDING_NOISING_ALPHA 0
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"
+# - name: 'ablations_OVERRIDE_LABEL_AUGMENTATION_DESCRIPTIONS_name' 
+#   sku: G8-V100
+#   priority: high
+#   preemptible: False
+#   command:
+#   - python main.py
+#     --nodes 1
+#     --gpus 8
+#     --train-path-name TRAIN_DATA_PATH
+#     --validation-path-name VAL_DATA_PATH
+#     --name "ablations_OVERRIDE_LABEL_AUGMENTATION_DESCRIPTIONS_name"
+#     --override SEED 52 LABEL_AUGMENTATION_DESCRIPTIONS name
+#     --amlt
+#     --use-wandb
+#   submit_args:
+#     env:
+#       WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+#       WANDB_API_KEY: "$WANDB_API_KEY"

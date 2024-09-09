@@ -36,14 +36,14 @@ import tqdm
 
 
 # From ftp://ftp.expasy.org/databases/enzyme/enzyme.dat
-DATA_DIR = 'data/'
+DATA_DIR = '../data/annotations/'
 EC_LEAF_NODE_METADATA_PATH = os.path.join(DATA_DIR, 'enzyme.dat')
 
 # From ftp://ftp.expasy.org/databases/enzyme/enzclass.txt
 EC_NON_LEAF_NODE_METADATA_PATH = os.path.join(DATA_DIR, 'enzclass.txt')
 
 # From http://purl.obolibrary.org/obo/go.obo
-GO_METADATA_PATH = os.path.join(DATA_DIR, 'go_may_2024.obo')
+GO_METADATA_PATH = os.path.join(DATA_DIR, 'go_jul_2024.obo')
 
 # Labels that are implied by other labels.
 # Json is a map from string key (label) to list of applicable/implied

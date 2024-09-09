@@ -28,13 +28,14 @@ params:
   IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
   WEIGHTED_SAMPLING: True #Sample rare sequences more often as dictaded by inverse frequency of labels
   INV_FREQUENCY_POWER: 0.5 #Used for weighted sampling AND relevant losses with weighting
+  SEQUENCE_WEIGHT_AGG: 'sum' #The aggregation to calculate sequence weight from applicable label weights.
   SAMPLING_LOWER_CLAMP_BOUND: null # Lower bound for when clamping sampling weights
   SAMPLING_UPPER_CLAMP_BOUND: null # Upper bound for when clamping sampling weights
   TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. IS ALSO USED WITH GRID SAMPLER
   VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
 
   # Inference
-  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 500 # 1K for V100
+  LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 50 # 1K for V100
   SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 32 # 64 for V100 
 
   # General
@@ -61,7 +62,7 @@ params:
   OPTIMIZATION_METRIC_NAME: f1_macro # Only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_macro
   ESTIMATE_MAP: True
-  NUM_EPOCHS: 32
+  NUM_EPOCHS: 46
 
   # Memory optimizations
   GRADIENT_ACCUMULATION_STEPS: 1 # 1 = no gradient accumulation
@@ -93,13 +94,13 @@ params:
   MAX_SEQUENCE_LENGTH: 10000 # Only affects training set. Just 8 seqs with 10K+ length
   REMOVE_UNREPRESENTED_LABELS: False # Removes labels that never apply to train sequences
   NORMALIZE_PROBABILITIES: False
-  INFERENCE_GO_DESCRIPTIONS: name # Ensembling during inference (validation, test). Only label, name, or name+label are supported.
+  INFERENCE_GO_DESCRIPTIONS: name+label # Ensembling during inference (validation, test). Only label, name, or name+label are supported.
 
   # Augmentation
   AUGMENT_RESIDUE_PROBABILITY: 0.1 # 0.0 = no augmentation. The probability that any given residue will be augmented. AlphaFold uses 0.15 (15% of residues are augmented)
   USE_RESIDUE_MASKING: False # If True, also use masking to augment sequences. Must then also set AUGMENT_SEQUENCE_PROBABILITY > 0, and TRAIN_SEQUENCE_ENCODER = True
-  LABEL_AUGMENTATION_DESCRIPTIONS: name # Specifies what descriptions to use during training. # Options are any combination of label, name, and synonym_exact. Must include at least one.
-  LABEL_EMBEDDING_NOISING_ALPHA: 0.0 # 0.0 = no noising. Typical ranges are <20. Noising scalar from https://arxiv.org/pdf/2310.05914.pdf
+  LABEL_AUGMENTATION_DESCRIPTIONS: name+label # Specifies what descriptions to use during training. # Options are any combination of label, name, and synonym_exact. Must include at least one.
+  LABEL_EMBEDDING_NOISING_ALPHA: 20.0 # 0.0 = no noising. Typical ranges are <20. Noising scalar from https://arxiv.org/pdf/2310.05914.pdf
 
   # Constants
   SEED: 42
@@ -122,7 +123,8 @@ embed_sequences_params:
   DILATION_BASE: 3
   NUM_RESNET_BLOCKS: 5
   BOTTLENECK_FACTOR: 0.5
-  PROTEINFER_NUM_LABELS: 32102
+  PROTEINFER_NUM_GO_LABELS: 32102
+  PROTEINFER_NUM_EC_LABELS: 5134
 
 # Paths to data, vocabularies, embeddings, and models
 paths:
@@ -130,7 +132,9 @@ paths:
   data_paths: 
     # ProteInfer data paths
     TRAIN_DATA_PATH: swissprot/proteinfer_splits/random/train_GO.fasta
+    TRAIN_2024_DATA_PATH: swissprot/proteinfer_splits/random/train_GO_jul_2024.fasta
     VAL_DATA_PATH: swissprot/proteinfer_splits/random/dev_GO.fasta
+    TEST_TOP_LABELS_DATA_PATH: swissprot/proteinfer_splits/random/test_top_labels_GO.fasta
     TEST_DATA_PATH: swissprot/proteinfer_splits/random/test_GO.fasta
 
     TRAIN_CLUSTERED_DATA_PATH: swissprot/proteinfer_splits/clustered/train_GO.fasta
@@ -138,17 +142,18 @@ paths:
     TEST_CLUSTERED_DATA_PATH: swissprot/proteinfer_splits/clustered/test_GO.fasta
 
     FULL_DATA_PATH: swissprot/proteinfer_splits/random/full_GO.fasta # used to generate vocabularies
+    FULL_EC_DATA_PATH: swissprot/proteinfer_splits/random/full_EC.fasta # used to generate vocabularies
 
-    TEST_2024_DATA_PATH: swissprot/proteinfer_splits/random/test_GO_may_2024.fasta
-    TEST_2024_PINF_VOCAB_DATA_PATH: swissprot/proteinfer_splits/random/test_GO_may_2024_pinf_vocab.fasta
+    TEST_2024_DATA_PATH: swissprot/proteinfer_splits/random/test_GO_jul_2024.fasta
+    TEST_2024_PINF_VOCAB_DATA_PATH: swissprot/proteinfer_splits/random/test_GO_jul_2024_pinf_vocab.fasta
     
     ALL_SWISSPROT: swissprot/swissprot_2023.fasta
 
     # Zero-shot data paths 
     TRAIN_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/2024-02-17_train_GO_zero_shot.fasta
     VAL_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/2024-02-17_dev_GO_zero_shot.fasta
-    TEST_DATA_PATH_ZERO_SHOT: zero_shot/GO_swissprot_may_2024.fasta
-    TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES: zero_shot/GO_swissprot_leaf_nodes_may_2024.fasta
+    TEST_DATA_PATH_ZERO_SHOT: zero_shot/GO_swissprot_jul_2024.fasta
+    TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES: zero_shot/GO_swissprot_leaf_nodes_jul_2024.fasta
 
     #Other non-GO datasets to test zero shot
     VAL_EC_DATA_PATH_ZERO_SHOT: zero_shot/dev_EC.fasta
@@ -158,7 +163,7 @@ paths:
 
     # Vocabulary paths
     VOCABULARIES_DIR: vocabularies/proteinfer
-    GO_ANNOTATIONS_PATH: annotations/go_annotations_may_2024.pkl #annotations/go_annotations_2019_07_01_updated.pkl # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
+    GO_ANNOTATIONS_PATH: annotations/go_annotations_jul_2024.pkl #annotations/go_annotations_2019_07_01_updated.pkl # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
     EC_ANNOTATIONS_PATH: annotations/ec_annotations.pkl
     INFERENCE_ANNOTATIONS_PATH: annotations/inference_annotations.pkl
 
@@ -168,7 +173,7 @@ paths:
     EC_BASE_LABEL_EMBEDDING_PATH: embeddings/ecv1_frozen_label_embeddings.pt # this is the base path which is modified by POOLING_METHOD
 
     # ProteInfer paths
-    PARENTHOOD_LIB_PATH: vocabularies/parenthood_may_2024.json
+    PARENTHOOD_LIB_PATH: vocabularies/parenthood_jul_2024.json
     PROTEINFER_GO_WEIGHTS_PATH: models/proteinfer/GO_model_weights.pkl
     PROTEINFER_EC_WEIGHTS_PATH: models/proteinfer/EC_model_weights.pkl
     

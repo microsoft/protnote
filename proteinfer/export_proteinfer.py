@@ -6,8 +6,9 @@ import tensorflow_hub as hub
 import pickle
 import os
 
-def export_model_weights(model_path:str,model_name:str,output_dir:str):
-    output_path = os.path.join(output_dir,f'{model_name}_model_weights.pkl')
+def export_model_weights(model_path:str,model_name:str,output_dir:str,add_model_id:bool=False):
+    suffix = model_path.split('-')[-1] if add_model_id else ''
+    output_path = os.path.join(output_dir,f'{model_name}_model_weights' + suffix + '.pkl')
     module_spec=hub.saved_model_module.create_module_spec_from_saved_model(
         model_path)
 
@@ -28,14 +29,15 @@ def export_model_weights(model_path:str,model_name:str,output_dir:str):
         pickle.dump(weights_dict, f,protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def export_proteinfer_vocab(model_path:str,model_name:str,output_dir:str,vocab_variable_name:str = 'label_vocab:0'):
+def export_proteinfer_vocab(model_path:str,model_name:str,output_dir:str,vocab_variable_name:str = 'label_vocab:0',add_model_id:bool=False):
+    suffix = model_path.split('-')[-1] if add_model_id else ''
     inferrer = inference.Inferrer(
             savedmodel_dir_path=model_path,
             use_tqdm= True,
             batch_size=16,
             activation_type="pooled_representation"
     )
-    output_path = os.path.join(output_dir,f'proteinfer_{model_name}_label_vocab.json')
+    output_path = os.path.join(output_dir,f'proteinfer_{model_name}_label_vocab' + suffix + '.json')
     label_vocab = inferrer.get_variable(vocab_variable_name).astype(str)
     with open(output_path,'w') as output_file:
         json.dump(label_vocab.tolist(),output_file)
@@ -50,6 +52,7 @@ if __name__ =='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model-path',required=True,help='originally stored in cached_models after running install_models.py')
     parser.add_argument('--model-name',required=True,help='GO')
+    parser.add_argument('--add-model-id',action='store_true',default=False,required=False)
     args = parser.parse_args()
     
     HOME = os.path.abspath(os.path.join(__file__, os.pardir))
@@ -58,6 +61,6 @@ if __name__ =='__main__':
         os.mkdir(export_folder)
     
     #if os.path.exists('export')
-    export_proteinfer_vocab(model_path=args.model_path,model_name=args.model_name,output_dir=export_folder)
-    export_model_weights(model_path=args.model_path,model_name=args.model_name,output_dir=export_folder)
+    export_proteinfer_vocab(model_path=args.model_path,model_name=args.model_name,output_dir=export_folder,add_model_id=args.add_model_id)
+    export_model_weights(model_path=args.model_path,model_name=args.model_name,output_dir=export_folder,add_model_id=args.add_model_id)
 

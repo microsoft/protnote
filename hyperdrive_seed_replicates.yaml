@@ -1,0 +1,57 @@
+description: Protein Functions replicate experiment with 5 different seeds and 3 different weight sampling schemes. 
+  Up to 46 epochs.
+
+target:
+  service: sing
+  name: barlow01
+  workspace_name: bio0-ext
+
+environment:
+  image: amlt-sing/acpt-2.0.1-py3.10-cuda11.8 #azureml/openmpi4.1.0-cuda11.8-cudnn8-ubuntu22.04:latest 
+  conda_yaml_file: $CONFIG_DIR/environment.yml
+  skip_conda_packages_on_sing:
+  - tensorflow
+  - cudatoolkit
+  - deepspeed
+  - pip
+  - python\b
+
+code:
+  local_dir: $CONFIG_DIR/ 
+
+data:
+  local_dir: $CONFIG_DIR/data
+  remote_dir: data
+
+# SKU usage: G1 (single GPU), G4 (quad GPU), G4-V100 (1 machine, 4 V100 gpus), etc...
+search:
+  job_template:
+    name: "{experiment_name}_SEED_{SEED}_SEQUENCE_WEIGHT_AGG_{SEQUENCE_WEIGHT_AGG}"
+    sku: G8-V100
+    priority: high
+    preemptible: False
+    command:
+    - python main.py
+      --nodes 1
+      --gpus 8
+      --train-path-name TRAIN_DATA_PATH
+      --validation-path-name VAL_DATA_PATH
+      --name "{experiment_name}_{SEED}_{SEQUENCE_WEIGHT_AGG}"
+      --override ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 VALIDATION_BATCH_SIZE 8 TEST_BATCH_SIZE 8 NUM_EPOCHS 46 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label
+      --amlt
+      --use-wandb
+    submit_args:
+      env:
+        WANDB_BASE_URL: "https://microsoft-research.wandb.io"
+        WANDB_API_KEY: "$WANDB_API_KEY"
+  type: hyperdrive
+  sampling: grid
+  max_trials: 10
+  parallel_trials: 10
+  params:
+    - name: SEED
+      values: [12,22,32,42,52]
+    - name: SEQUENCE_WEIGHT_AGG
+      values: ['sum','mean']
+
+ 

@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<!-- saved from url=(0043)https://release.geneontology.org/index.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>Gene Ontology Data Archive</title>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="https://geneontology.org/favicon.ico">
+    <link rel="stylesheet" href="./Gene Ontology Data Archive_files/bootstrap.min.css" integrity="sha384-PmY9l28YgO4JwMKbTvgaS7XNZJ30MK9FAZjjzXtlqyZCqBY6X6bXIkM++IkyinN+" crossorigin="anonymous">
+    <link rel="stylesheet" href="./Gene Ontology Data Archive_files/bootstrap-theme.min.css" integrity="sha384-jzngWsPS6op3fgRCDTESqrEJwRKck+CILhJVO5VvaAZCq8JYf8HsR/HPpBOOPZfR" crossorigin="anonymous">
+    <link href="./Gene Ontology Data Archive_files/font-awesome.css" rel="stylesheet">
+    <link rel="stylesheet" href="./Gene Ontology Data Archive_files/dataTables.bootstrap.min.css">
+    <link rel="stylesheet" href="./Gene Ontology Data Archive_files/font-awesome.min.css">
+
+
+    <style type="text/css">
+        #wrapper {
+            padding-left: 0;
+        }
+
+        #page-wrapper {
+            width: 100%;
+        }
+
+        #tb-s3objects {
+            width: 100% !Important;
+        }
+
+        a {
+            color: rgb(73, 101, 194);
+        }
+
+        body {
+            font-family: "Lato", sans-serif;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        td {
+            font-family: "Lato", sans-serif;
+            font-size: 12px;
+        }
+
+        .title {
+            padding: 6px 12px;
+        }
+
+        .breadcrumb {
+            margin-bottom: 0;
+        }
+
+        #navbuttons .btn {
+            padding: 3px 6px;
+        }
+
+        blockquote { font-size: 14px; font-style: italic }
+
+        p { margin: 10 0 10px; }
+
+        h1 {
+            display: inline-block;
+            font-size: 34px;
+            color: #4965c2;
+            margin-top: 10px;
+        }
+
+        .padding-right {
+            padding-right: 12px;
+        }
+
+        .logo img {
+            width: 175px;
+            margin-right: 30px
+        }
+
+        .panel-heading {
+            padding: 10px 10px 10px 15px;
+            box-shadow: 0 1px 4px 0 rgba(0,0,0,0.30);
+        }
+        .panel-body {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .small-margin {
+            margin: 2px 2px;
+        }
+
+        .disclaimer {
+            margin: 3rem 0rem 6rem 0rem;
+        }
+
+    </style>
+</head>
+
+<!-- DEBUG: Enable this for red outline on all elements -->
+<!-- <style media="screen" type="text/css"> * { outline: 1px red solid; } </style> -->
+
+<body>
+
+    <div id="page-wrapper">
+        <div class="row">
+            <div class="col-lg-12">
+                <div class="panel">
+
+                    <!-- Panel including title, breadcrumbs, and controls -->
+                    <div class="panel-heading clearfix">
+                        <!-- Title and breadcrumbs -->
+                        <div class="btn-group pull-left">
+                            <!-- App title -->
+                            <div class="pull-left logo" style="margin-top: 10px;">
+                                <a href="https://geneontology.org/">
+                                    <img src="./Gene Ontology Data Archive_files/go-logo.large.png">
+                                </a>
+                            </div>
+
+                        </div>
+
+                        <h1>
+                            Gene Ontology Data Archive
+                        </h1>
+
+
+            <!-- SOCIAL LINKS -->
+            <div class="navbar-right">
+                    <ul class="nav navbar-nav" style="padding-top: 14px;">
+                        <li>
+                            <a href="https://github.com/geneontology" target="blank" style="padding: 8px 3px; font-size: 15px;">
+                                <i class="fa fa-github padding-right" aria-hidden="true"></i>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="https://twitter.com/news4go" target="blank" style="padding: 8px 3px; font-size: 15px;">
+                                <i class="fa fa-twitter padding-right" aria-hidden="true"></i>
+                            </a>
+                        </li>
+                        <li style="margin-right: 5px">
+                            <a href="https://www.facebook.com/pages/Gene-Ontology/305908656519" target="blank" style="padding: 8px 3px; font-size: 15px;">
+                                <i class="fa fa-facebook padding-right" aria-hidden="true"></i>
+                            </a>
+                        </li>
+                    </ul>
+
+                    <a href="https://www.alliancegenome.org/" target="blank" alt="Alliance of Genome Resources" style="padding-right: 10px;">
+                        <img src="./Gene Ontology Data Archive_files/ALLIANCE-logo-nobackground_foundingmember.png" alt="Alliance of Genome Resources" style="height: 60px; margin-right: 10px;">
+                    </a>
+
+                </div>
+
+                        <!-- Controls -->
+                        <div id="navbuttons" class="pull-right" style="display:none">
+                                <div>
+                                    <!-- Hide folders checkbox -->
+                                    <div class="btn-group">
+                                        <label class="btn">
+                                            <input type="checkbox" id="hidefolders">&nbsp;Hide folders?
+                                        </label>
+                                    </div>
+                                    <!-- Folder/Bucket radio group -->
+                                    <div class="btn-group" data-toggle="buttons">
+                                        <label class="btn btn-primary active" title="View all objects in folder">
+                                            <i class="fa fa-angle-double-up"></i>
+                                            <input type="radio" name="optionsdepth" value="folder" id="optionfolder" checked="">&nbsp;Folder
+                                        </label>
+                                        <label class="btn btn-primary" title="View all objects in bucket">
+                                            <i class="fa fa-angle-double-down"></i>
+                                            <input type="radio" name="optionsdepth" value="bucket" id="optionbucket">&nbsp;Bucket
+                                        </label>
+                                    </div>
+                                    <!-- Bucket selection -->
+                                    <div class="btn-group" id="bucket">
+                                        <i id="bucket-chooser" style="cursor: pointer;" class="btn fa fa-cog fa-2x" title="Switch to a different S3 Bucket"></i>
+                                    </div>
+                                    <!-- Dual purpose: progress spinner and refresh button, plus object count -->
+                                    <div class="btn-group" id="refresh">
+                                        <span id="bucket-loader" style="cursor: pointer;" class="btn fa fa-refresh fa-2x pull-left" title="Refresh"></span>
+                                        <span id="badgecount" class="badge pull-right" title="Object count">236</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                    </div>
+
+                    <!-- Panel including S3 object table -->
+                    <div class="panel-body">
+
+                        <!-- DISCLAIMER MESSAGE -->
+                        <div class="disclaimer">
+                            <p>
+                                The <b>Gene Ontology archive</b> provides GO data - ontology, annotations, and associated files - starting from March 2004. The archive was built from the legacy GO CVS, SVN and archive products to reconstruct GO releases on a monthly basis, similar to our current release cycle. The file structure and file format were made consistent with the current GO monthly releases produced since 2018.
+                                <br><br>
+                                File structure and format are further described in the [ <a href="https://geneontology.org/docs/archives/">GO Archive documentation</a> ].
+                                <br>
+                                Questions or suggestions can be sent to the [ <a href="https://help.geneontology.org/">GO Helpdesk</a> ].
+                                <br><br>
+                                <b>Note</b>: <i>users are encouraged to cite the date of the GO release (e.g. 2005-04-01) used in their analysis to enable the reproducibility of their experiments.</i>
+                            </p>
+                        </div>
+
+
+                        <!-- Bucket breadcrumbs -->
+                        <div style="margin-bottom: 1rem">
+                            <span style="vertical-align: sub; font-weight: 800">Current Folder: </span>
+                            <div id="list_folders"><a id="folder_/" class="btn btn-primary small-margin" href="https://release.geneontology.org/index.html">/</a></div>
+                        </div>
+
+
+                        <div id="tb-s3objects_wrapper" class="dataTables_wrapper form-inline dt-bootstrap no-footer"><div class="row"><div class="col-sm-6"><div class="dataTables_length" id="tb-s3objects_length" hidden=""><label>Show <select name="tb-s3objects_length" aria-controls="tb-s3objects" class="form-control input-sm"><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select> entries</label></div></div><div class="col-sm-6"><div id="tb-s3objects_filter" class="dataTables_filter"><label>Search:<input type="search" class="form-control input-sm" placeholder="" aria-controls="tb-s3objects"></label></div></div></div><div class="row"><div class="col-sm-12"><table class="table table-bordered table-hover table-striped dataTable no-footer" id="tb-s3objects" role="grid" aria-describedby="tb-s3objects_info" style="width: 968px;">
+                            <thead>
+                                <tr role="row"><th class="sorting_asc" tabindex="0" aria-controls="tb-s3objects" rowspan="1" colspan="1" aria-label="Folders and files: activate to sort column ascending" style="width: 691.333px;">Folders and files</th><th style="width:200px" class="sorting" tabindex="0" aria-controls="tb-s3objects" rowspan="1" colspan="1" aria-label="Size: activate to sort column ascending">Size</th></tr>
+                            </thead>
+                            <tbody id="tbody-s3objects"><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2024-04-24/" href="https://release.geneontology.org/2024-04-24/index.html">2024-04-24/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2024-04-18/" href="https://release.geneontology.org/2024-04-18/index.html">2024-04-18/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2024-03-28/" href="https://release.geneontology.org/2024-03-28/index.html">2024-03-28/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2024-01-17/" href="https://release.geneontology.org/2024-01-17/index.html">2024-01-17/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2023-11-15/" href="https://release.geneontology.org/2023-11-15/index.html">2023-11-15/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2023-10-09/" href="https://release.geneontology.org/2023-10-09/index.html">2023-10-09/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2023-07-27/" href="https://release.geneontology.org/2023-07-27/index.html">2023-07-27/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2023-06-11/" href="https://release.geneontology.org/2023-06-11/index.html">2023-06-11/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2023-05-10/" href="https://release.geneontology.org/2023-05-10/index.html">2023-05-10/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2023-04-01/" href="https://release.geneontology.org/2023-04-01/index.html">2023-04-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2023-03-06/" href="https://release.geneontology.org/2023-03-06/index.html">2023-03-06/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2023-01-01/" href="https://release.geneontology.org/2023-01-01/index.html">2023-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2022-12-04/" href="https://release.geneontology.org/2022-12-04/index.html">2022-12-04/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2022-11-03/" href="https://release.geneontology.org/2022-11-03/index.html">2022-11-03/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2022-10-07/" href="https://release.geneontology.org/2022-10-07/index.html">2022-10-07/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2022-09-19/" href="https://release.geneontology.org/2022-09-19/index.html">2022-09-19/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2022-07-01/" href="https://release.geneontology.org/2022-07-01/index.html">2022-07-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2022-06-15/" href="https://release.geneontology.org/2022-06-15/index.html">2022-06-15/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2022-05-16/" href="https://release.geneontology.org/2022-05-16/index.html">2022-05-16/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2022-03-22/" href="https://release.geneontology.org/2022-03-22/index.html">2022-03-22/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2022-03-10/" href="https://release.geneontology.org/2022-03-10/index.html">2022-03-10/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2022-01-13/" href="https://release.geneontology.org/2022-01-13/index.html">2022-01-13/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2021-12-15/" href="https://release.geneontology.org/2021-12-15/index.html">2021-12-15/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2021-11-16/" href="https://release.geneontology.org/2021-11-16/index.html">2021-11-16/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2021-10-26/" href="https://release.geneontology.org/2021-10-26/index.html">2021-10-26/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2021-09-01/" href="https://release.geneontology.org/2021-09-01/index.html">2021-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2021-08-18/" href="https://release.geneontology.org/2021-08-18/index.html">2021-08-18/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2021-07-02/" href="https://release.geneontology.org/2021-07-02/index.html">2021-07-02/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2021-06-16/" href="https://release.geneontology.org/2021-06-16/index.html">2021-06-16/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2021-05-01/" href="https://release.geneontology.org/2021-05-01/index.html">2021-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2021-02-01/" href="https://release.geneontology.org/2021-02-01/index.html">2021-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2021-01-01/" href="https://release.geneontology.org/2021-01-01/index.html">2021-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2020-12-08/" href="https://release.geneontology.org/2020-12-08/index.html">2020-12-08/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2020-11-17/" href="https://release.geneontology.org/2020-11-17/index.html">2020-11-17/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2020-10-09/" href="https://release.geneontology.org/2020-10-09/index.html">2020-10-09/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2020-09-10/" href="https://release.geneontology.org/2020-09-10/index.html">2020-09-10/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2020-08-10/" href="https://release.geneontology.org/2020-08-10/index.html">2020-08-10/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2020-07-16/" href="https://release.geneontology.org/2020-07-16/index.html">2020-07-16/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2020-06-01/" href="https://release.geneontology.org/2020-06-01/index.html">2020-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2020-05-02/" href="https://release.geneontology.org/2020-05-02/index.html">2020-05-02/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2020-04-23/" href="https://release.geneontology.org/2020-04-23/index.html">2020-04-23/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2020-03-25/" href="https://release.geneontology.org/2020-03-25/index.html">2020-03-25/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2020-02-26/" href="https://release.geneontology.org/2020-02-26/index.html">2020-02-26/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2020-01-01/" href="https://release.geneontology.org/2020-01-01/index.html">2020-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2019-12-09/" href="https://release.geneontology.org/2019-12-09/index.html">2019-12-09/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2019-11-01/" href="https://release.geneontology.org/2019-11-01/index.html">2019-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2019-10-07/" href="https://release.geneontology.org/2019-10-07/index.html">2019-10-07/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2019-07-01/" href="https://release.geneontology.org/2019-07-01/index.html">2019-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2019-06-09/" href="https://release.geneontology.org/2019-06-09/index.html">2019-06-09/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2019-06-01/" href="https://release.geneontology.org/2019-06-01/index.html">2019-06-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2019-05-09/" href="https://release.geneontology.org/2019-05-09/index.html">2019-05-09/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2019-04-17/" href="https://release.geneontology.org/2019-04-17/index.html">2019-04-17/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2019-03-18/" href="https://release.geneontology.org/2019-03-18/index.html">2019-03-18/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2019-03-10/" href="https://release.geneontology.org/2019-03-10/index.html">2019-03-10/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2019-02-01/" href="https://release.geneontology.org/2019-02-01/index.html">2019-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2019-01-01/" href="https://release.geneontology.org/2019-01-01/index.html">2019-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2018-12-01/" href="https://release.geneontology.org/2018-12-01/index.html">2018-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2018-11-15/" href="https://release.geneontology.org/2018-11-15/index.html">2018-11-15/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2018-10-08/" href="https://release.geneontology.org/2018-10-08/index.html">2018-10-08/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2018-10-01/" href="https://release.geneontology.org/2018-10-01/index.html">2018-10-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2018-09-05/" href="https://release.geneontology.org/2018-09-05/index.html">2018-09-05/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2018-08-09/" href="https://release.geneontology.org/2018-08-09/index.html">2018-08-09/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2018-07-02/" href="https://release.geneontology.org/2018-07-02/index.html">2018-07-02/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2018-06-01/" href="https://release.geneontology.org/2018-06-01/index.html">2018-06-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2018-05-20/" href="https://release.geneontology.org/2018-05-20/index.html">2018-05-20/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2018-04-02/" href="https://release.geneontology.org/2018-04-02/index.html">2018-04-02/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2018-03-10/" href="https://release.geneontology.org/2018-03-10/index.html">2018-03-10/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2018-03-06/" href="https://release.geneontology.org/2018-03-06/index.html">2018-03-06/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2018-02-01/" href="https://release.geneontology.org/2018-02-01/index.html">2018-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2018-01-01/" href="https://release.geneontology.org/2018-01-01/index.html">2018-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2017-12-01/" href="https://release.geneontology.org/2017-12-01/index.html">2017-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2017-11-01/" href="https://release.geneontology.org/2017-11-01/index.html">2017-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2017-10-01/" href="https://release.geneontology.org/2017-10-01/index.html">2017-10-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2017-09-01/" href="https://release.geneontology.org/2017-09-01/index.html">2017-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2017-08-01/" href="https://release.geneontology.org/2017-08-01/index.html">2017-08-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2017-07-01/" href="https://release.geneontology.org/2017-07-01/index.html">2017-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2017-06-01/" href="https://release.geneontology.org/2017-06-01/index.html">2017-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2017-05-01/" href="https://release.geneontology.org/2017-05-01/index.html">2017-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2017-04-01/" href="https://release.geneontology.org/2017-04-01/index.html">2017-04-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2017-03-01/" href="https://release.geneontology.org/2017-03-01/index.html">2017-03-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2017-02-01/" href="https://release.geneontology.org/2017-02-01/index.html">2017-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2017-01-01/" href="https://release.geneontology.org/2017-01-01/index.html">2017-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2016-12-01/" href="https://release.geneontology.org/2016-12-01/index.html">2016-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2016-11-01/" href="https://release.geneontology.org/2016-11-01/index.html">2016-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2016-10-01/" href="https://release.geneontology.org/2016-10-01/index.html">2016-10-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2016-09-01/" href="https://release.geneontology.org/2016-09-01/index.html">2016-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2016-08-01/" href="https://release.geneontology.org/2016-08-01/index.html">2016-08-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2016-07-01/" href="https://release.geneontology.org/2016-07-01/index.html">2016-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2016-06-01/" href="https://release.geneontology.org/2016-06-01/index.html">2016-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2016-05-01/" href="https://release.geneontology.org/2016-05-01/index.html">2016-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2016-04-01/" href="https://release.geneontology.org/2016-04-01/index.html">2016-04-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2016-03-01/" href="https://release.geneontology.org/2016-03-01/index.html">2016-03-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2016-02-01/" href="https://release.geneontology.org/2016-02-01/index.html">2016-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2016-01-01/" href="https://release.geneontology.org/2016-01-01/index.html">2016-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2015-12-01/" href="https://release.geneontology.org/2015-12-01/index.html">2015-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2015-11-01/" href="https://release.geneontology.org/2015-11-01/index.html">2015-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2015-10-01/" href="https://release.geneontology.org/2015-10-01/index.html">2015-10-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2015-09-01/" href="https://release.geneontology.org/2015-09-01/index.html">2015-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2015-08-01/" href="https://release.geneontology.org/2015-08-01/index.html">2015-08-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2015-07-01/" href="https://release.geneontology.org/2015-07-01/index.html">2015-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2015-06-01/" href="https://release.geneontology.org/2015-06-01/index.html">2015-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2015-05-01/" href="https://release.geneontology.org/2015-05-01/index.html">2015-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2015-04-01/" href="https://release.geneontology.org/2015-04-01/index.html">2015-04-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2015-03-01/" href="https://release.geneontology.org/2015-03-01/index.html">2015-03-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2015-02-01/" href="https://release.geneontology.org/2015-02-01/index.html">2015-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2015-01-01/" href="https://release.geneontology.org/2015-01-01/index.html">2015-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2014-12-01/" href="https://release.geneontology.org/2014-12-01/index.html">2014-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2014-11-01/" href="https://release.geneontology.org/2014-11-01/index.html">2014-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2014-10-01/" href="https://release.geneontology.org/2014-10-01/index.html">2014-10-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2014-09-01/" href="https://release.geneontology.org/2014-09-01/index.html">2014-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2014-08-01/" href="https://release.geneontology.org/2014-08-01/index.html">2014-08-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2014-07-01/" href="https://release.geneontology.org/2014-07-01/index.html">2014-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2014-06-01/" href="https://release.geneontology.org/2014-06-01/index.html">2014-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2014-05-01/" href="https://release.geneontology.org/2014-05-01/index.html">2014-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2014-04-01/" href="https://release.geneontology.org/2014-04-01/index.html">2014-04-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2014-03-01/" href="https://release.geneontology.org/2014-03-01/index.html">2014-03-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2014-02-01/" href="https://release.geneontology.org/2014-02-01/index.html">2014-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2014-01-01/" href="https://release.geneontology.org/2014-01-01/index.html">2014-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2013-12-01/" href="https://release.geneontology.org/2013-12-01/index.html">2013-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2013-11-01/" href="https://release.geneontology.org/2013-11-01/index.html">2013-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2013-10-01/" href="https://release.geneontology.org/2013-10-01/index.html">2013-10-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2013-09-01/" href="https://release.geneontology.org/2013-09-01/index.html">2013-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2013-08-01/" href="https://release.geneontology.org/2013-08-01/index.html">2013-08-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2013-07-01/" href="https://release.geneontology.org/2013-07-01/index.html">2013-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2013-06-01/" href="https://release.geneontology.org/2013-06-01/index.html">2013-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2013-05-01/" href="https://release.geneontology.org/2013-05-01/index.html">2013-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2013-04-01/" href="https://release.geneontology.org/2013-04-01/index.html">2013-04-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2013-03-01/" href="https://release.geneontology.org/2013-03-01/index.html">2013-03-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2013-02-01/" href="https://release.geneontology.org/2013-02-01/index.html">2013-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2013-01-01/" href="https://release.geneontology.org/2013-01-01/index.html">2013-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2012-12-01/" href="https://release.geneontology.org/2012-12-01/index.html">2012-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2012-11-01/" href="https://release.geneontology.org/2012-11-01/index.html">2012-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2012-10-01/" href="https://release.geneontology.org/2012-10-01/index.html">2012-10-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2012-09-01/" href="https://release.geneontology.org/2012-09-01/index.html">2012-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2012-08-01/" href="https://release.geneontology.org/2012-08-01/index.html">2012-08-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2012-07-01/" href="https://release.geneontology.org/2012-07-01/index.html">2012-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2012-06-01/" href="https://release.geneontology.org/2012-06-01/index.html">2012-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2012-05-01/" href="https://release.geneontology.org/2012-05-01/index.html">2012-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2012-04-01/" href="https://release.geneontology.org/2012-04-01/index.html">2012-04-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2012-03-01/" href="https://release.geneontology.org/2012-03-01/index.html">2012-03-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2012-02-01/" href="https://release.geneontology.org/2012-02-01/index.html">2012-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2012-01-01/" href="https://release.geneontology.org/2012-01-01/index.html">2012-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2011-12-01/" href="https://release.geneontology.org/2011-12-01/index.html">2011-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2011-11-01/" href="https://release.geneontology.org/2011-11-01/index.html">2011-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2011-10-01/" href="https://release.geneontology.org/2011-10-01/index.html">2011-10-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2011-09-01/" href="https://release.geneontology.org/2011-09-01/index.html">2011-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2011-08-01/" href="https://release.geneontology.org/2011-08-01/index.html">2011-08-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2011-07-01/" href="https://release.geneontology.org/2011-07-01/index.html">2011-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2011-06-01/" href="https://release.geneontology.org/2011-06-01/index.html">2011-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2011-05-01/" href="https://release.geneontology.org/2011-05-01/index.html">2011-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2011-04-01/" href="https://release.geneontology.org/2011-04-01/index.html">2011-04-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2011-03-01/" href="https://release.geneontology.org/2011-03-01/index.html">2011-03-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2011-02-01/" href="https://release.geneontology.org/2011-02-01/index.html">2011-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2011-01-01/" href="https://release.geneontology.org/2011-01-01/index.html">2011-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2010-12-01/" href="https://release.geneontology.org/2010-12-01/index.html">2010-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2010-11-01/" href="https://release.geneontology.org/2010-11-01/index.html">2010-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2010-10-01/" href="https://release.geneontology.org/2010-10-01/index.html">2010-10-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2010-09-01/" href="https://release.geneontology.org/2010-09-01/index.html">2010-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2010-08-01/" href="https://release.geneontology.org/2010-08-01/index.html">2010-08-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2010-07-01/" href="https://release.geneontology.org/2010-07-01/index.html">2010-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2010-06-01/" href="https://release.geneontology.org/2010-06-01/index.html">2010-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2010-05-01/" href="https://release.geneontology.org/2010-05-01/index.html">2010-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2010-04-01/" href="https://release.geneontology.org/2010-04-01/index.html">2010-04-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2010-03-01/" href="https://release.geneontology.org/2010-03-01/index.html">2010-03-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2010-02-01/" href="https://release.geneontology.org/2010-02-01/index.html">2010-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2010-01-01/" href="https://release.geneontology.org/2010-01-01/index.html">2010-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2009-12-01/" href="https://release.geneontology.org/2009-12-01/index.html">2009-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2009-11-01/" href="https://release.geneontology.org/2009-11-01/index.html">2009-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2009-10-01/" href="https://release.geneontology.org/2009-10-01/index.html">2009-10-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2009-09-01/" href="https://release.geneontology.org/2009-09-01/index.html">2009-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2009-08-01/" href="https://release.geneontology.org/2009-08-01/index.html">2009-08-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2009-07-01/" href="https://release.geneontology.org/2009-07-01/index.html">2009-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2009-06-01/" href="https://release.geneontology.org/2009-06-01/index.html">2009-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2009-05-01/" href="https://release.geneontology.org/2009-05-01/index.html">2009-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2009-04-01/" href="https://release.geneontology.org/2009-04-01/index.html">2009-04-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2009-03-01/" href="https://release.geneontology.org/2009-03-01/index.html">2009-03-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2009-02-01/" href="https://release.geneontology.org/2009-02-01/index.html">2009-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2009-01-01/" href="https://release.geneontology.org/2009-01-01/index.html">2009-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2008-12-01/" href="https://release.geneontology.org/2008-12-01/index.html">2008-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2008-11-01/" href="https://release.geneontology.org/2008-11-01/index.html">2008-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2008-10-01/" href="https://release.geneontology.org/2008-10-01/index.html">2008-10-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2008-09-01/" href="https://release.geneontology.org/2008-09-01/index.html">2008-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2008-08-01/" href="https://release.geneontology.org/2008-08-01/index.html">2008-08-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2008-07-01/" href="https://release.geneontology.org/2008-07-01/index.html">2008-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2008-06-01/" href="https://release.geneontology.org/2008-06-01/index.html">2008-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2008-05-01/" href="https://release.geneontology.org/2008-05-01/index.html">2008-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2008-04-01/" href="https://release.geneontology.org/2008-04-01/index.html">2008-04-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2008-03-01/" href="https://release.geneontology.org/2008-03-01/index.html">2008-03-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2008-02-01/" href="https://release.geneontology.org/2008-02-01/index.html">2008-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2008-01-01/" href="https://release.geneontology.org/2008-01-01/index.html">2008-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2007-12-01/" href="https://release.geneontology.org/2007-12-01/index.html">2007-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2007-11-01/" href="https://release.geneontology.org/2007-11-01/index.html">2007-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2007-10-01/" href="https://release.geneontology.org/2007-10-01/index.html">2007-10-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2007-09-01/" href="https://release.geneontology.org/2007-09-01/index.html">2007-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2007-08-01/" href="https://release.geneontology.org/2007-08-01/index.html">2007-08-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2007-07-01/" href="https://release.geneontology.org/2007-07-01/index.html">2007-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2007-06-01/" href="https://release.geneontology.org/2007-06-01/index.html">2007-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2007-05-01/" href="https://release.geneontology.org/2007-05-01/index.html">2007-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2007-04-01/" href="https://release.geneontology.org/2007-04-01/index.html">2007-04-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2007-03-01/" href="https://release.geneontology.org/2007-03-01/index.html">2007-03-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2007-02-01/" href="https://release.geneontology.org/2007-02-01/index.html">2007-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2007-01-01/" href="https://release.geneontology.org/2007-01-01/index.html">2007-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2006-12-01/" href="https://release.geneontology.org/2006-12-01/index.html">2006-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2006-11-01/" href="https://release.geneontology.org/2006-11-01/index.html">2006-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2006-10-01/" href="https://release.geneontology.org/2006-10-01/index.html">2006-10-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2006-09-01/" href="https://release.geneontology.org/2006-09-01/index.html">2006-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2006-08-01/" href="https://release.geneontology.org/2006-08-01/index.html">2006-08-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2006-07-01/" href="https://release.geneontology.org/2006-07-01/index.html">2006-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2006-06-01/" href="https://release.geneontology.org/2006-06-01/index.html">2006-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2006-05-01/" href="https://release.geneontology.org/2006-05-01/index.html">2006-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2006-04-01/" href="https://release.geneontology.org/2006-04-01/index.html">2006-04-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2006-03-01/" href="https://release.geneontology.org/2006-03-01/index.html">2006-03-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2006-02-01/" href="https://release.geneontology.org/2006-02-01/index.html">2006-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2006-01-01/" href="https://release.geneontology.org/2006-01-01/index.html">2006-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2005-12-01/" href="https://release.geneontology.org/2005-12-01/index.html">2005-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2005-11-01/" href="https://release.geneontology.org/2005-11-01/index.html">2005-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2005-10-01/" href="https://release.geneontology.org/2005-10-01/index.html">2005-10-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2005-09-01/" href="https://release.geneontology.org/2005-09-01/index.html">2005-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2005-08-01/" href="https://release.geneontology.org/2005-08-01/index.html">2005-08-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2005-07-01/" href="https://release.geneontology.org/2005-07-01/index.html">2005-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2005-06-01/" href="https://release.geneontology.org/2005-06-01/index.html">2005-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2005-05-01/" href="https://release.geneontology.org/2005-05-01/index.html">2005-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2005-04-01/" href="https://release.geneontology.org/2005-04-01/index.html">2005-04-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2005-03-01/" href="https://release.geneontology.org/2005-03-01/index.html">2005-03-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2005-02-01/" href="https://release.geneontology.org/2005-02-01/index.html">2005-02-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2005-01-01/" href="https://release.geneontology.org/2005-01-01/index.html">2005-01-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2004-12-01/" href="https://release.geneontology.org/2004-12-01/index.html">2004-12-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2004-11-01/" href="https://release.geneontology.org/2004-11-01/index.html">2004-11-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2004-10-01/" href="https://release.geneontology.org/2004-10-01/index.html">2004-10-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2004-09-01/" href="https://release.geneontology.org/2004-09-01/index.html">2004-09-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2004-08-01/" href="https://release.geneontology.org/2004-08-01/index.html">2004-08-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2004-07-01/" href="https://release.geneontology.org/2004-07-01/index.html">2004-07-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2004-06-01/" href="https://release.geneontology.org/2004-06-01/index.html">2004-06-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2004-05-01/" href="https://release.geneontology.org/2004-05-01/index.html">2004-05-01/</a></td><td></td></tr><tr role="row" class="odd"><td class="sorting_2"><a data-s3="folder" data-prefix="2004-04-01/" href="https://release.geneontology.org/2004-04-01/index.html">2004-04-01/</a></td><td></td></tr><tr role="row" class="even"><td class="sorting_2"><a data-s3="folder" data-prefix="2004-03-01/" href="https://release.geneontology.org/2004-03-01/index.html">2004-03-01/</a></td><td></td></tr></tbody>
+                        </table></div></div><div class="row"><div class="col-sm-5"><div class="dataTables_info" id="tb-s3objects_info" role="status" aria-live="polite">Showing 1 to 236 of 236 entries</div></div><div class="col-sm-7"><div class="dataTables_paginate paging_simple_numbers" id="tb-s3objects_paginate" hidden=""><ul class="pagination"><li class="paginate_button previous disabled" id="tb-s3objects_previous"><a href="https://release.geneontology.org/index.html#" aria-controls="tb-s3objects" data-dt-idx="0" tabindex="0">Previous</a></li><li class="paginate_button active"><a href="https://release.geneontology.org/index.html#" aria-controls="tb-s3objects" data-dt-idx="1" tabindex="0">1</a></li><li class="paginate_button next disabled" id="tb-s3objects_next"><a href="https://release.geneontology.org/index.html#" aria-controls="tb-s3objects" data-dt-idx="2" tabindex="0">Next</a></li></ul></div></div></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+
+
+<script src="./Gene Ontology Data Archive_files/jquery-3.4.1.min.js.download"></script>
+<script src="./Gene Ontology Data Archive_files/bootstrap.min.js.download" integrity="sha384-vhJnz1OVIdLktyixHY4Uk3OHEwdQqPppqYR8+5mjsauETgLOcEynD9oPHhhz18Nw" crossorigin="anonymous"></script>
+<script src="./Gene Ontology Data Archive_files/bootbox.min.js.download"></script>
+<script src="./Gene Ontology Data Archive_files/aws-sdk-2.207.0.min.js.download"></script>
+<script src="./Gene Ontology Data Archive_files/moment.min.js.download"></script>
+<script src="./Gene Ontology Data Archive_files/jquery.dataTables.min.js.download"></script>
+<script src="./Gene Ontology Data Archive_files/dataTables.bootstrap.min.js.download"></script>
+
+<script type="text/javascript">
+    const VERBOSE = false;
+    const HIDE_INDEX = true;
+    const ADD_INDEX_HTML = true;
+
+    var s3exp_config = {
+        Region: '',
+        Bucket: '',
+        Prefix: '',
+        Delimiter: '/'
+    };
+    var s3exp_lister = null;
+    var s3exp_columns = {
+        key: 1,
+        folder: 2,
+        date: 3,
+        size: 4
+    };
+
+    AWS.config.region = 'us-east-1';
+    if(VERBOSE) { console.log('Region: ' + AWS.config.region); }
+
+    // Initialize S3 SDK and the moment library (for time formatting utilities)
+    var s3 = new AWS.S3();
+    moment().format();
+
+    function bytesToSize(bytes) {
+        var sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        if (bytes === 0) return '0 Bytes';
+        var ii = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)));
+        return Math.round(bytes / Math.pow(1024, ii), 2) + ' ' + sizes[ii];
+    }
+
+    // Custom startsWith function for String prototype
+    if (typeof String.prototype.startsWith != 'function') {
+        String.prototype.startsWith = function(str) {
+            return this.indexOf(str) == 0;
+        };
+    }
+
+    // Custom endsWith function for String prototype
+    if (typeof String.prototype.endsWith != 'function') {
+        String.prototype.endsWith = function(str) {
+            return this.slice(-str.length) == str;
+        };
+    }
+
+    function object2hrefvirt(bucket, key) {
+        var enckey = key.split('/').map(function(x) { return encodeURIComponent(x); }).join('/');
+
+        // added to handle the "../" virtual folder
+        if(key == "../") {
+            enckey = "../";
+        }
+
+        var parser = document.createElement('a');
+        parser.href = document.URL;
+        var pathnames = parser.pathname.split('/');
+        path2 = pathnames.join("/");
+        path2 = path2.startsWith("/") ? path2.substring(1) : path2;
+
+        // This step is down to produce local instead of absolute link
+        prefix = path2.substring(0, path2.lastIndexOf("/") + 1);
+        enckey = enckey.replace(prefix, "");
+        return enckey;
+    }
+
+    function object2hrefpath(bucket, key) {
+        var enckey = key.split('/').map(function(x) { return encodeURIComponent(x); }).join('/');
+
+        if (AWS.config.region === "us-east-1") {
+            return document.location.protocol + "//s3.amazonaws.com/" + bucket + "/" + enckey;
+        } else {
+            return document.location.protocol + "//s3-' + AWS.config.region + '.amazonaws.com/" + bucket + "/" + enckey;
+        }
+    }
+
+    function htmlEscape(str) {
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/\//g, '&#x2F;')
+            .replace(/`/g, '&#x60;')
+            .replace(/=/g, '&#x3D;');
+    }
+
+    function isthisdocument(bucket, key) {
+        return key.includes("index.html");
+    }
+
+    function isfolder(path) {
+        return path.endsWith('/');
+    }
+
+    // Convert cars/vw/golf.png to golf.png
+    function fullpath2filename(path) {
+        return htmlEscape(path.replace(/^.*[\\\/]/, ''));
+    }
+
+    // Convert cars/vw/golf.png to cars/vw
+    function fullpath2pathname(path) {
+        return htmlEscape(path.substring(0, path.lastIndexOf('/')));
+    }
+
+    // Convert cars/vw/ to vw/
+    function prefix2folder(prefix) {
+        var parts = prefix.split('/');
+        return htmlEscape(parts[parts.length - 2] + '/');
+    }
+
+
+    // We are going to generate bucket/folder breadcrumbs. The resulting HTML will
+    // look something like this:
+    //
+    // <li>Home</li>
+    // <li>Library</li>
+    // <li class="active">Samples</li>
+    //
+    // Note: this code is a little complex right now so it would be good to find
+    // a simpler way to create the breadcrumbs.
+    function folder2breadcrumbs(data) {
+        if(VERBOSE) {
+            console.log('Bucket: ' + data.params.Bucket);
+            console.log('Prefix: ' + data.params.Prefix);
+        }
+
+        // The parts array will contain the bucket name followed by all the
+        // segments of the prefix, exploded out as separate strings.
+        var parts = [data.params.Bucket];
+
+        if (data.params.Prefix) {
+            parts.push.apply(parts,
+                data.params.Prefix.endsWith('/') ?
+                data.params.Prefix.slice(0, -1).split('/') :
+                data.params.Prefix.split('/'));
+        }
+
+        if(VERBOSE) { console.log('Parts: ' + parts + ' (length=' + parts.length + ')'); }
+
+        // Empty the current breadcrumb list
+        $('#breadcrumb li').remove();
+
+    }
+
+    function s3draw(data, complete) {
+        $('li.li-bucket').remove();
+        folder2breadcrumbs(data);
+
+        if(VERBOSE) { console.log("s3draw: - data: ", data , " -complete: ", complete); }
+
+        // add a way to return to upper folder if we are in a subfolder of the bucket
+        if(data.params.Prefix && data.params.Prefix.includes("/")) {
+            $('#tb-s3objects').DataTable().rows.add([
+                {
+                    Key: "../"
+                }
+            ]);
+        }
+
+        // Add each part of current path (S3 bucket plus folder hierarchy) into the breadcrumbs
+        $.each(data.CommonPrefixes, function(i, prefix) {
+            $('#tb-s3objects').DataTable().rows.add([{
+                Key: prefix.Prefix
+            }]);
+        });
+
+        // Add S3 objects to DataTable
+        $('#tb-s3objects').DataTable().rows.add(data.Contents).draw();
+    }
+
+    function s3list(config, completecb) {
+        if(VERBOSE) { console.log('s3list config: ' + JSON.stringify(config)); }
+        var params = {
+            Bucket: config.Bucket,
+            Prefix: config.Prefix,
+            Delimiter: config.Delimiter
+        };
+        var scope = {
+            Contents: [],
+            CommonPrefixes: [],
+            params: params,
+            stop: false,
+            completecb: completecb
+        };
+
+        return {
+            // This is the callback that the S3 API makes when an S3 listObjectsV2
+            // request completes (successfully or in error). Note that a single call
+            // to listObjectsV2 may not be enough to get all objects so we need to
+            // check if the returned data is truncated and, if so, make additional
+            // requests with a 'next marker' until we have all the objects.
+            cb: function(err, data) {
+                if (err) {
+                    console.log('Error: ' + JSON.stringify(err));
+                    console.log('Error: ' + err.stack);
+                    scope.stop = true;
+                    $('#bucket-loader').removeClass('fa-spin');
+                    bootbox.alert("Error accessing S3 bucket " + scope.params.Bucket + ". Error: " + err);
+                } else {
+                    if(VERBOSE) {
+                        console.log("data retrieved: ", data);
+                        // console.log('Data: ' + JSON.stringify(data));
+                        console.log("Options: " + $("input[name='optionsdepth']:checked").val());
+                    }
+
+                    // Store marker before filtering data
+                    if (data.IsTruncated) {
+                        if (data.NextContinuationToken) {
+                            scope.params.ContinuationToken = data.NextContinuationToken;
+                        }
+                    }
+
+                    // Filter the folders out of the listed S3 objects
+                    // (could probably be done more efficiently)
+                    if(VERBOSE) { console.log("Filter: remove folders"); }
+                    data.Contents = data.Contents.filter(function(el) {
+                        return el.Key !== scope.params.Prefix;
+                    });
+
+                    // Optionally, filter the root index.html out of the listed S3 objects
+                    if (HIDE_INDEX) {
+                        if(VERBOSE) { console.log("Filter: remove index.html"); }
+                        data.Contents = data.Contents.filter(elt => !elt.Key.includes("index.html"));
+                    }
+
+                    // Accumulate the S3 objects and common prefixes
+                    scope.Contents.push.apply(scope.Contents, data.Contents);
+                    scope.CommonPrefixes.push.apply(scope.CommonPrefixes, data.CommonPrefixes);
+
+                    // Update badge count to show number of objects read
+                    $('#badgecount').text(scope.Contents.length + scope.CommonPrefixes.length);
+
+                    if (scope.stop) {
+                        if(VERBOSE) { console.log('Bucket ' + scope.params.Bucket + ' stopped'); }
+                    } else if (data.IsTruncated) {
+                        if(VERBOSE) { console.log('Bucket ' + scope.params.Bucket + ' truncated'); }
+                        s3.makeUnauthenticatedRequest('listObjectsV2', scope.params, scope.cb);
+                    } else {
+                        if(VERBOSE) { console.log('Bucket ' + scope.params.Bucket + ' has ' + scope.Contents.length + ' objects, including ' + scope.CommonPrefixes.length + ' prefixes'); }
+                        delete scope.params.ContinuationToken;
+                        if (scope.completecb) {
+                            scope.completecb(scope, true);
+                        }
+                        $('#bucket-loader').removeClass('fa-spin');
+                    }
+                }
+            },
+
+            // Start the spinner, clear the table, make an S3 listObjectsV2 request
+            go: function() {
+                scope.cb = this.cb;
+                $('#bucket-loader').addClass('fa-spin');
+                $('#tb-s3objects').DataTable().clear();
+                s3.makeUnauthenticatedRequest('listObjectsV2', scope.params, this.cb);
+            },
+
+            stop: function() {
+                scope.stop = true;
+                delete scope.params.ContinuationToken;
+                if (scope.completecb) {
+                    scope.completecb(scope, false);
+                }
+                $('#bucket-loader').removeClass('fa-spin');
+            }
+        };
+    }
+
+    function promptForBucketInput() {
+        bootbox.prompt("Please enter the S3 bucket name", function(result) {
+            if (result !== null) {
+                resetDepth();
+                s3exp_config = {
+                    Bucket: result,
+                    Delimiter: '/'
+                };
+                (s3exp_lister = s3list(s3exp_config, s3draw)).go();
+            }
+        });
+    }
+
+    function resetDepth() {
+        $('#tb-s3objects').DataTable().column(1).visible(false);
+        $('input[name="optionsdepth"]').val(['folder']);
+        $('input[name="optionsdepth"][value="bucket"]').parent().removeClass('active');
+        $('input[name="optionsdepth"][value="folder"]').parent().addClass('active');
+    }
+
+    $(document).ready(function() {
+        if(VERBOSE) {
+            console.log('ready');
+            console.log("Document URL: " + document.URL);
+        }
+        var urls = document.URL.split('/');
+        if(VERBOSE) {
+            console.log("URL split: " + urls);
+            console.log("s3exp_config(1): ", s3exp_config)
+        }
+
+        // Using technique from https://gist.github.com/jlong/2428561
+        // to parse the document URL.
+        var parser = document.createElement('a');
+        parser.href = document.URL;
+
+
+        if(ADD_INDEX_HTML && !parser.pathname.endsWith("index.html")) {
+            parser.pathname = parser.pathname + "index.html";
+        }
+
+        // URL format is scheme://[user:password@]domain:port/path?query_string#fragment_id
+        // For example: http://example.com:3000/path/?name=abc#topic
+        if(VERBOSE) {
+            console.log("protocol: " + parser.protocol); // => "http:"
+            console.log("hostname: " + parser.hostname); // => "example.com"
+            console.log("port    : " + parser.port); // => "3000"
+            console.log("pathname: " + parser.pathname); // => "/path/"
+            console.log("search  : " + parser.search); // => "?name=abc"
+            console.log("hash    : " + parser.hash); // => "#topic"
+            console.log("host    : " + parser.host); // => "example.com:3000"
+        }
+
+
+        let lf = document.getElementById("list_folders");
+        let path = parser.pathname;
+        let folders = path.split("/"); // could use .shift()
+        folders[0] = "/";
+        folders.pop();
+        if(VERBOSE) { console.log("folders: ", folders); }
+        let hierarchy = "";
+        for(let folder of folders) {
+            let btn = document.createElement("a");
+            btn.id = "folder_" + folder;
+            btn.className = "btn btn-primary small-margin"
+            btn.innerHTML = folder;
+            hierarchy += folder;
+            hierarchy = hierarchy.endsWith("/") ? hierarchy : hierarchy + "/";
+            btn.href = parser.protocol + "//" + parser.hostname + hierarchy + "index.html";
+            lf.appendChild(btn);
+        }
+
+
+        path = path.startsWith("/") ? path.substring(1) : path;
+        if(VERBOSE) { console.log("path: ", path); }
+        let prefix = path.includes("/index.html") ? path.substring(0, path.lastIndexOf("index.html")) : "";
+        if(VERBOSE) { console.log("prefix: " + prefix) }
+
+
+
+        // Click handler for refresh button (to invoke manual refresh)
+        $('#bucket-loader').click(function(e) {
+            if ($('#bucket-loader').hasClass('fa-spin')) {
+                // To do: We need to stop the S3 list that's going on
+                // bootbox.alert("Stop is not yet supported.");
+                s3exp_lister.stop();
+            } else {
+                delete s3exp_config.ContinuationToken;
+                (s3exp_lister = s3list(s3exp_config, s3draw)).go();
+            }
+        });
+
+        // Click handler for bucket button (to allow user to change bucket)
+        $('#bucket-chooser').click(function(e) {
+            promptForBucketInput();
+        });
+
+        $('#hidefolders').click(function(e) {
+            $('#tb-s3objects').DataTable().draw();
+        });
+
+        // Folder/Bucket radio button handler
+        $("input:radio[name='optionsdepth']").change(function() {
+            if(VERBOSE) {
+                console.log("Folder/Bucket option change to " + $(this).val());
+                console.log("Change options: " + $("input[name='optionsdepth']:checked").val());
+            }
+
+            // If user selected deep then we do need to do a full list
+            if ($(this).val() == 'bucket') {
+                if(VERBOSE) { console.log("Switch to bucket"); }
+                var choice = $(this).val();
+                $('#tb-s3objects').DataTable().column(1).visible(choice === 'bucket');
+                delete s3exp_config.ContinuationToken;
+                delete s3exp_config.Prefix;
+                s3exp_config.Delimiter = '';
+                (s3exp_lister = s3list(s3exp_config, s3draw)).go();
+                // Else user selected folder then can do a delimiter list
+            } else {
+                if(VERBOSE) { console.log("Switch to folder"); }
+                $('#tb-s3objects').DataTable().column(1).visible(false);
+                delete s3exp_config.ContinuationToken;
+                delete s3exp_config.Prefix;
+                s3exp_config.Delimiter = '/';
+                (s3exp_lister = s3list(s3exp_config, s3draw)).go();
+            }
+        });
+
+
+        // we could filter out some folders or files here
+        function renderObject(data, type, full) {
+            if (isthisdocument(s3exp_config.Bucket, data)) {
+                console.log("is this document: " + data);
+                return fullpath2filename(data);
+            } else if (isfolder(data)) {
+                // console.log("is folder: " + data);
+                if(VERBOSE) { console.log("a href= ", object2hrefvirt(s3exp_config.Bucket, data)) }
+                return '<a data-s3="folder" data-prefix="' + htmlEscape(data) + '" href="' + object2hrefvirt(s3exp_config.Bucket, data) + "index.html" + '">' + prefix2folder(data) + '</a>';
+            } else {
+                // console.log("not folder/this document: " + data);
+                return '<a data-s3="object" href="' + object2hrefvirt(s3exp_config.Bucket, data) + '"download="' + fullpath2filename(data) + '">' + fullpath2filename(data) + '</a>';
+            }
+        }
+
+        function renderFolder(data, type, full) {
+            return isfolder(data) ? "" : fullpath2pathname(data);
+        }
+
+        // Initial DataTable settings
+        $('#tb-s3objects').DataTable({
+            iDisplayLength: 1000,
+
+            order: [
+                [1, 'asc'],
+                [0, 'asc']
+            ],
+
+            aoColumnDefs: [{
+                "aTargets": [0],
+                "mData": "Key",
+                "mRender": function(data, type, full) {
+                    return (type == 'display') ? renderObject(data, type, full) : data;
+                },
+                "sType": "key"
+            }, {
+                "aTargets": [1],
+                "mData": "Key",
+                "mRender": function(data, type, full) {
+                    return renderFolder(data, type, full);
+                }
+            }, {
+                "aTargets": [2],
+                "mData": "LastModified",
+                "mRender": function(data, type, full) {
+                    return data ? moment(data).fromNow() : "";
+                }
+            }, {
+                "aTargets": [3],
+                "mData": "LastModified",
+                "mRender": function(data, type, full) {
+                    return data ? moment(data).local().format('YYYY-MM-DD HH:mm:ss') : "";
+                }
+            }, {
+                "aTargets": [4],
+                "mData": function(source, type, val) {
+                    return source.Size ? ((type == 'display') ? bytesToSize(source.Size) : source.Size) : "";
+                }
+            }, ]
+        });
+
+        $('#tb-s3objects').DataTable().column(s3exp_columns.key).visible(false);
+        $('#tb-s3objects').DataTable().column(2).visible(false); // hide last modified
+        $('#tb-s3objects').DataTable().column(3).visible(false); // hide timestamp
+
+        // NOTE: also hide the pagination. When too many folders and the 1000 limit is reached, pagination should be reintroduced and the following lines commented
+        var elt = document.getElementById("tb-s3objects_length");
+        elt.hidden = true;
+        var elt = document.getElementById("tb-s3objects_paginate");
+        elt.hidden = true;
+
+        // Custom sort for the Key column so that folders appear before objects
+        $.fn.dataTableExt.oSort['key-asc'] = function(a, b) {
+
+            let x = (isfolder(a) ? "0-" + a : "1-" + a).toLowerCase();
+            let y = (isfolder(b) ? "0-" + b : "1-" + b).toLowerCase();
+            let res = ((x < y) ? -1 : ((x > y) ? 1 : 0));
+
+            // This trick is used to know if we are at the first level or not
+            let counta = (a.match(/\//g) || []).length;
+            let countb = (b.match(/\//g) || []).length;
+            if(res == 0) return 0;
+
+            // At the first level, we want a descending order (dates)
+            if(counta > 1 || countb > 1) {
+                return res;
+            }
+            // Otherwise, ascending order
+            return -res;
+        };
+
+        $.fn.dataTableExt.oSort['key-desc'] = function(a, b) {
+            var x = (isfolder(a) ? "1-" + a : "0-" + a).toLowerCase();
+            var y = (isfolder(b) ? "1-" + b : "0-" + b).toLowerCase();
+            return ((x < y) ? 1 : ((x > y) ? -1 : 0));
+        };
+
+        // Allow user to hide folders
+        $.fn.dataTableExt.afnFiltering.push(function(oSettings, aData, iDataIndex) {
+            return $('#hidefolders').is(':checked') ? !isfolder(aData[0]) : true;
+        });
+
+
+
+
+        var hostnames = parser.hostname.split('.');
+        var pathnames = parser.pathname.split('/');
+
+
+        // Setting this avoid the URL parsing in case of redirection / CNAME
+        delete s3exp_config.ContinuationToken;
+        s3exp_config.Delimiter = "/";
+        // note: this line gets rewritten by the script s3_add_index when submitting the file to S3
+        s3exp_config.Bucket = "go-data-product-release"
+        // s3exp_config.Region = "us-east-1"
+        path2 = pathnames.join("/");
+        path2 = path2.startsWith("/") ? path2.substring(1) : path2;
+        s3exp_config.Prefix = path2.includes("/index.html") ? path2.substring(0, path2.lastIndexOf("index.html")) : "";
+        if(VERBOSE) { console.log("s3exp_config: ", s3exp_config); }
+
+
+        // If initial bucket has been hard-coded above then use it, else try to
+        // derive the initial bucket from the document URL (useful if index.html was
+        // launched directly from within a bucket), else prompt the user.
+        if (s3exp_config.Bucket) {
+            (s3exp_lister = s3list(s3exp_config, s3draw)).go();
+        } else {
+            promptForBucketInput();
+        }
+    });
+</script>
+</body></html>

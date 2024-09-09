@@ -9,10 +9,9 @@ channels:
   - defaults
 dependencies:
   - python=3.10.13
-  - jq
-  # - pytorch=2.0.1
+  - pytorch=2.0.1
   - torchvision=0.15.2
-  # - pytorch-cuda=11.8
+  - pytorch-cuda=11.8
   - pandas=1.5.2
   - joblib=1.1.1
   - transformers=4.32.1
