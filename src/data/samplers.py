@@ -198,6 +198,7 @@ class GridBatchSampler(BatchSampler):
 def observation_sampler_factory(
     distribute_labels:bool,
     weighted_sampling:bool,
+    shuffle:bool,
     dataset: Dataset = None,
     world_size: int = 1,
     rank: int = 0,
@@ -234,7 +235,7 @@ def observation_sampler_factory(
             dataset,
             num_replicas=world_size,
             rank=rank,
-            shuffle=True
+            shuffle=shuffle
         )
     else:
         # Raise error

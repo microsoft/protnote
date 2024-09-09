@@ -4,24 +4,68 @@ from src.utils.evaluation import EvalMetrics,metric_collection_to_dict_float,sav
 from src.utils.losses import BatchWeightedBCE, FocalLoss, RGDBCE, WeightedBCE,SupCon, CBLoss
 from torchmetrics import MetricCollection, Metric
 from src.utils.proteinfer import normalize_confidences
+import torch.distributed as dist
 import numpy as np
 import torch
 import wandb
 import os
+import pickle
+import shutil
 import json
 from collections import defaultdict
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from transformers import BatchEncoding
 from src.utils.models import biogpt_train_last_n_layers, save_checkpoint, load_model
-from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC, BinaryBinnedAUPRC, MultilabelBinnedAUPRC
-#from torch.utils.tensorboard import SummaryWriter
+from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC, BinaryBinnedAUPRC, MultilabelBinnedAUPRC,Mean, BinaryF1Score
+from torcheval.metrics.toolkit import sync_and_compute
+
+def calculate_f1_micro(total_tp_per_label, total_fn_per_label, total_fp_per_label):
+    tp_micro = total_tp_per_label.sum()
+    fn_micro = total_fn_per_label.sum()
+    fp_micro = total_fp_per_label.sum()
+    precision_micro = tp_micro / (tp_micro + fp_micro + 1e-8)
+    recall_micro = tp_micro / (tp_micro + fn_micro + 1e-8)
+    f1_micro = 2 * (precision_micro * recall_micro) / (precision_micro + recall_micro + 1e-8)
+    return f1_micro
+
+def calculate_f1(tp, fn, fp):
+    precision = tp / (tp + fp + 1e-8)
+    recall = tp / (tp + fn + 1e-8)
+    f1 = 2 * (precision * recall) / (precision + recall + 1e-8)
+    return f1
+
+def calculate_tp_fn_fp(probs, labels, threshold=0.5):
+    """
+    Calculate true positives, false negatives, and false positives per label.
+
+    Args:
+        probs (torch.Tensor): A tensor of probabilities with shape (num_observations, num_labels).
+        labels (torch.Tensor): A tensor of true labels with shape (num_observations, num_labels).
+        threshold (float): The threshold to convert probabilities to binary predictions.
+
+    Returns:
+        tp (torch.Tensor): True positives per label.
+        fn (torch.Tensor): False negatives per label.
+        fp (torch.Tensor): False positives per label.
+    """
+    # Convert probabilities to binary predictions
+    preds = (probs >= threshold).float()
+
+    # Calculate true positives, false negatives, and false positives per label
+    tp = (preds * labels).sum(dim=0)
+    fn = ((1 - preds) * labels).sum(dim=0)
+    fp = (preds * (1 - labels)).sum(dim=0)
+
+    return tp, fn, fp
+
 
 class ProTCLTrainer:
     def __init__(
         self,
         model: torch.nn.Module,
         device: str,
+        rank: int,
         config: dict,
         logger: logging.Logger,
         timestamp: str,
@@ -48,13 +92,15 @@ class ProTCLTrainer:
         self.model = model
         self.is_master = is_master
         self.device = device
+        self.rank = rank
         self.run_name = run_name
         self.logger = logger
         self.timestamp = timestamp
         self.use_wandb = use_wandb
         self.use_amlt = use_amlt
         self.loss_fn = loss_fn
-        self.best_val_metric = 0.0
+        self.best_val_metric = 0.0 #WARNING: Assumes higher is better
+        self.best_val_loss = float('inf')
         self.starting_epoch = starting_epoch
         self.epoch = starting_epoch
         self.config = config
@@ -81,20 +127,23 @@ class ProTCLTrainer:
                             lr = config["params"]["LEARNING_RATE"])
         
         self.scaler = GradScaler()
-        self.model_path = self._get_saved_model_path()
+        self.base_model_path = self._get_saved_model_base_path()
+        self.model_path_best_metric = self.base_model_path + f'_best_val_metric.pt'
+        self.model_path_best_loss = self.base_model_path + f'_best_val_loss.pt'
+        self.model_path_last_epoch = self.base_model_path + f'_last_epoch.pt'
 
         #self.tb = SummaryWriter(f"runs/{self.run_name}_{self.timestamp}") if self.is_master else None
 
-    def _get_saved_model_path(self):
+    def _get_saved_model_base_path(self):
         # Save model to OUTPUT_MODEL_DIR. Create path if it doesn't exist.
         if not os.path.exists(self.output_model_dir) and self.is_master:
             os.makedirs(self.output_model_dir)
 
         model_name = (
-            self.run_name if self.run_name else "best_ProTCL.pt"
+            self.run_name if self.run_name else "ProTCL"
         )
         model_path = os.path.join(
-            self.output_model_dir, f"{self.timestamp}_{model_name}.pt"
+            self.output_model_dir, f"{self.timestamp}_{model_name}"
         )
         return model_path
 
@@ -151,7 +200,7 @@ class ProTCLTrainer:
         else:
             raise ValueError("Unsupported optimizer name")
 
-    def evaluation_step(self, batch) -> tuple:
+    def evaluation_step(self, batch, return_embeddings = False) -> tuple:
         """Perform a single evaluation step.
 
         :param batch: _description_
@@ -180,11 +229,11 @@ class ProTCLTrainer:
             "label_embeddings": label_embeddings
         }
         with autocast():
-            logits = self.model(**inputs)
+            logits,embeddings = self.model(**inputs,save_embeddings = return_embeddings)
             # Compute validation loss for the batch
             loss = self.loss_fn(logits, label_multihots.float())
 
-        return loss.item(), logits, label_multihots, sequence_ids
+        return loss, logits, label_multihots, sequence_ids, embeddings
 
 
     def validate(self,
@@ -200,7 +249,7 @@ class ProTCLTrainer:
 
         val_metrics = self.evaluate(data_loader=val_loader,
                                        eval_metrics=eval_metrics,
-                                       metrics_prefix=prefix,
+                                       data_loader_name=prefix,
                                        only_represented_labels=only_represented_labels)
         val_optimization_metric_name = f'{prefix}_{val_optimization_metric_name}'
 
@@ -223,25 +272,46 @@ class ProTCLTrainer:
                 self.logger.warning(
                     f"Failed to log validation metrics to wandb: {e}")
 
-        # Save the model if it has the best validation loss so far (only on master node)
+        # Save the model if it has the best validation **metric** so far (only on master node)
         if self.is_master and val_metrics[val_optimization_metric_name] > self.best_val_metric:
             self.logger.info(
                 f"New best {val_optimization_metric_name}: {val_metrics[val_optimization_metric_name]}. Saving model..."
             )
             self.best_val_metric = val_metrics[val_optimization_metric_name]
 
+            
             save_checkpoint(
                 model=self.model.module,
                 optimizer=self.optimizer,
                 epoch=self.epoch,
                 best_val_metric=self.best_val_metric,
-                model_path=self.model_path
+                model_path=self.model_path_best_metric
             )
-            self.logger.info(f"Saved model to {self.model_path}.")
+            self.logger.info(f"Saved model to {self.model_path_best_metric}")
 
             if self.use_wandb:
-                wandb.save(f"{self.timestamp}_best_ProTCL.pt")
+                wandb.save(f"{self.timestamp}_best_{val_optimization_metric_name}_ProTCL.pt")
         
+        # Save the model if it has the best validation **loss** so far (only on master node)
+        if self.is_master and val_metrics[f'{prefix}_loss'] < self.best_val_loss:
+            self.logger.info(
+                f"New best loss: {val_metrics[f'{prefix}_loss']}. Saving model..."
+            )
+            self.best_val_loss = val_metrics[f'{prefix}_loss']
+
+            
+            save_checkpoint(
+                model=self.model.module,
+                optimizer=self.optimizer,
+                epoch=self.epoch,
+                best_val_metric=self.best_val_loss,
+                model_path=self.model_path_best_loss
+            )
+            self.logger.info(f"Saved model to {self.model_path_best_loss}")
+
+            if self.use_wandb:
+                wandb.save(f"{self.timestamp}_best_loss_ProTCL.pt")
+
         self.logger.info("+------------------------------------------------------------------------------------+") 
 
         return val_metrics
@@ -268,10 +338,8 @@ class ProTCLTrainer:
         best_score = 0.0
 
         with torch.no_grad():
-            all_probabilities = []
-            all_label_multihots = []
             for batch in data_loader:
-                _, logits, label_multihots, _ = self.evaluation_step(
+                _, logits, label_multihots, _,embeddings = self.evaluation_step(
                     batch=batch)
 
                 # Apply sigmoid to get the probabilities for multi-label classification
@@ -279,9 +347,6 @@ class ProTCLTrainer:
 
                 if self.normalize_probabilities:
                     probabilities = self._normalize_probabilities(probabilities)
-
-                all_probabilities.append(probabilities)
-                all_label_multihots.append(label_multihots)
 
             all_probabilities = torch.cat(all_probabilities)
             all_label_multihots = torch.cat(all_label_multihots)
@@ -324,8 +389,9 @@ class ProTCLTrainer:
         data_loader: torch.utils.data.DataLoader,
         eval_metrics: MetricCollection = None,
         save_results: bool = False,
-        metrics_prefix = None,
-        only_represented_labels: bool = False
+        data_loader_name = None,
+        only_represented_labels: bool = False,
+        return_embeddings: bool = False
     ) -> tuple[dict, dict]:
         """Evaluate the model on the given data loader.
         :param data_loader: pytorch data loader
@@ -336,7 +402,6 @@ class ProTCLTrainer:
         :rtype: dict
         """
         self.model.eval()
-        total_loss = 0
         test_results = defaultdict(list)
 
         if only_represented_labels:
@@ -353,8 +418,8 @@ class ProTCLTrainer:
                                         num_labels=num_labels)
         
         elif self.config["params"]["ESTIMATE_MAP"] == True:
-            mAP_micro = BinaryBinnedAUPRC(device='cpu',threshold=50)
-            mAP_macro = MultilabelBinnedAUPRC(device='cpu',
+            mAP_micro = BinaryBinnedAUPRC(device=self.device,threshold=50)
+            mAP_macro = MultilabelBinnedAUPRC(device=self.device,
                                             num_labels=num_labels,
                                             threshold=50)
         
@@ -362,15 +427,28 @@ class ProTCLTrainer:
             self.logger.info("Not computing mAP metrics")
             mAP_macro = mAP_micro = None
 
-        with torch.no_grad():
+        avg_loss = Mean(device = self.device)
+        total_tp_per_label = torch.zeros(num_labels, device=self.device)
+        total_fn_per_label = torch.zeros(num_labels, device=self.device)
+        total_fp_per_label = torch.zeros(num_labels, device=self.device)
+        all_embeddings = {'output_layer_embeddings':[],
+                          'joint_embeddings':[],
+                          'labels':[],
+                          'sequence_ids':[]
+                          }
+        embeddings_num_batches = 100 # The number of embedding batches to export at a time if return_embedding = True
+        embeddings_export_dir = os.path.join(self.config["paths"]["RESULTS_DIR"],f'{data_loader_name}_embeddings_{self.run_name}')
+        if return_embeddings:
+            if os.path.exists(embeddings_export_dir):
+                shutil.rmtree(embeddings_export_dir)
+            os.mkdir(embeddings_export_dir)
             
+        with torch.no_grad():
             for batch_idx, batch in enumerate(data_loader):
-                loss, logits, labels, sequence_ids = self.evaluation_step(batch=batch)
-
+                loss, logits, labels, sequence_ids, embeddings = self.evaluation_step(batch=batch,return_embeddings=return_embeddings)
                 if only_represented_labels:
                     logits = logits[:,data_loader.dataset.represented_vocabulary_mask]
                     labels = labels[:,data_loader.dataset.represented_vocabulary_mask]
-
 
                 if eval_metrics is not None:
                     # Apply sigmoid to get the probabilities for multi-label classification
@@ -381,6 +459,13 @@ class ProTCLTrainer:
 
                     # Update eval metrics
                     eval_metrics(probabilities, labels)
+                    tp,fn,fp = calculate_tp_fn_fp(probs=probabilities,
+                                                  labels=labels,
+                                                  threshold=self.config["params"]["DECISION_TH"])
+                    
+                    total_tp_per_label += tp
+                    total_fn_per_label += fn
+                    total_fp_per_label += fp
 
                     if (mAP_macro is not None)&(mAP_micro is not None):
                         mAP_micro.update(probabilities.cpu().flatten(), labels.cpu().flatten())
@@ -392,6 +477,33 @@ class ProTCLTrainer:
                         test_results["logits"].append(logits.cpu())
                         test_results["labels"].append(labels.cpu())
 
+                    if return_embeddings:
+                        
+                        all_embeddings["joint_embeddings"].append(embeddings["joint_embeddings"])
+                        all_embeddings["output_layer_embeddings"].append(embeddings["output_layer_embeddings"])
+                        all_embeddings['labels'].append(labels.cpu())
+                        all_embeddings['sequence_ids'].append(sequence_ids)
+
+                        #Export every 100 batches
+
+                        if (batch_idx + 1) % embeddings_num_batches == 0:
+
+                            for key, embedding_list in all_embeddings.items():
+                                if key == "sequence_ids":
+                                    all_embeddings[key] = [j for i in all_embeddings["sequence_ids"] for j in i]
+                                else:
+                                    all_embeddings[key] = torch.cat(embedding_list).numpy()
+
+                            torch.save(all_embeddings,
+                                       os.path.join(
+                                           embeddings_export_dir,
+                                           f'batches_{batch_idx-embeddings_num_batches+1}_{batch_idx}.pt'
+                                           ),
+                                           pickle_protocol=pickle.HIGHEST_PROTOCOL
+                                           )
+
+                            #Clean buffer
+                            all_embeddings = {k:[] for k in all_embeddings.keys()}
                 
                 # Print progress every 25%
                 progress_chunk = 20
@@ -400,9 +512,16 @@ class ProTCLTrainer:
                     self.logger.info(f"[Evaluation] Epoch {self.epoch}: Processed {batch_idx} out of {len(data_loader)} batches ({batch_idx / len(data_loader) * 100:.2f}%).")  
 
 
-                # Accumulate loss
-                total_loss += loss
+                # Update loss
+                avg_loss.update(loss)
 
+            # if return_embeddings:
+            #     for embedding_type, embedding_list in all_embeddings.items():
+            #         all_embeddings[embedding_type] = torch.cat(embedding_list).numpy()
+            #     torch.save(all_embeddings,
+            #                os.path.join(self.config["paths"]["RESULTS_DIR"],f'{data_loader_name}_embeddings_{self.run_name}.pt')
+            #                )
+                
             if save_results:
                 for key in test_results.keys():
                     if key == "sequence_ids":
@@ -421,23 +540,43 @@ class ProTCLTrainer:
                                             label_vocabulary=[i for i,mask in zip(data_loader.dataset.label_vocabulary,data_loader.dataset.represented_vocabulary_mask) if mask==True],
                                             run_name=self.run_name,
                                             output_dir=self.config["paths"]["RESULTS_DIR"],
-                                            data_split_name=metrics_prefix
+                                            data_split_name=data_loader_name
                                             )
-                
 
-            # Compute average validation loss
-            avg_loss = total_loss / len(data_loader)
+            
+            # Aggregate the TP, FN, FP across all GPUs
+            dist.reduce(total_tp_per_label, dst=0, op=dist.ReduceOp.SUM)
+            dist.reduce(total_fn_per_label, dst=0, op=dist.ReduceOp.SUM)
+            dist.reduce(total_fp_per_label, dst=0, op=dist.ReduceOp.SUM)
+
+            
+            global_f1_scores_per_label = calculate_f1(tp=total_tp_per_label,
+                                                      fn=total_fn_per_label,
+                                                      fp=total_fp_per_label)
+            global_f1_macro = global_f1_scores_per_label.mean()
+            global_f1_micro = calculate_f1_micro(total_tp_per_label=total_tp_per_label,
+                                                 total_fn_per_label=total_fn_per_label,
+                                                 total_fp_per_label=total_fp_per_label)
 
             final_metrics = eval_metrics.compute() if eval_metrics is not None else {}
-            final_metrics.update({"loss": avg_loss,
-                                  "map_micro":mAP_micro.compute() if mAP_micro is not None else None,
-                                  "map_macro":mAP_macro.compute() if mAP_macro is not None else None
+
+            global_mAP_micro = sync_and_compute(mAP_micro)
+            global_avg_loss = sync_and_compute(avg_loss)
+            global_mAP_macro = sync_and_compute(mAP_macro)
+
+
+            final_metrics.update({"loss": global_avg_loss,
+                                  "map_micro": global_mAP_micro,
+                                  "map_macro": global_mAP_macro,
+                                  "f1_macro": global_f1_macro,
+                                  "f1_micro": global_f1_micro
                                   })
 
             final_metrics = metric_collection_to_dict_float(
                 final_metrics,
-                prefix=metrics_prefix)           
+                prefix=data_loader_name)     
 
+            
         self.model.train()
 
         return final_metrics
@@ -446,10 +585,12 @@ class ProTCLTrainer:
                         train_loader: torch.utils.data.DataLoader,
                         eval_metrics: MetricCollection
         ):
-        
-        avg_loss = 0
-        avg_probs = 0
-        avg_gt = 0
+                
+        avg_loss = Mean(device = self.device)
+        num_labels = len(train_loader.dataset.label_vocabulary)
+        total_tp_per_label = torch.zeros(num_labels, device=self.device)
+        total_fn_per_label = torch.zeros(num_labels, device=self.device)
+        total_fp_per_label = torch.zeros(num_labels, device=self.device)
         eval_metrics.reset()
         
         ####### TRAINING LOOP #######
@@ -479,7 +620,7 @@ class ProTCLTrainer:
             }
 
             with autocast():
-                logits = self.model(**inputs)
+                logits,_ = self.model(**inputs)
 
                 # Compute loss, normalized by the number of gradient accumulation steps
                 loss = self.loss_fn(logits, label_multihots.float()) / \
@@ -500,26 +641,22 @@ class ProTCLTrainer:
                 
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
-
-                '''
-                # Log at this point to TB to have weights and gradients after a full epoch
-                if (batch_idx + 1 == len(train_loader)) & self.is_master:
-                    for name, weight in self._get_model().named_parameters():
-                        if weight.requires_grad:
-                            self.tb.add_histogram(name,weight, self.epoch)
-                            self.tb.add_histogram(f'{name}.grad',weight.grad, self.epoch)
-                '''
-
                 self.optimizer.zero_grad()
             
-            avg_loss+=loss.item()
-            avg_probs += torch.mean(torch.sigmoid(logits).detach())
-            avg_gt += torch.mean(label_multihots.float().detach())
+            avg_loss.update(loss.detach())
 
-            eval_metrics(logits, label_multihots)
+            eval_metrics(logits.detach(), label_multihots.detach()) #detaching labels is not "necessary" because they don't retain the graph
+            tp,fn,fp = calculate_tp_fn_fp(probs=torch.sigmoid(logits.detach()),
+                                          labels=label_multihots.detach(),
+                                          threshold=self.config["params"]["DECISION_TH"])
+
+            total_tp_per_label += tp
+            total_fn_per_label += fn
+            total_fp_per_label += fp
+
             
-            if self.use_wandb:
-                wandb.log({"per_batch_train_loss": loss.item()},
+            if self.use_wandb and self.is_master:
+                wandb.log({"per_batch_train_loss": loss.item()}, #.item() is detached
                           step=self.training_step
                           )
             
@@ -533,20 +670,34 @@ class ProTCLTrainer:
             if batch_idx % (len(train_loader) // 10) == 0:
                 self.logger.info(f"[Train] Epoch {self.epoch}: Processed {batch_idx} out of {len(train_loader)} batches ({batch_idx / len(train_loader) * 100:.2f}%).")  
 
-        avg_loss = avg_loss/len(train_loader) if len(train_loader)> 0 else avg_loss
-        avg_probs_gt_ration = avg_probs/avg_gt
 
+        # Aggregate the TP, FN, FP across all GPUs
+        dist.reduce(total_tp_per_label, dst=0, op=dist.ReduceOp.SUM)
+        dist.reduce(total_fn_per_label, dst=0, op=dist.ReduceOp.SUM)
+        dist.reduce(total_fp_per_label, dst=0, op=dist.ReduceOp.SUM)
+
+        global_f1_scores_per_label = calculate_f1(tp=total_tp_per_label,
+                                                  fn=total_fn_per_label,
+                                                  fp=total_fp_per_label)
+        
+        global_f1_macro = global_f1_scores_per_label.mean()
+        global_f1_micro = calculate_f1_micro(total_tp_per_label=total_tp_per_label,
+                                             total_fn_per_label=total_fn_per_label,
+                                             total_fp_per_label=total_fp_per_label)
+        global_avg_train_loss = sync_and_compute(avg_loss)
+        
         train_metrics = eval_metrics.compute() if eval_metrics is not None else {}
-        train_metrics.update({"loss": avg_loss,
-                              "avg_probabilities_ground_truth_ratio":avg_probs_gt_ration,
-                                })
+        train_metrics.update({"loss":global_avg_train_loss,
+                              "f1_macro":global_f1_macro,
+                              "f1_micro":global_f1_micro})
+        
         train_metrics = metric_collection_to_dict_float(train_metrics,prefix='train')
         
-        if self.use_wandb:
+        if self.use_wandb and self.is_master:
             wandb.log(train_metrics,
                       step=self.training_step
                       )
-            
+
         return train_metrics
         
     def train(
@@ -581,7 +732,7 @@ class ProTCLTrainer:
             f"Starting training. Total number of training steps: {num_training_steps}")
         self.logger.info(f"{'='*100}")
 
-        for epoch in range(self.starting_epoch, self.starting_epoch + self.num_epochs):
+        for epoch in range(self.starting_epoch, self.starting_epoch + self.num_epochs ):
             self.logger.info(
                 f"Starting epoch {epoch}/{self.starting_epoch + self.num_epochs - 1}...")
             self.epoch = epoch
@@ -608,11 +759,44 @@ class ProTCLTrainer:
                 self.logger.info(
                     f"Epoch {epoch}/{self.starting_epoch + self.num_epochs - 1}, Batch {self.training_step}, Training Loss: {train_metrics['train_loss']}"
                 )
+            
+            #Save model every 10 epochs and the last epoch
+            if self.is_master:
+
+                if (epoch == self.starting_epoch + self.num_epochs - 1):
+                    self.logger.info("Saving model from last epoch...")
+                    save_checkpoint(
+                        model=self.model.module,
+                        optimizer=self.optimizer,
+                        epoch=self.epoch,
+                        best_val_metric=self.best_val_metric,
+                        model_path=self.model_path_last_epoch
+                    )
+                    self.logger.info(f"Saved model to {self.model_path_last_epoch}")
+
+                    if self.use_wandb:
+                        wandb.save(f"{self.timestamp}_last_epoch_ProTCL.pt")
+
+                if epoch % 10 == 0 :
+                    self.logger.info(f"Saving checkpoint from epoch {epoch}...")
+                    epoch_model_path = self.base_model_path + f'_epoch_{epoch}.pt'
+                    save_checkpoint(
+                        model=self.model.module,
+                        optimizer=self.optimizer,
+                        epoch=self.epoch,
+                        best_val_metric=self.best_val_metric,
+                        model_path=epoch_model_path
+                    )
+                    self.logger.info(f"Saved model to {epoch_model_path}")
+
+                    if self.use_wandb:
+                        wandb.save(f"{self.timestamp}_last_epoch_ProTCL.pt")
 
         if self.is_master:
-            self.logger.info("Restoring model to best validation map_micro...")
+            self.logger.info(f"Restoring model to best validation {val_optimization_metric_name}...")
             load_model(trainer=self,
-                            checkpoint_path=self.model_path)
+                       rank=self.rank,
+                       checkpoint_path=self.model_path_best_metric)
 
             # Broadcast model state to other processes
             for param in self._get_model().parameters():

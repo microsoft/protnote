@@ -11,7 +11,7 @@ import numpy as np
 import blosum as bl
 from torch.utils.data import Dataset, DataLoader
 from src.data.collators import collate_variable_sequence_length
-from src.utils.data import read_fasta, get_vocab_mappings
+from src.utils.data import read_fasta, get_vocab_mappings,save_to_fasta
 from src.data.samplers import GridBatchSampler,observation_sampler_factory
 from src.utils.data import generate_vocabularies
 
@@ -152,6 +152,7 @@ class ProteinDataset(Dataset):
         self.represented_vocabulary_mask = [label in self.label_frequency for label in self.label_vocabulary]
         
         self._process_vocab()
+
 
     # Helper functions for processing and loading vocabularies
     def _process_vocab(self):
@@ -377,27 +378,6 @@ class ProteinDataset(Dataset):
         self.logger.info(f"Calculated bce_pos_weight= {pos_weight.item()}")
         return pos_weight
 
-    # def calculate_label_frequency(self):
-    #     if self.label_frequency is None:
-    #         self.logger.info("Calculating label frequency...")
-    #         def count_labels(chunk):
-    #             label_freq = Counter()
-    #             for _, _, labels in chunk:
-    #                 label_freq.update(labels)
-    #             return label_freq
-
-    #         # Adjust chunk size if necessary.
-    #         chunk_size = max(len(self.data) // cpu_count(), 1)
-
-    #         # Count labels in parallel
-    #         results = Parallel(n_jobs=-1)(
-    #             delayed(count_labels)(self.data[i:i+chunk_size]) for i in range(0, len(self.data), chunk_size)
-    #         )
-
-    #         #Label frequency
-    #         self.label_frequency = Counter()
-    #         for result in results:
-    #             self.label_frequency.update(result)
     def calculate_label_frequency(self):
         if self.label_frequency is None:
             self.logger.info("Calculating label frequency...")
@@ -425,8 +405,9 @@ class ProteinDataset(Dataset):
             total = sum(label_weights.values())
             num_labels = len(label_weights.keys())
             label_weights = {k: (total/v)**power for k, v in label_weights.items()}
-            
-        if normalize:
+
+        #When power = 1, normalization is redundant b/c i'm already calcualtating label weighrs with "total" for frequency, rather than total_per_label. This already gives proper distribution  
+        if normalize: 
             sum_raw_weights = sum(label_weights.values())
             label_weights = {k:v*num_labels/sum_raw_weights for k,v in label_weights.items()}
         
@@ -446,43 +427,25 @@ class ProteinDataset(Dataset):
         return label_weights
 
 
-
-
-# def calculate_sequence_weights(data: list, label_inv_freq: dict):
-#     """
-#     Calculate the sequence weights for weighted sampling. 
-#     The sequence weights are the sum of the inverse frequencies of the labels in the sequence.
-#     """
-#     def sum_label_inverse_freqs(chunk):
-#         sequence_weights = []
-#         for _, _, labels in chunk:
-#             labels = labels[1:]
-#             sequence_weight = sum([label_inv_freq[label] for label in labels])
-#             sequence_weights.append(sequence_weight)
-#         return sequence_weights
-
-#     # Adjust chunk size if necessary.
-#     chunk_size = max(len(data) // cpu_count(), 1)
-
-#     results = Parallel(n_jobs=-1)(
-#         delayed(sum_label_inverse_freqs)(data[i:i+chunk_size]) for i in range(0, len(data), chunk_size)
-#     )
-
-#     sequence_weights = []
-#     for result in results:
-#         sequence_weights.extend(result)
-
-#     return sequence_weights
-
-def calculate_sequence_weights(data: list, label_inv_freq: dict):
+def calculate_sequence_weights(data: list, label_inv_freq: dict, aggregation: str):
     """
     Calculate the sequence weights for weighted sampling.
     The sequence weights are the sum of the inverse frequencies of the labels in the sequence.
-    """
+
+    :param data: _description_
+    :type data: list
+    :param label_inv_freq: _description_
+    :type label_inv_freq: dict
+    :param aggregation: a pandas aggregations string e.g., mean, sum, max
+    :type aggregation: str
+    :return: _description_
+    :rtype: _type_
+    """    
+    
     sequence_weights = []
     for _, _, labels in data:
         labels = labels[1:]  # Assuming the first element is not a label
-        sequence_weight = sum([label_inv_freq.get(label, 0) for label in labels])
+        sequence_weight = pd.Series([label_inv_freq.get(label, 0) for label in labels]).agg(aggregation)     
         sequence_weights.append(sequence_weight)
     return sequence_weights
 
@@ -561,7 +524,8 @@ def create_multiple_loaders(
                     dataset = dataset,
                     world_size = world_size,
                     rank = rank,
-                    sequence_weights=sequence_weights)
+                    sequence_weights=sequence_weights,
+                    shuffle=True)
                 
                 if grid_sampler:
                     assert label_sample_size is not None,"Provide label_sample_size when using grid sampler"
@@ -580,8 +544,14 @@ def create_multiple_loaders(
                     sequence_sampler = None
                     drop_last = False
             else:
-                # No sampling in validation and test sets
-                sequence_sampler = None
+                # Distributed Sampler without shuffling for validation or test
+                sequence_sampler = observation_sampler_factory(
+                    distribute_labels = False,
+                    weighted_sampling = False,
+                    dataset = dataset,
+                    world_size = world_size,
+                    rank = rank,
+                    shuffle=False)                
                 drop_last = False
 
             loader = DataLoader(

@@ -13,6 +13,7 @@ import json
 from collections import defaultdict
 from src.utils.losses import FocalLoss
 from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC
+from torch.cuda.amp import autocast
 from src.utils.data import generate_vocabularies
 
 
@@ -63,6 +64,18 @@ parser.add_argument(
     default=0.5
 )
 
+parser.add_argument(
+    "--proteinfer-weights",
+    type=str,
+    default="GO",
+    help="Which model weights to use: GO or EC",
+)
+parser.add_argument(
+    "--model-weights-id",
+    type=int,
+    default=None,
+    help="The model id if any. If not specified will pick the same one always.",
+)
 parser.add_argument("--override", nargs="*",
                     help="Override config parameters in key-value pairs.")
 
@@ -90,9 +103,9 @@ def to_device(device, *args):
     return [item.to(device) if isinstance(item,torch.Tensor) else None for item in args]
 
 if args.override:
-    args.override+=["WEIGHTED_SAMPLING","False","TEST_BATCH_SIZE",128]
+    args.override+=["WEIGHTED_SAMPLING","False","TEST_BATCH_SIZE",4]
 else:
-    args.override=["WEIGHTED_SAMPLING","False","TEST_BATCH_SIZE",128]
+    args.override=["WEIGHTED_SAMPLING","False","TEST_BATCH_SIZE",4]
 
 
 task = args.annotations_path_name.split('_')[0]
@@ -169,9 +182,13 @@ loaders = create_multiple_loaders(
     pin_memory=True
 )
 
+model_weights = paths[f"PROTEINFER_{args.proteinfer_weights}_WEIGHTS_PATH"]
+if args.model_weights_id is not None:
+    model_weights = model_weights.replace('.pkl',f'{args.model_weights_id}.pkl')
+
 model = ProteInfer.from_pretrained(
-    weights_path=paths[f"PROTEINFER_GO_WEIGHTS_PATH"],#TODO: replace GO with "{task}"
-    num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"],
+    weights_path=model_weights,
+    num_labels=config["embed_sequences_params"][f"PROTEINFER_NUM_{args.proteinfer_weights}_LABELS"],
     input_channels=config["embed_sequences_params"]["INPUT_CHANNELS"],
     output_channels=config["embed_sequences_params"]["OUTPUT_CHANNELS"],
     kernel_size=config["embed_sequences_params"]["KERNEL_SIZE"],
@@ -193,7 +210,8 @@ eval_metrics = EvalMetrics(device=device)
 label_sample_sizes = {k:(v if v is not None else len(datasets[k][0].label_vocabulary)) 
                         for k,v in label_sample_sizes.items() if k in datasets.keys()}
 
-PROTEINFER_VOCABULARY = generate_vocabularies(file_path = config['paths']['FULL_DATA_PATH'])['label_vocab']
+full_data_path = 'FULL_DATA_PATH' if args.proteinfer_weights == 'GO' else 'FULL_EC_DATA_PATH'
+PROTEINFER_VOCABULARY = generate_vocabularies(file_path = config['paths'][full_data_path])['label_vocab']
 
 for loader_name, loader in loaders.items():
 
@@ -216,7 +234,7 @@ for loader_name, loader in loaders.items():
     mAP_micro = BinaryAUPRC(device='cpu')
     mAP_macro = MultilabelAUPRC(device='cpu',num_labels=label_sample_sizes["test"] )
 
-    with torch.no_grad():
+    with torch.no_grad(), autocast(enabled=True):
         for batch_idx, batch in tqdm(
             enumerate(loader[0]), total=len(loader[0])
         ):
@@ -251,8 +269,8 @@ for loader_name, loader in loaders.items():
                 
             if args.save_prediction_results:
                 test_results["sequence_ids"].append(sequence_ids)
-                test_results["logits"].append(logits)
-                test_results["labels"].append(label_multihots)
+                test_results["logits"].append(logits.cpu())
+                test_results["labels"].append(label_multihots.cpu())
 
         if not args.only_inference:
             test_metrics = test_metrics.compute()
@@ -280,13 +298,15 @@ for loader_name, loader in loaders.items():
                     )
                 else:
                     test_results[key] = (
-                        torch.cat(test_results[key]).detach().cpu().numpy()
+                        torch.cat(test_results[key]).numpy()
                     )
-
+            print('saving resuts...')
             save_evaluation_results(results=test_results,
-                                                    label_vocabulary=loader[0].dataset.label_vocabulary,
-                                                    run_name=f"{task}_{args.name}",
-                                                    output_dir=config["paths"]["RESULTS_DIR"],
-                                                    data_split_name = loader_name
-                                                    )
+                                            label_vocabulary=loader[0].dataset.label_vocabulary,
+                                            run_name=f"{task}_{args.name}" + str(args.model_weights_id) if args.model_weights_id is not None else "",
+                                            output_dir=config["paths"]["RESULTS_DIR"],
+                                            data_split_name = loader_name,
+                                            save_as_h5 = True
+                                            )
+            print('Done saving resuts...')
 torch.cuda.empty_cache()

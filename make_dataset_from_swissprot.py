@@ -43,14 +43,14 @@ def process_data(data_file_path:str,
                  output_file_path:str,
                  parenthood_file_path:str,
                  label_vocabulary:Literal['proteinfer','new','all'],
-                 sequence_vocabulary:Literal['proteinfer_test','new','all'],
+                 sequence_vocabulary:Literal['proteinfer_test','proteinfer_test','new','all'],
                  only_leaf_nodes:bool=False,
                  cache=True):
     # Extract data from SwissProt records
 
     # See https://biopython.org/docs/1.75/api/Bio.SwissProt.html and https://web.expasy.org/docs/userman.html
 
-    if not (os.path.exists("/home/samirchar/ProteinFunctions/data/swissprot/swissprot_2024_full.pkl") & cache):
+    if not (os.path.exists("data/swissprot/swissprot_2024_full.pkl") & cache):
         with open(data_file_path, 'r') as f:
             data = []
 
@@ -97,17 +97,17 @@ def process_data(data_file_path:str,
             lambda x: x.get('SUBCELLULAR LOCATION'))
 
         # Save df_2024 to a file
-        df_2024.to_pickle("/home/samirchar/ProteinFunctions/data/swissprot/swissprot_2024_full.pkl")
+        df_2024.to_pickle("data/swissprot/swissprot_2024_full.pkl")
     else:
-        df_2024 = pd.read_pickle("/home/samirchar/ProteinFunctions/data/swissprot/swissprot_2024_full.pkl")
+        df_2024 = pd.read_pickle("data/swissprot/swissprot_2024_full.pkl")
 
 
     # Make a set of the GO labels from the label embeddings
-    label_ids_2019  = set(pd.read_pickle('/home/samirchar/ProteinFunctions/data/annotations/go_annotations_2019_07_01.pkl').index)
-    annotations_2024 = pd.read_pickle('/home/samirchar/ProteinFunctions/data/annotations/go_annotations_may_2024.pkl')
-    pinf_train = read_fasta('/home/samirchar/ProteinFunctions/data/swissprot/proteinfer_splits/random/train_GO.fasta')
-    pinf_val = read_fasta('/home/samirchar/ProteinFunctions/data/swissprot/proteinfer_splits/random/dev_GO.fasta')
-    pinf_test = read_fasta('/home/samirchar/ProteinFunctions/data/swissprot/proteinfer_splits/random/test_GO.fasta')
+    label_ids_2019  = set(pd.read_pickle('data/annotations/go_annotations_2019_07_01.pkl').index)
+    annotations_2024 = pd.read_pickle('data/annotations/go_annotations_jul_2024.pkl')
+    pinf_train = read_fasta('data/swissprot/proteinfer_splits/random/train_GO.fasta')
+    pinf_val = read_fasta('data/swissprot/proteinfer_splits/random/dev_GO.fasta')
+    pinf_test = read_fasta('data/swissprot/proteinfer_splits/random/test_GO.fasta')
 
     label_ids_2024 = set(annotations_2024.index)
     
@@ -144,13 +144,18 @@ def process_data(data_file_path:str,
         in_proteinfer_test = df_2024.seq_id.apply(
             lambda x: x in proteinfer_test_set_seqs)
         df_2024 = df_2024[(in_proteinfer_test == True)]
+    elif sequence_vocabulary == 'proteinfer_train':
+        proteinfer_train_set_seqs = set([id for _,id,_ in pinf_train])
+        in_proteinfer_train = df_2024.seq_id.apply(
+            lambda x: x in proteinfer_train_set_seqs)
+        df_2024 = df_2024[(in_proteinfer_train == True)]
     elif sequence_vocabulary=='all':
         pass
     else:
         raise ValueError(f'{sequence_vocabulary} not recognized')
     
     if label_vocabulary =='proteinfer':
-        vocab = set(generate_vocabularies('/home/samirchar/ProteinFunctions/data/swissprot/proteinfer_splits/random/full_GO.fasta')['label_vocab'])
+        vocab = set(generate_vocabularies('data/swissprot/proteinfer_splits/random/full_GO.fasta')['label_vocab'])
     elif label_vocabulary == 'new':
         vocab = new_go_labels
     elif label_vocabulary == 'all':
@@ -189,6 +194,7 @@ def process_data(data_file_path:str,
           f" Number of labels in dataframe: {str(len(final_labels))}"
           )
 
+    print('Writting to FASTA...')
     # Convert dataframe to FASTA format and save to a file
     records = [SeqRecord(Seq(row['sequence']), id=row['seq_id'], description=" ".join(
         row['go_ids'])) for _, row in SwissProt_2023.iterrows()]
@@ -199,14 +205,13 @@ def process_data(data_file_path:str,
 if __name__ == "__main__":
     """
     Examples usage:
-    # python make_dataset_from_swissprot.py --data-file-path /home/samirchar/ProteinFunctions/data/swissprot/uniprot_sprot.dat --output-file-path /home/samirchar/ProteinFunctions/data/swissprot/unseen_swissprot_may_2024.fasta --only-unseen-seqs --label-vocabulary=new --parenthood-file-path /home/samirchar/ProteinFunctions/data/vocabularies/parenthood_may_2024.json
-    # update test set python make_dataset_from_swissprot.py --data-file-path /home/samirchar/ProteinFunctions/data/swissprot/uniprot_sprot.dat --output-file-path /home/samirchar/ProteinFunctions/data/swissprot/test_may_2024.fasta --only-unseen-seqs --label-vocabulary=new --parenthood-file-path /home/samirchar/ProteinFunctions/data/vocabularies/parenthood_may_2024.json
+    # python make_dataset_from_swissprot.py --data-file-path data/swissprot/uniprot_sprot.dat --output-file-path data/swissprot/unseen_swissprot_jul_2024.fasta --only-unseen-seqs --label-vocabulary=new --parenthood-file-path data/vocabularies/parenthood_jul_2024.json
+    # update test set python make_dataset_from_swissprot.py --data-file-path data/swissprot/uniprot_sprot.dat --output-file-path data/swissprot/test_jul_2024.fasta --only-unseen-seqs --label-vocabulary=new --parenthood-file-path data/vocabularies/parenthood_jul_2024.json
 
 
     
         
     """
-    # TODO: Refactor this into two scripts, and use vocabularies instead of embeddings
     parser = argparse.ArgumentParser(
         description="Process SwissProt data and generate a FASTA file.")
     parser.add_argument("--data-file-path", type=str,

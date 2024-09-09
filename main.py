@@ -79,6 +79,9 @@ def main():
     
     parser.add_argument("--save-val-test-metrics", action="store_true", default=False,
                         help="Append val/test metrics to json")
+    
+    parser.add_argument("--save-embeddings", action="store_true", default=False,
+                        help="Save different embeddings from the model FOR TEST SET ONLY")
 
     parser.add_argument("--save-val-test-metrics-path", default = 'outputs/results/ablation_results.json',
                         help=" Path to append val/test metrics to json",type=str) 
@@ -91,6 +94,7 @@ def main():
 
     parser.add_argument('-nr', '--nr', default=0, type=int,
                         help='Ranking within the nodes')
+    
     
     args = parser.parse_args()
     validate_arguments(args, parser)
@@ -248,7 +252,9 @@ def train_validate_test(gpu, args):
 
         # Calculate sequence weights
         logger.info("Calculating sequence weights based on the label weights...")
-        sequence_weights = calculate_sequence_weights(datasets["train"][0].data, label_weights)
+        sequence_weights = calculate_sequence_weights(data = datasets["train"][0].data,
+                                                      label_inv_freq = label_weights,
+                                                      aggregation = params["SEQUENCE_WEIGHT_AGG"])
         
         # If using clamping, clamp the weights based on the hyperparameters
         if params["SAMPLING_LOWER_CLAMP_BOUND"] is not None:
@@ -275,7 +281,7 @@ def train_validate_test(gpu, args):
     if params['PRETRAINED_SEQUENCE_ENCODER'] & (args.load_model is None): 
         sequence_encoder = ProteInfer.from_pretrained(
             weights_path=paths[f"PROTEINFER_{task}_WEIGHTS_PATH"],
-            num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"],
+            num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_GO_LABELS"],
             input_channels=config["embed_sequences_params"]["INPUT_CHANNELS"],
             output_channels=config["embed_sequences_params"]["OUTPUT_CHANNELS"],
             kernel_size=config["embed_sequences_params"]["KERNEL_SIZE"],
@@ -286,7 +292,7 @@ def train_validate_test(gpu, args):
         )
     else:
         sequence_encoder = ProteInfer(
-            num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_LABELS"],
+            num_labels=config["embed_sequences_params"]["PROTEINFER_NUM_GO_LABELS"],
             input_channels=config["embed_sequences_params"]["INPUT_CHANNELS"],
             output_channels=config["embed_sequences_params"]["OUTPUT_CHANNELS"],
             kernel_size=config["embed_sequences_params"]["KERNEL_SIZE"],
@@ -380,6 +386,7 @@ def train_validate_test(gpu, args):
     Trainer = ProTCLTrainer(
         model=model,
         device=device,
+        rank=rank,
         config=config,
         logger=logger,
         timestamp=timestamp,
@@ -442,6 +449,8 @@ def train_validate_test(gpu, args):
     # Setup for validation
     run_metrics = {'name':args.name}
     if args.save_val_test_metrics & is_master :
+        if not os.path.exists(args.save_val_test_metrics_path):
+            write_json([],args.save_val_test_metrics_path)
         metrics_results = read_json(args.save_val_test_metrics_path)
         
     best_th = None
@@ -470,7 +479,7 @@ def train_validate_test(gpu, args):
                                                                     num_labels=label_sample_sizes["validation"]
                                                             ),
             save_results=args.save_prediction_results,
-            metrics_prefix='final_validation'
+            data_loader_name='final_validation'
                     )
         all_metrics.update(validation_metrics)
         logger.info(json.dumps(validation_metrics, indent=4))
@@ -494,7 +503,8 @@ def train_validate_test(gpu, args):
                                                                           threshold=best_th if best_th is not None else params["DECISION_TH"],
                                                                           num_labels=label_sample_sizes["test"]),
                 save_results=args.save_prediction_results,
-                metrics_prefix=f'test_{idx+1}'
+                data_loader_name=f'test_{idx+1}',
+                return_embeddings=args.save_embeddings
             )
             all_test_metrics.update(test_metrics)
             logger.info(json.dumps(test_metrics, indent=4))
@@ -529,13 +539,7 @@ def train_validate_test(gpu, args):
                 wandb.log(validation_metrics)
             if args.amlt & args.mlflow:
                 mlflow.log_metrics(validation_metrics)
-    
-        '''
-        #Create wandb summary table
-        wandb.log({{'':args.name},
-                   all_metrics
-                   })
-        '''
+                
         #Close metric loggers
         if args.use_wandb:
             wandb.finish()
@@ -551,18 +555,5 @@ def train_validate_test(gpu, args):
     torch.cuda.empty_cache()
     dist.destroy_process_group()
 
-
-"""
- Sample usage (single GPU): 
- python main.py 
-    --nodes 1 
-    --gpus 1 
-    --nr 0 
-    --train-path-name TRAIN_DATA_PATH 
-    --validation-path-name VAL_DATA_PATH 
-    --full-path-name FULL_DATA_PATH 
-    --test-paths-names TEST_DATA_PATH
-    --use-wandb
-"""
 if __name__ == "__main__":
     main()

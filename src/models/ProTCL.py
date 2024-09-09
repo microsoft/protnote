@@ -32,7 +32,7 @@ class ProTCL(nn.Module):
         label_batch_size_limit=float("inf"),
         sequence_batch_size_limit=float("inf"),
         feature_fusion='concatenation',
-        temperature=0.07,
+        temperature=0.07
     ):
         super().__init__()
 
@@ -90,6 +90,8 @@ class ProTCL(nn.Module):
                 dropout=dropout,
             )
 
+
+            
     def _get_concatenated_features_dim(self):
         
         dim = {'concatenation_diff':self.latent_dim*3,
@@ -145,6 +147,8 @@ class ProTCL(nn.Module):
         tokenized_labels=None,
         label_embeddings=None,
         label_token_counts=None,
+        save_embeddings=False
+
     ):
         """
         Forward pass of the model.
@@ -200,15 +204,6 @@ class ProTCL(nn.Module):
             # Scale the noise
             scaled_noise = noise * scalars.unsqueeze(-1)
             
-            # # Calculate the Frobenius norm of the scaled noise
-            # noise_norm = torch.norm(scaled_noise, p='fro')
-            # # Calculate the Frobenius norm of the original label embeddings
-            # L_f_norm = torch.norm(L_f, p='fro')
-
-            # # Calculate the percentage of noise added
-            # noise_percentage = (noise_norm / L_f_norm) * 100
-            # print(f'Noise added: {noise_percentage:.2f}%')
-
             # Add the scaled noise to the original label embeddings
             L_f = L_f + scaled_noise
 
@@ -242,6 +237,8 @@ class ProTCL(nn.Module):
 
         # Get concatenated embeddings, representing all possible combinations of protein and label embeddings
         # (number proteins * number labels by latent_dim*2)
+        output_layer_embeddings = None
+        joint_embeddings = None
 
         if self.feature_fusion=='similarity':
             P_e = F.normalize(P_e,dim=-1,p=2)
@@ -251,21 +248,18 @@ class ProTCL(nn.Module):
         elif self.feature_fusion.startswith('concatenation'):
             joint_embeddings = self._get_joint_embeddings(
                 P_e, L_e, num_sequences, num_labels)
+            # Feed through MLP to get logits
+             
+            if not save_embeddings:
+                logits = self.output_layer(joint_embeddings)
+            else:
+                output_layer_embeddings = joint_embeddings
+                for i, layer in enumerate(self.output_layer):
+                    output_layer_embeddings = layer(output_layer_embeddings)
+                    if i == len(self.output_layer) - 2:  # Check if this is the layer before the last layer
+                        break
+                logits = self.output_layer[-1](output_layer_embeddings)
 
-            # print(joint_embeddings.shape,L_e.shape,P_e.shape)
-            # if self.residual_connection == 'standard':
-            #     joint_embeddings += L_e + P_e
-            # elif self.residual_connection == 'pre_projection_outer':
-            #     joint_embeddings += torch.bmm(L_f.unsqueeze(-1),P_f.unsqueeze(1)).mean(axis=-1) #Outer product 
-            # elif self.residual_connection == 'post_projection_outer':
-            #     joint_embeddings += torch.bmm(P_e.unsqueeze(-1),L_e.unsqueeze(1)).mean(axis=-1) #Outer product 
-            # elif self.residual_connection == False:
-            #     pass
-            # else:
-            #     raise ValueError(f'residual connection: {self.residual_connection} not implemented')
-
-            # Feed through MLP to get logits 
-            logits = self.output_layer(joint_embeddings)
         else:
             raise ValueError("feature fusion method not implemented")
         
@@ -275,12 +269,20 @@ class ProTCL(nn.Module):
         else:
             # Get equivalent logit of averaging in probability space
 
-            logits = torch.special.logit(torch.sigmoid(logits)\
+            logits = torch.special.logit(torch.sigmoid(logits)
                 .reshape(num_sequences,
                          num_labels//self.inference_descriptions_per_label,
                          self.inference_descriptions_per_label).mean(axis=-1),eps=1e-7)
+        
+        embeddings = {'output_layer_embeddings':[],'joint_embeddings':[]}
 
-        return logits
+        if save_embeddings:
+            if joint_embeddings is not None:
+                embeddings['joint_embeddings'] = joint_embeddings.detach().cpu()
+            if output_layer_embeddings is not None:
+                embeddings['output_layer_embeddings'] = output_layer_embeddings.detach().cpu()
+
+        return logits,embeddings
 
 def get_mlp(input_dim,
             hidden_dim,

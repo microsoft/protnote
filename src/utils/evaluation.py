@@ -255,7 +255,7 @@ class EvalMetrics:
         return metrics[name]
 
 
-def save_evaluation_results(results, label_vocabulary, run_name,output_dir,data_split_name):
+def save_evaluation_results(results, label_vocabulary, run_name,output_dir,data_split_name,save_as_h5:bool=False):
     # Do not need to check if is_master, since this function is only called by the master node
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -268,21 +268,36 @@ def save_evaluation_results(results, label_vocabulary, run_name,output_dir,data_
         labels_df = pd.DataFrame(results['labels'],
                         columns=label_vocabulary,
                         index=results['sequence_ids'])
-        labels_df = convert_float16_to_float32(labels_df)
         labels_df_output_path = os.path.join(
             output_dir, f'{data_split_name}_labels_{run_name}.parquet')
-
-        print(f"saving results to {labels_df_output_path}")
-        labels_df.to_parquet(labels_df_output_path)
+        
+        
+        if save_as_h5:
+            
+            labels_df_output_path = labels_df_output_path.replace('.parquet','.h5')
+            print(f"saving results to {labels_df_output_path}")
+            labels_df.to_hdf(labels_df_output_path,key='labels_df',mode='w')
+        else:
+            print(f"saving results to {labels_df_output_path}")
+            labels_df = convert_float16_to_float32(labels_df)
+            labels_df.to_parquet(labels_df_output_path)
 
     logits_df = pd.DataFrame(results['logits'],
                                     columns=logits_df_cols,
                                     index=results['sequence_ids']) 
-    logits_df = convert_float16_to_float32(logits_df)
+    
     logits_df_output_path = os.path.join(
         output_dir, f'{data_split_name}_logits_{run_name}.parquet')
-    print(f"saving results to {logits_df_output_path}")
-    logits_df.to_parquet(logits_df_output_path)
+    
+    
+    if save_as_h5:
+        logits_df_output_path = logits_df_output_path.replace('.parquet','.h5')
+        print(f"saving results to {logits_df_output_path}")
+        logits_df.to_hdf(logits_df_output_path,key='logits_df',mode='w')
+    else:
+        print(f"saving results to {logits_df_output_path}")
+        logits_df = convert_float16_to_float32(logits_df)
+        logits_df.to_parquet(logits_df_output_path)
 
 
 def metrics_per_label_df(logits_df:pd.DataFrame,labels_df:pd.DataFrame,device:str,threshold:None)->pd.DataFrame:
