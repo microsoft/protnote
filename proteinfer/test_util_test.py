@@ -29,165 +29,225 @@ import test_util
 
 
 class TestUtilTest(parameterized.TestCase):
+    @parameterized.named_parameters(
+        dict(
+            testcase_name="empty df",
+            df1=pd.DataFrame(),
+            df2=pd.DataFrame(),
+        ),
+        dict(
+            testcase_name="one column, ints",
+            df1=pd.DataFrame({"col1": [1, 2, 3]}),
+            df2=pd.DataFrame({"col1": [1, 2, 3]}),
+        ),
+        dict(
+            testcase_name="one column, floats",
+            df1=pd.DataFrame({"col1": [1.0, 2.0]}),
+            df2=pd.DataFrame({"col1": [1.0, 2.0]}),
+        ),
+        dict(
+            testcase_name="one column, sets",
+            df1=pd.DataFrame(
+                {
+                    "col1": [
+                        {1.0, 2.0},
+                        {3.0, 4.0},
+                    ]
+                }
+            ),
+            df2=pd.DataFrame(
+                {
+                    "col1": [
+                        {1.0, 2.0},
+                        {3.0, 4.0},
+                    ]
+                }
+            ),
+        ),
+        dict(
+            testcase_name="one column, np.arrays",
+            df1=pd.DataFrame(
+                {
+                    "col1": [
+                        np.array([1.0, 2.0]),
+                        np.array([3.0, 4.0]),
+                    ]
+                }
+            ),
+            df2=pd.DataFrame(
+                {
+                    "col1": [
+                        np.array([1.0, 2.0]),
+                        np.array([3.0, 4.0]),
+                    ]
+                }
+            ),
+        ),
+        dict(
+            testcase_name="two columns, ints and floats",
+            df1=pd.DataFrame(
+                {
+                    "col1": ["a", "b"],
+                    "col2": [1.0, 2.0],
+                }
+            ),
+            df2=pd.DataFrame(
+                {
+                    "col1": ["a", "b"],
+                    "col2": [1.0, 2.0],
+                }
+            ),
+        ),
+        dict(
+            testcase_name="two columns, strings and floats, reordered",
+            df1=pd.DataFrame(
+                {
+                    "col1": ["a", "b"],
+                    "col2": [1.0, 2.0],
+                }
+            ),
+            df2=pd.DataFrame(
+                {
+                    "col1": ["b", "a"],
+                    "col2": [2.0, 1.0],
+                }
+            ),
+            order_by_column="col1",
+        ),
+        dict(
+            testcase_name="two columns, strings and np.arrays, reordered",
+            df1=pd.DataFrame(
+                {
+                    "col1": ["a", "b"],
+                    "col2": [
+                        np.array([1.0, 2.0]),
+                        np.array([3.0, 4.0]),
+                    ],
+                }
+            ),
+            df2=pd.DataFrame(
+                {
+                    "col1": ["b", "a"],
+                    "col2": [
+                        np.array([3.0, 4.0]),
+                        np.array([1.0, 2.0]),
+                    ],
+                }
+            ),
+            order_by_column="col1",
+        ),
+    )
+    def test_assert_dataframes_equal_no_error(self, df1, df2, order_by_column=None):
+        test_util.assert_dataframes_equal(self, df1, df2, order_by_column)
 
-  @parameterized.named_parameters(
-      dict(
-          testcase_name='empty df',
-          df1=pd.DataFrame(),
-          df2=pd.DataFrame(),
-      ),
-      dict(
-          testcase_name='one column, ints',
-          df1=pd.DataFrame({'col1': [1, 2, 3]}),
-          df2=pd.DataFrame({'col1': [1, 2, 3]}),
-      ),
-      dict(
-          testcase_name='one column, floats',
-          df1=pd.DataFrame({'col1': [1., 2.]}),
-          df2=pd.DataFrame({'col1': [1., 2.]}),
-      ),
-      dict(
-          testcase_name='one column, sets',
-          df1=pd.DataFrame({'col1': [
-              {1., 2.},
-              {3., 4.},
-          ]}),
-          df2=pd.DataFrame({'col1': [
-              {1., 2.},
-              {3., 4.},
-          ]}),
-      ),
-      dict(
-          testcase_name='one column, np.arrays',
-          df1=pd.DataFrame({'col1': [
-              np.array([1., 2.]),
-              np.array([3., 4.]),
-          ]}),
-          df2=pd.DataFrame({'col1': [
-              np.array([1., 2.]),
-              np.array([3., 4.]),
-          ]}),
-      ),
-      dict(
-          testcase_name='two columns, ints and floats',
-          df1=pd.DataFrame({
-              'col1': ['a', 'b'],
-              'col2': [1., 2.],
-          }),
-          df2=pd.DataFrame({
-              'col1': ['a', 'b'],
-              'col2': [1., 2.],
-          }),
-      ),
-      dict(
-          testcase_name='two columns, strings and floats, reordered',
-          df1=pd.DataFrame({
-              'col1': ['a', 'b'],
-              'col2': [1., 2.],
-          }),
-          df2=pd.DataFrame({
-              'col1': ['b', 'a'],
-              'col2': [2., 1.],
-          }),
-          order_by_column='col1',
-      ),
-      dict(
-          testcase_name='two columns, strings and np.arrays, reordered',
-          df1=pd.DataFrame({
-              'col1': ['a', 'b'],
-              'col2': [
-                  np.array([1., 2.]),
-                  np.array([3., 4.]),
-              ],
-          }),
-          df2=pd.DataFrame({
-              'col1': ['b', 'a'],
-              'col2': [
-                  np.array([3., 4.]),
-                  np.array([1., 2.]),
-              ],
-          }),
-          order_by_column='col1',
-      ),
-  )
-  def test_assert_dataframes_equal_no_error(self,
-                                            df1,
-                                            df2,
-                                            order_by_column=None):
-    test_util.assert_dataframes_equal(self, df1, df2, order_by_column)
+    @parameterized.named_parameters(
+        dict(
+            testcase_name="empty df and nonempty df",
+            df1=pd.DataFrame(),
+            df2=pd.DataFrame({"col1": [1.0, 2.0, 3.0]}),
+        ),
+        dict(
+            testcase_name="one column, different lengths",
+            df1=pd.DataFrame({"col1": [1, 2]}),
+            df2=pd.DataFrame({"col1": [1, 2, 3]}),
+        ),
+        dict(
+            testcase_name="one column, sets",
+            df1=pd.DataFrame(
+                {
+                    "col1": [
+                        {1.0, 2.0},
+                        {3.0, 4.0},
+                    ]
+                }
+            ),
+            df2=pd.DataFrame(
+                {
+                    "col1": [
+                        {1.0, 2.0},
+                        set([]),
+                    ]
+                }
+            ),
+        ),
+        dict(
+            testcase_name="one column, np.arrays",
+            df1=pd.DataFrame(
+                {
+                    "col1": [
+                        np.array([1.0, 2.0]),
+                        np.array([3.0, 4.0]),
+                    ]
+                }
+            ),
+            df2=pd.DataFrame(
+                {
+                    "col1": [
+                        np.array([1.0, 2.0]),
+                        np.array([]),
+                    ]
+                }
+            ),
+        ),
+        dict(
+            testcase_name="two columns, ints and floats",
+            df1=pd.DataFrame(
+                {
+                    "col1": ["a", "b"],
+                    "col2": [1.0, 2.0],
+                }
+            ),
+            df2=pd.DataFrame(
+                {
+                    "col1": ["a", "b"],
+                    "col2": [1.0, 9999999999999.0],
+                }
+            ),
+        ),
+        dict(
+            testcase_name="two columns, strings and floats, reordered",
+            df1=pd.DataFrame(
+                {
+                    "col1": ["a", "b"],
+                    "col2": [1.0, 2.0],
+                }
+            ),
+            df2=pd.DataFrame(
+                {
+                    "col1": ["b", "a"],
+                    "col2": [9999999999999.0, 1.0],
+                }
+            ),
+            order_by_column="col1",
+        ),
+    )
+    def test_assert_dataframes_equal_error(self, df1, df2, order_by_column=None):
+        with self.assertRaises(AssertionError):
+            test_util.assert_dataframes_equal(self, df1, df2, order_by_column)
 
-  @parameterized.named_parameters(
-      dict(
-          testcase_name='empty df and nonempty df',
-          df1=pd.DataFrame(),
-          df2=pd.DataFrame({'col1': [1., 2., 3.]}),
-      ),
-      dict(
-          testcase_name='one column, different lengths',
-          df1=pd.DataFrame({'col1': [1, 2]}),
-          df2=pd.DataFrame({'col1': [1, 2, 3]}),
-      ),
-      dict(
-          testcase_name='one column, sets',
-          df1=pd.DataFrame({'col1': [
-              {1., 2.},
-              {3., 4.},
-          ]}),
-          df2=pd.DataFrame({'col1': [
-              {1., 2.},
-              set([]),
-          ]}),
-      ),
-      dict(
-          testcase_name='one column, np.arrays',
-          df1=pd.DataFrame({'col1': [
-              np.array([1., 2.]),
-              np.array([3., 4.]),
-          ]}),
-          df2=pd.DataFrame({'col1': [
-              np.array([1., 2.]),
-              np.array([]),
-          ]}),
-      ),
-      dict(
-          testcase_name='two columns, ints and floats',
-          df1=pd.DataFrame({
-              'col1': ['a', 'b'],
-              'col2': [1., 2.],
-          }),
-          df2=pd.DataFrame({
-              'col1': ['a', 'b'],
-              'col2': [1., 9999999999999.],
-          }),
-      ),
-      dict(
-          testcase_name='two columns, strings and floats, reordered',
-          df1=pd.DataFrame({
-              'col1': ['a', 'b'],
-              'col2': [1., 2.],
-          }),
-          df2=pd.DataFrame({
-              'col1': ['b', 'a'],
-              'col2': [9999999999999., 1.],
-          }),
-          order_by_column='col1',
-      ),
-  )
-  def test_assert_dataframes_equal_error(self, df1, df2, order_by_column=None):
-    with self.assertRaises(AssertionError):
-      test_util.assert_dataframes_equal(self, df1, df2, order_by_column)
+    def test_assert_dataframes_equal_nan_equal_nan(self):
+        df1 = pd.DataFrame(
+            {
+                "col1": [
+                    float("nan"),
+                ]
+            }
+        )
 
-  def test_assert_dataframes_equal_nan_equal_nan(self):
-    df1 = pd.DataFrame({'col1': [float('nan'),]})
+        test_util.assert_dataframes_equal(self, df1, df1, nan_equals_nan=True)
 
-    test_util.assert_dataframes_equal(self, df1, df1, nan_equals_nan=True)
+    def test_assert_dataframes_equal_nan_raises(self):
+        df1 = pd.DataFrame(
+            {
+                "col1": [
+                    float("nan"),
+                ]
+            }
+        )
 
-  def test_assert_dataframes_equal_nan_raises(self):
-    df1 = pd.DataFrame({'col1': [float('nan'),]})
-
-    with self.assertRaisesRegex(AssertionError, 'nan'):
-      test_util.assert_dataframes_equal(self, df1, df1, nan_equals_nan=False)
+        with self.assertRaisesRegex(AssertionError, "nan"):
+            test_util.assert_dataframes_equal(self, df1, df1, nan_equals_nan=False)
 
 
-if __name__ == '__main__':
-  absltest.main()
+if __name__ == "__main__":
+    absltest.main()

@@ -40,82 +40,87 @@ import tensorflow.compat.v1 as tf
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('output_file', '/tmp/parenthood.json.gz',
-                    'The file to which the parenthood file will be written')
+flags.DEFINE_string(
+    "output_file",
+    "/tmp/parenthood.json.gz",
+    "The file to which the parenthood file will be written",
+)
 
 
 def _get_ec_transitive():
-  """Loads dictionary of label to implied labels for EC numbers."""
-  logging.info('Getting EC parenthood dict.')
+    """Loads dictionary of label to implied labels for EC numbers."""
+    logging.info("Getting EC parenthood dict.")
 
-  with tf.io.gfile.GFile(parenthood_lib.EC_LEAF_NODE_METADATA_PATH) as f:
-    leaf_node_contents = f.read()
-  with tf.io.gfile.GFile(parenthood_lib.EC_NON_LEAF_NODE_METADATA_PATH) as f:
-    non_leaf_node_contents = f.read()
+    with tf.io.gfile.GFile(parenthood_lib.EC_LEAF_NODE_METADATA_PATH) as f:
+        leaf_node_contents = f.read()
+    with tf.io.gfile.GFile(parenthood_lib.EC_NON_LEAF_NODE_METADATA_PATH) as f:
+        non_leaf_node_contents = f.read()
 
-  ec = parenthood_lib.parse_full_ec_file_to_transitive_parenthood(
-      leaf_node_contents, non_leaf_node_contents)
-  return ec
+    ec = parenthood_lib.parse_full_ec_file_to_transitive_parenthood(
+        leaf_node_contents, non_leaf_node_contents
+    )
+    return ec
 
 
 def _get_go_transitive():
-  """Loads dictionary of label to implied labels for GO terms."""
-  logging.info('Getting GO parenthood dict.')
-  with tf.io.gfile.GFile(parenthood_lib.GO_METADATA_PATH) as f:
-    whole_go_contents = f.read()
-  go_nontransitive = parenthood_lib.parse_full_go_file(whole_go_contents)
+    """Loads dictionary of label to implied labels for GO terms."""
+    logging.info("Getting GO parenthood dict.")
+    with tf.io.gfile.GFile(parenthood_lib.GO_METADATA_PATH) as f:
+        whole_go_contents = f.read()
+    go_nontransitive = parenthood_lib.parse_full_go_file(whole_go_contents)
 
-  go_transitive = parenthood_lib.transitive_go_parenthood(go_nontransitive)
-  return go_transitive
+    go_transitive = parenthood_lib.transitive_go_parenthood(go_nontransitive)
+    return go_transitive
 
 
 def get_output_dict():
-  """Get output dictionary of label to set of transitive applicable labels.
+    """Get output dictionary of label to set of transitive applicable labels.
 
-  Returns:
-     Dictionary from label to all labels (transitively) that should be used
-     for an example with that label.
+    Returns:
+       Dictionary from label to all labels (transitively) that should be used
+       for an example with that label.
 
-  Raises:
-    ValueError if go and ec terms contain any shared keys.
-  """
-  ec = _get_ec_transitive()
-  go = _get_go_transitive()
-  overlapping_keys = (
-      set(ec.keys()).intersection(go.keys()))
-  if overlapping_keys:
-    raise ValueError('There was an overlap in keys between EC/GO. '
-                     'Overlapping keys: {}'.format(overlapping_keys))
+    Raises:
+      ValueError if go and ec terms contain any shared keys.
+    """
+    ec = _get_ec_transitive()
+    go = _get_go_transitive()
+    overlapping_keys = set(ec.keys()).intersection(go.keys())
+    if overlapping_keys:
+        raise ValueError(
+            "There was an overlap in keys between EC/GO. "
+            "Overlapping keys: {}".format(overlapping_keys)
+        )
 
-  to_write = dict()
-  to_write.update(ec)
-  to_write.update(go)
-  return to_write
+    to_write = dict()
+    to_write.update(ec)
+    to_write.update(go)
+    return to_write
 
 
 def write_output_dict(output_dict, output_path):
-  """Writes `output_dict` as json to a gzipped file."""
-  to_write_json = json.dumps(
-      {k: sorted(list(v)) for k, v in output_dict.items()},
-      sort_keys=True,
-  )
+    """Writes `output_dict` as json to a gzipped file."""
+    to_write_json = json.dumps(
+        {k: sorted(list(v)) for k, v in output_dict.items()},
+        sort_keys=True,
+    )
 
-  logging.info('gzipping dictionary.')
-  gzip_contents = io.BytesIO()
-  with gzip.GzipFile(fileobj=gzip_contents, mode='w') as f:
-    f.write(to_write_json.encode('utf-8'))
+    logging.info("gzipping dictionary.")
+    gzip_contents = io.BytesIO()
+    with gzip.GzipFile(fileobj=gzip_contents, mode="w") as f:
+        f.write(to_write_json.encode("utf-8"))
 
-  logging.info('Writing to file.')
-  with tf.io.gfile.GFile(output_path, 'wb') as output_file:
-    output_file.write(gzip_contents.getvalue())
+    logging.info("Writing to file.")
+    with tf.io.gfile.GFile(output_path, "wb") as output_file:
+        output_file.write(gzip_contents.getvalue())
 
 
 def main(_):
-  output_dict = get_output_dict()
-  write_output_dict(output_dict, FLAGS.output_file)
+    output_dict = get_output_dict()
+    write_output_dict(output_dict, FLAGS.output_file)
 
-  logging.info('Done.')
+    logging.info("Done.")
 
 
-if __name__ == '__main__':
-  app.run(main)
+if __name__ == "__main__":
+    app.run(main)

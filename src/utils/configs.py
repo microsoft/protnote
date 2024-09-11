@@ -7,6 +7,7 @@ import sys
 from ast import literal_eval
 from pathlib import Path
 
+
 def get_logger():
     # Create a custom logger
     logger = logging.getLogger(__name__)
@@ -19,7 +20,9 @@ def get_logger():
     console_handler.setLevel(logging.INFO)
 
     # Create a formatter that includes the current date and time
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
 
     # Set the formatter for the console handler
     console_handler.setFormatter(formatter)
@@ -28,8 +31,9 @@ def get_logger():
     logger.addHandler(console_handler)
 
     # Example usage
-    logger.info('This is an info message.')
+    logger.info("This is an info message.")
     return logger
+
 
 def try_literal_eval(val):
     try:
@@ -37,11 +41,12 @@ def try_literal_eval(val):
         return literal_eval(val)
     except (ValueError, SyntaxError):
         # If evaluation fails means input is actually a string
-        if val=='null':
+        if val == "null":
             return None
-        if (val=="false")|(val=="true"):
+        if (val == "false") | (val == "true"):
             return literal_eval(val.title())
         return val
+
 
 def override_config(config: dict, overrides: list):
     # Process the overrides if provided
@@ -65,37 +70,42 @@ def override_config(config: dict, overrides: list):
                     f"Key '{key}' not found in the 'params' section of the config."
                 )
 
-def generate_label_embedding_path(params:dict,
-                                   base_label_embedding_path:str):
-    '''
+
+def generate_label_embedding_path(params: dict, base_label_embedding_path: str):
+    """
     Generates the name of the file that caches label embeddings. Needed due to different
-    ways of pooling embeddings, different types of go descriptions and other paramters. 
+    ways of pooling embeddings, different types of go descriptions and other paramters.
     This way we can store different versions/types of label embeddings for caching
-    '''
-    assert params["LABEL_ENCODER_CHECKPOINT"] in ["microsoft/biogpt",
-                                                  "intfloat/e5-large-v2",
-                                                  "intfloat/multilingual-e5-large-instruct"], "Model not supported"
-    
-    MODEL_NAME_2_NICKNAME = {"microsoft/biogpt":"BioGPT",
-                             "intfloat/e5-large-v2":"E5",
-                             "intfloat/multilingual-e5-large-instruct":"E5_multiling_inst"}
+    """
+    assert params["LABEL_ENCODER_CHECKPOINT"] in [
+        "microsoft/biogpt",
+        "intfloat/e5-large-v2",
+        "intfloat/multilingual-e5-large-instruct",
+    ], "Model not supported"
 
-    label_embedding_path=base_label_embedding_path.split('/')
-    temp=label_embedding_path[-1].split('.')
+    MODEL_NAME_2_NICKNAME = {
+        "microsoft/biogpt": "BioGPT",
+        "intfloat/e5-large-v2": "E5",
+        "intfloat/multilingual-e5-large-instruct": "E5_multiling_inst",
+    }
 
-    
+    label_embedding_path = base_label_embedding_path.split("/")
+    temp = label_embedding_path[-1].split(".")
 
-    base_model = temp[0].split('_')
-    base_model = "_".join([base_model[0]] + [MODEL_NAME_2_NICKNAME[params["LABEL_ENCODER_CHECKPOINT"]]] + base_model[1:])
+    base_model = temp[0].split("_")
+    base_model = "_".join(
+        [base_model[0]]
+        + [MODEL_NAME_2_NICKNAME[params["LABEL_ENCODER_CHECKPOINT"]]]
+        + base_model[1:]
+    )
 
-    label_embedding_path[-1] = \
-        base_model \
-        + '_' \
-        + params["LABEL_EMBEDDING_POOLING_METHOD"] \
-        + '.' + temp[1]
-    
-    label_embedding_path = '/'.join(label_embedding_path)
+    label_embedding_path[-1] = (
+        base_model + "_" + params["LABEL_EMBEDDING_POOLING_METHOD"] + "." + temp[1]
+    )
+
+    label_embedding_path = "/".join(label_embedding_path)
     return label_embedding_path
+
 
 def get_setup(
     config_path: str,
@@ -105,9 +115,9 @@ def get_setup(
     val_path_name: str = None,
     test_paths_names: list = None,
     annotations_path_name: str = None,
-    base_label_embedding_name:str = None,
+    base_label_embedding_name: str = None,
     amlt: bool = False,
-    is_master: bool = True
+    is_master: bool = True,
 ):
     # Get the root path from the environment variable; default to current directory if ROOT_PATH is not set
     if amlt:
@@ -146,11 +156,14 @@ def get_setup(
     }
 
     train_paths_list = (
-        [{"data_path": paths[train_path_name],
-          "dataset_type": "train",
-          "annotations_path": paths[annotations_path_name],
-          "vocabularies_dir": paths["VOCABULARIES_DIR"]
-          }]
+        [
+            {
+                "data_path": paths[train_path_name],
+                "dataset_type": "train",
+                "annotations_path": paths[annotations_path_name],
+                "vocabularies_dir": paths["VOCABULARIES_DIR"],
+            }
+        ]
         if train_path_name is not None
         else []
     )
@@ -161,7 +174,7 @@ def get_setup(
                 "data_path": paths[val_path_name],
                 "dataset_type": "validation",
                 "annotations_path": paths[annotations_path_name],
-                "vocabularies_dir": paths["VOCABULARIES_DIR"]
+                "vocabularies_dir": paths["VOCABULARIES_DIR"],
             }
         ]
         if val_path_name is not None
@@ -170,22 +183,23 @@ def get_setup(
 
     test_paths_list = (
         [
-            {"data_path": paths[key],
-             "dataset_type": "test",
-             "annotations_path": paths[annotations_path_name],
-             "vocabularies_dir": paths["VOCABULARIES_DIR"]
-             }
+            {
+                "data_path": paths[key],
+                "dataset_type": "test",
+                "annotations_path": paths[annotations_path_name],
+                "vocabularies_dir": paths["VOCABULARIES_DIR"],
+            }
             for key in test_paths_names
         ]
         if test_paths_names is not None
         else []
     )
 
-
-    dataset_paths = {'train': train_paths_list,
-                     'validation':val_paths_list,
-                     'test': test_paths_list
-                    }
+    dataset_paths = {
+        "train": train_paths_list,
+        "validation": val_paths_list,
+        "test": test_paths_list,
+    }
 
     # Set the timezone for the entire Python environment
     os.environ["TZ"] = "US/Pacific"
@@ -198,8 +212,7 @@ def get_setup(
         try:
             os.makedirs(log_dir)
         except FileExistsError:
-            print(
-                f"Log directory {log_dir} already exists. is_master={is_master}")
+            print(f"Log directory {log_dir} already exists. is_master={is_master}")
             pass
     full_log_path = os.path.join(log_dir, f"{timestamp}_{run_name}.log")
 
@@ -214,7 +227,7 @@ def get_setup(
         # Create a formatter
         formatter = logging.Formatter(
             fmt="%(asctime)s %(levelname)-4s %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S %Z"
+            datefmt="%Y-%m-%d %H:%M:%S %Z",
         )
 
         # Create a file handler and add it to the logger
@@ -233,9 +246,10 @@ def get_setup(
         logger.setLevel(logging.CRITICAL + 1)
 
     # Generate embeddings
-    label_embedding_path = generate_label_embedding_path(params=params,
-                                                          base_label_embedding_path=paths[base_label_embedding_name])
-    
+    label_embedding_path = generate_label_embedding_path(
+        params=params, base_label_embedding_path=paths[base_label_embedding_name]
+    )
+
     # Return a dictionary
     return {
         "params": params,
@@ -247,7 +261,5 @@ def get_setup(
         "ROOT_PATH": ROOT_PATH,
         "DATA_PATH": DATA_PATH,
         "OUTPUT_PATH": OUTPUT_PATH,
-        "LABEL_EMBEDDING_PATH":label_embedding_path
+        "LABEL_EMBEDDING_PATH": label_embedding_path,
     }
-
-

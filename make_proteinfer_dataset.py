@@ -1,6 +1,5 @@
 import os
 import logging
-from typing import Literal
 from torchdata.datapipes.iter import FileLister, FileOpener
 import argparse
 from Bio.Seq import Seq
@@ -10,22 +9,21 @@ from tqdm import tqdm
 
 
 def process_sequence_tfrecord(record: dict, annotation_types: list):
-
-    sequence = record['sequence'][0].decode()
-    id = record['id'][0].decode()
+    sequence = record["sequence"][0].decode()
+    id = record["id"][0].decode()
 
     labels = set()
 
     # Some rows have no lavel column
-    if 'label' not in record:
+    if "label" not in record:
         return None
 
     # Add all labels from desired annotation types
-    for l in record['label']:
+    for l in record["label"]:
         label = l.decode()
-        label_type = label.split(':')[0]
+        label_type = label.split(":")[0]
 
-        if (label_type in annotation_types):
+        if label_type in annotation_types:
             labels.add(label)
 
     # Sequence with no annotation from selected types
@@ -35,12 +33,13 @@ def process_sequence_tfrecord(record: dict, annotation_types: list):
     return id, (sequence, list(labels))
 
 
-def process_tfrecords(input_dir: str,
-                      output_dir: str,
-                      annotation_types: list,
-                      pattern: str,
-                      pattern_name: str
-                      ):
+def process_tfrecords(
+    input_dir: str,
+    output_dir: str,
+    annotation_types: list,
+    pattern: str,
+    pattern_name: str,
+):
     # Load all tfrecords from desired data split
     datapipe1 = FileLister(input_dir, pattern)
     datapipe2 = FileOpener(datapipe1, mode="b")
@@ -49,8 +48,7 @@ def process_tfrecords(input_dir: str,
     records = []
     # Iterate over records, process and write to a fasta file
     for _, record in tqdm(enumerate(tfrecord_loader_dp)):
-        processed_sequence = process_sequence_tfrecord(
-            record, annotation_types)
+        processed_sequence = process_sequence_tfrecord(record, annotation_types)
 
         # Skipping sequence with no labels from desired annotations
         if processed_sequence is None:
@@ -62,38 +60,43 @@ def process_tfrecords(input_dir: str,
         record = SeqRecord(Seq(sequence), id=f"{id}", description=description)
         records.append(record)
 
-    with open(os.path.join(output_dir, f"{pattern_name}_{'_'.join(annotation_types)}.fasta"), "w") as output_handle:
+    with open(
+        os.path.join(output_dir, f"{pattern_name}_{'_'.join(annotation_types)}.fasta"),
+        "w",
+    ) as output_handle:
         SeqIO.write(records, output_handle, "fasta")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     """
     Example usage: python make_proteinfer_dataset.py --input-dir data/swissprot/proteinfer_splits/random/ --output-dir data/swissprot/proteinfer_splits/random/ --annotation-types GO
     """
     logging.basicConfig(
-        format='%(asctime)s | %(levelname)s: %(message)s', level=logging.NOTSET)
+        format="%(asctime)s | %(levelname)s: %(message)s", level=logging.NOTSET
+    )
     parser = argparse.ArgumentParser()
 
     # TODO: I/O paths could be not required and default to some env var
-    parser.add_argument('--input-dir', required=True)
-    parser.add_argument('--output-dir', required=True)
-    parser.add_argument('--annotation-types', nargs='+', required=True)
+    parser.add_argument("--input-dir", required=True)
+    parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--annotation-types", nargs="+", required=True)
     args = parser.parse_args()
 
     dirname = os.path.dirname(__file__)
-    # TODO: This paths should be in config or something
-    # input_dir = os.path.join(dirname, 'data/swissprot/proteinfer_splits/random/')
-    # output_dir = os.path.join(dirname, 'data/swissprot/proteinfer_splits/random/')
 
-    patterns = {'train': 'train*.tfrecord',
-                'dev': 'dev*.tfrecord',
-                'test': 'test*.tfrecord',
-                'full': '*.tfrecord'}
+    patterns = {
+        "train": "train*.tfrecord",
+        "dev": "dev*.tfrecord",
+        "test": "test*.tfrecord",
+        "full": "*.tfrecord",
+    }
 
     for pattern_name, pattern in patterns.items():
-        logging.info(f'Processing {pattern_name}')
-        process_tfrecords(input_dir=args.input_dir,
-                          output_dir=args.output_dir,
-                          annotation_types=args.annotation_types,
-                          pattern=pattern,
-                          pattern_name=pattern_name)
+        logging.info(f"Processing {pattern_name}")
+        process_tfrecords(
+            input_dir=args.input_dir,
+            output_dir=args.output_dir,
+            annotation_types=args.annotation_types,
+            pattern=pattern,
+            pattern_name=pattern_name,
+        )

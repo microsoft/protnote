@@ -24,52 +24,52 @@ from tensorflow.contrib import training as contrib_training
 
 
 def _starting_hparams():
-  """Set of shared starting parameters used in sets below."""
-  hparams = contrib_training.HParams()
-  hparams.add_hparam('batch_style', 'bucket')
-  hparams.add_hparam('gradient_clipping_decay', 0.9999)
-  hparams.add_hparam('learning_rate', 0.0005)
-  hparams.add_hparam('lr_decay_rate', .997)
-  hparams.add_hparam('lr_decay_steps', 1000)
-  hparams.add_hparam('lr_warmup_steps', 3000)
-  hparams.add_hparam('model_type', 'cnn')
-  hparams.add_hparam('resnet_bottleneck_factor', 0.5)
-  hparams.add_hparam('decision_threshold', 0.5)
-  hparams.add_hparam('denominator_power', 1.0)  # Standard mean-pooling.
-  return hparams
+    """Set of shared starting parameters used in sets below."""
+    hparams = contrib_training.HParams()
+    hparams.add_hparam("batch_style", "bucket")
+    hparams.add_hparam("gradient_clipping_decay", 0.9999)
+    hparams.add_hparam("learning_rate", 0.0005)
+    hparams.add_hparam("lr_decay_rate", 0.997)
+    hparams.add_hparam("lr_decay_steps", 1000)
+    hparams.add_hparam("lr_warmup_steps", 3000)
+    hparams.add_hparam("model_type", "cnn")
+    hparams.add_hparam("resnet_bottleneck_factor", 0.5)
+    hparams.add_hparam("decision_threshold", 0.5)
+    hparams.add_hparam("denominator_power", 1.0)  # Standard mean-pooling.
+    return hparams
 
 
 def tuned_for_ec():
-  """Hyperparameters tuned for EC classification."""
-  # TODO(theosanderson): update these to true SOTA values
-  hparams = contrib_training.HParams()
-  hparams.add_hparam('gradient_clipping_decay', 0.9999)
-  hparams.add_hparam('batch_style', 'bucket')
-  hparams.add_hparam('batch_size', 34)
-  hparams.add_hparam('dilation_rate', 5)
-  hparams.add_hparam('filters', 411)
-  hparams.add_hparam('first_dilated_layer', 1)  # This is 0-indexed
-  hparams.add_hparam('kernel_size', 7)
-  hparams.add_hparam('num_layers', 5)
-  hparams.add_hparam('pooling', 'mean')
-  hparams.add_hparam('resnet_bottleneck_factor', 0.88152)
-  hparams.add_hparam('lr_decay_rate', 0.9977)
-  hparams.add_hparam('learning_rate', 0.00028748)
-  hparams.add_hparam('decision_threshold', 0.3746)
-  hparams.add_hparam('denominator_power', 0.88)
+    """Hyperparameters tuned for EC classification."""
+    # TODO(theosanderson): update these to true SOTA values
+    hparams = contrib_training.HParams()
+    hparams.add_hparam("gradient_clipping_decay", 0.9999)
+    hparams.add_hparam("batch_style", "bucket")
+    hparams.add_hparam("batch_size", 34)
+    hparams.add_hparam("dilation_rate", 5)
+    hparams.add_hparam("filters", 411)
+    hparams.add_hparam("first_dilated_layer", 1)  # This is 0-indexed
+    hparams.add_hparam("kernel_size", 7)
+    hparams.add_hparam("num_layers", 5)
+    hparams.add_hparam("pooling", "mean")
+    hparams.add_hparam("resnet_bottleneck_factor", 0.88152)
+    hparams.add_hparam("lr_decay_rate", 0.9977)
+    hparams.add_hparam("learning_rate", 0.00028748)
+    hparams.add_hparam("decision_threshold", 0.3746)
+    hparams.add_hparam("denominator_power", 0.88)
 
-  hparams.add_hparam('train_steps', 650000)
-  return hparams
+    hparams.add_hparam("train_steps", 650000)
+    return hparams
 
 
 def small_test_model():
-  """A small test model that will run on a CPU quickly."""
-  hparams = _starting_hparams()
-  hparams.add_hparam('batch_size', 8)
-  hparams.add_hparam('dilation_rate', 1)
-  hparams.add_hparam('first_dilated_layer', 1)  # This is 0-indexed
-  hparams.add_hparam('filters', 10)
-  hparams.add_hparam('kernel_size', 3)
-  hparams.add_hparam('num_layers', 1)
-  hparams.add_hparam('train_steps', 100)
-  return hparams
+    """A small test model that will run on a CPU quickly."""
+    hparams = _starting_hparams()
+    hparams.add_hparam("batch_size", 8)
+    hparams.add_hparam("dilation_rate", 1)
+    hparams.add_hparam("first_dilated_layer", 1)  # This is 0-indexed
+    hparams.add_hparam("filters", 10)
+    hparams.add_hparam("kernel_size", 3)
+    hparams.add_hparam("num_layers", 1)
+    hparams.add_hparam("train_steps", 100)
+    return hparams
