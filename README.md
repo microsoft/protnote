@@ -31,3 +31,30 @@ trademarks or logos is subject to and must follow
 [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
 Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
 Any use of third-party trademarks or logos are subject to those third-party's policies.
+
+
+## Instalation
+```
+conda env create -f environment.yml
+conda activate protnote
+pip install -e ./  # make sure ./ is the dir including setup.py
+```
+## Config
+Most hyperparameters and paths are managed through base_config.yaml. Whenever reasonable we enforce certain files to be in specific directories to increase consistency and reproducibility. In general, we adhere to the following data argument naming conventions in scripts: 
+* Argument ending in "dir" corresponds to the full path of the folder where a file is located. E.g., data/swissprot/
+* Argument ending in "path" corresponds to the full file path. E.g., data/swissprot/myfile.fasta
+* Argument ending in "file" corresponds to the full file name alone (including the extension). E.g., myfile.fasta. This is used for files with enforced location within the data folder structure
+
+## Get model predictions for all datasets
+Get the predictions of the selected models for all the specified datasets. Useful to get the predictions of the same model with different seeds. Warning: the script is designed such that all models have the same hyperparameters but the only difference lies on the weights. 
+
+```
+python test_models.py --model-paths \
+    models/ProtNote/seed_replicates_v9_12_sum_last_epoch.pt \
+    models/ProtNote/seed_replicates_v9_22_sum_last_epoch.pt \
+    models/ProtNote/seed_replicates_v9_32_sum_last_epoch.pt \
+    models/ProtNote/seed_replicates_v9_42_sum_last_epoch.pt \
+    models/ProtNote/seed_replicates_v9_52_sum_last_epoch.pt \
+    --test-paths-names "TEST_DATA_PATH_ZERO_SHOT" "TEST_EC_DATA_PATH_ZERO_SHOT" \
+    --save-prediction-results
+```

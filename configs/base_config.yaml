@@ -2,21 +2,6 @@
 params:
   ############## PARAMS THAT NEED TO BE CHANGED FOR AMULET V100 VS. SANDBOX A100 ##############
 
-  # Batch sizes
-  # TRAIN_BATCH_SIZE: 32 # 256 for A100
-  # VALIDATION_BATCH_SIZE: 32 # 256 for A100
-  # TEST_BATCH_SIZE: 32 # 16 for A100
-  # # Label Sampling: can only use one of grid sampler, in batch sampling or normal label sampling
-  # GRID_SAMPLER: False
-  # IN_BATCH_SAMPLING: False # Use either in batch sampling or lable samples, not both.
-  # WEIGHTED_SAMPLING: True #Sample rare sequences more often as dictaded by inverse frequency of labels
-  # INV_FREQUENCY_POWER: 0.5 #Used for weighted sampling AND relevant losses with weighting
-  # TRAIN_LABEL_SAMPLE_SIZE: null # 15K for both. IS ALSO USED WITH GRID SAMPLER
-  # VALIDATION_LABEL_SAMPLE_SIZE: null # use all labels in validation
-  # # Inference
-  # LABEL_BATCH_SIZE_LIMIT_NO_GRAD: 2000 # 1500 for A100
-  # SEQUENCE_BATCH_SIZE_LIMIT_NO_GRAD: 128 # 128 for A100 (TO BE VERIFIED)
-
   ### V100 ###
   # Batch sizes
   TRAIN_BATCH_SIZE: 8 # 8 per GPU for V100 (64 if using 8 GPUs)
@@ -128,14 +113,14 @@ embed_sequences_params:
 
 # Paths to data, vocabularies, embeddings, and models
 paths:
-  # Paths referenced relative to DATA_PATH (will have DATA_PATH prepended)
+  # Paths referenced relative to DATA_PATH (will have "data" prepended)
   data_paths: 
     # ProteInfer data paths
     TRAIN_DATA_PATH: swissprot/proteinfer_splits/random/train_GO.fasta
     TRAIN_2024_DATA_PATH: swissprot/proteinfer_splits/random/train_GO_jul_2024.fasta
     VAL_DATA_PATH: swissprot/proteinfer_splits/random/dev_GO.fasta
-    TEST_TOP_LABELS_DATA_PATH: swissprot/proteinfer_splits/random/test_top_labels_GO.fasta
     TEST_DATA_PATH: swissprot/proteinfer_splits/random/test_GO.fasta
+    TEST_TOP_LABELS_DATA_PATH: swissprot/proteinfer_splits/random/test_top_labels_GO.fasta
 
     TRAIN_CLUSTERED_DATA_PATH: swissprot/proteinfer_splits/clustered/train_GO.fasta
     VAL_CLUSTERED_DATA_PATH: swissprot/proteinfer_splits/clustered/dev_GO.fasta
@@ -147,11 +132,10 @@ paths:
     TEST_2024_DATA_PATH: swissprot/proteinfer_splits/random/test_GO_jul_2024.fasta
     TEST_2024_PINF_VOCAB_DATA_PATH: swissprot/proteinfer_splits/random/test_GO_jul_2024_pinf_vocab.fasta
     
-    ALL_SWISSPROT: swissprot/swissprot_2023.fasta
-
     # Zero-shot data paths 
-    TRAIN_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/2024-02-17_train_GO_zero_shot.fasta
-    VAL_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/2024-02-17_dev_GO_zero_shot.fasta
+    TRAIN_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/fake_train_GO_zero_shot.fasta
+    VAL_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/fake_dev_GO_zero_shot.fasta
+    VAL_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/fake_dev_GO_zero_shot.fasta
     TEST_DATA_PATH_ZERO_SHOT: zero_shot/GO_swissprot_jul_2024.fasta
     TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES: zero_shot/GO_swissprot_leaf_nodes_jul_2024.fasta
 
@@ -165,7 +149,6 @@ paths:
     VOCABULARIES_DIR: vocabularies/proteinfer
     GO_ANNOTATIONS_PATH: annotations/go_annotations_jul_2024.pkl #annotations/go_annotations_2019_07_01_updated.pkl # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
     EC_ANNOTATIONS_PATH: annotations/ec_annotations.pkl
-    INFERENCE_ANNOTATIONS_PATH: annotations/inference_annotations.pkl
 
     # Embeddings paths (if using frozen pre-trained models)
     GO_BASE_LABEL_EMBEDDING_PATH: embeddings/frozen_label_embeddings.pt # this is the base path which is modified by POOLING_METHOD
@@ -176,8 +159,11 @@ paths:
     PARENTHOOD_LIB_PATH: vocabularies/parenthood_jul_2024.json
     PROTEINFER_GO_WEIGHTS_PATH: models/proteinfer/GO_model_weights.pkl
     PROTEINFER_EC_WEIGHTS_PATH: models/proteinfer/EC_model_weights.pkl
+
+    #SwissProt
+    LATEST_SWISSPROT_DAT_PATH: swissprot/uniprot_sprot_jul_2024.dat
     
-  # Paths referenced relative to OUTPUT_PATH (will have OUTPUT_PATH prepended)
+  # Paths referenced relative to OUTPUT_PATH (will have "outputs" prepended)
   output_paths:
     # Where to save the model
     OUTPUT_MODEL_DIR: checkpoints/
