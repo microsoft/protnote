@@ -1,10 +1,13 @@
 import json
+import os
+import sys
+from protnote.utils.configs import get_project_root
+sys.path.append(str(get_project_root() / "proteinfer"))
 import inference
 import argparse
 import tensorflow as tf
 import tensorflow_hub as hub
 import pickle
-import os
 
 
 def export_model_weights(
@@ -57,8 +60,8 @@ def export_proteinfer_vocab(
 if __name__ == "__main__":
     """
     example
-
-    python proteinfer/export_proteinfer.py --model-path 'proteinfer/cached_models/noxpd2_cnn_swissprot_go_random_swiss-cnn_for_swissprot_go_random-13703706' --model-name GO
+ 
+    python bin/export_proteinfer.py --model-path 'data/models/proteinfer/noxpd2_cnn_swissprot_go_random_swiss-cnn_for_swissprot_go_random-13703706' --model-name GO
 
     """
     parser = argparse.ArgumentParser()
@@ -67,7 +70,7 @@ if __name__ == "__main__":
         required=True,
         help="originally stored in cached_models after running install_models.py",
     )
-    parser.add_argument("--model-name", required=True, help="GO")
+    parser.add_argument("--model-name", required=True, help="GO or EC")
     parser.add_argument(
         "--add-model-id", action="store_true", default=False, required=False
     )

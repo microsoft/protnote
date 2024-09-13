@@ -7,12 +7,10 @@ names=(
     "2024-08-21_06-00-52_SEED_42_AUGMENT_RESIDUE_PROBABILITY_0_SEQUENCE_WEIGHT_AGG_sum_last_epoch.pt"
     ) 
 
-output_path='outputs/results/final_model_ablations_part2.json'
+output_file='final_model_ablations.json'
 for name in "${names[@]}"; do
-    file_name="models/ProtNote/${name}"
+    model_file="${name}"
     model_name="${name%.pt}"
-
-    # python test_model.py --test-paths-names "TEST_DATA_PATH_ZERO_SHOT" "TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES" "TEST_EC_DATA_PATH_ZERO_SHOT" "VAL_DATA_PATH" --model-path "${file_name}" --save-val-test-metrics --test-type "model" --save-val-test-metrics-path "$output_path"
     
     if [[ "$model_name" == *"LABEL_AUGMENTATION_DESCRIPTIONS_name"* ]]
     then  
@@ -28,8 +26,8 @@ for name in "${names[@]}"; do
         label_encoder_checkpoint="intfloat/multilingual-e5-large-instruct"
     fi 
     
-    python main.py --test-paths-names TEST_DATA_PATH_ZERO_SHOT --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.3 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT "$label_encoder_checkpoint" AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS "$description_augmentation" INFERENCE_GO_DESCRIPTIONS "$description_augmentation" --load-model "$file_name" --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH --name TEST_DATA_PATH_ZERO_SHOT_"$model_name" --save-val-test-metrics --save-val-test-metrics-path "$output_path"
-    python main.py --test-paths-names TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.3 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT "$label_encoder_checkpoint" AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS "$description_augmentation" INFERENCE_GO_DESCRIPTIONS "$description_augmentation" --load-model "$file_name" --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH --name TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES_"$model_name" --save-val-test-metrics --save-val-test-metrics-path "$output_path"
-    python main.py --test-paths-names TEST_EC_DATA_PATH_ZERO_SHOT --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT "$label_encoder_checkpoint" DECISION_TH .3 --load-model "$file_name" --annotations-path-name EC_ANNOTATIONS_PATH --base-label-embedding-name EC_BASE_LABEL_EMBEDDING_PATH --name TEST_EC_DATA_PATH_ZERO_SHOT_"$model_name" --save-val-test-metrics --save-val-test-metrics-path "$output_path"
-    python main.py --test-paths-names VAL_DATA_PATH --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT "$label_encoder_checkpoint" AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS "$description_augmentation" INFERENCE_GO_DESCRIPTIONS "$description_augmentation" --load-model "$file_name" --name VAL_DATA_PATH_"$model_name" --save-val-test-metrics --save-val-test-metrics-path "$output_path"
+    python main.py --test-paths-names TEST_DATA_PATH_ZERO_SHOT --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.3 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT "$label_encoder_checkpoint" AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS "$description_augmentation" INFERENCE_GO_DESCRIPTIONS "$description_augmentation" --load-model "$model_file" --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH --name TEST_DATA_PATH_ZERO_SHOT_"$model_name" --save-val-test-metrics --save-val-test-metrics-file "$output_file"
+    python main.py --test-paths-names TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.3 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT "$label_encoder_checkpoint" AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS "$description_augmentation" INFERENCE_GO_DESCRIPTIONS "$description_augmentation" --load-model "$model_file" --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH --name TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES_"$model_name" --save-val-test-metrics --save-val-test-metrics-file "$output_file"
+    python main.py --test-paths-names TEST_EC_DATA_PATH_ZERO_SHOT --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT "$label_encoder_checkpoint" DECISION_TH .3 --load-model "$model_file" --annotations-path-name EC_ANNOTATIONS_PATH --base-label-embedding-name EC_BASE_LABEL_EMBEDDING_PATH --name TEST_EC_DATA_PATH_ZERO_SHOT_"$model_name" --save-val-test-metrics --save-val-test-metrics-file "$output_file"
+    python main.py --test-paths-names VAL_DATA_PATH --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT "$label_encoder_checkpoint" AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS "$description_augmentation" INFERENCE_GO_DESCRIPTIONS "$description_augmentation" --load-model "$model_file" --name VAL_DATA_PATH_"$model_name" --save-val-test-metrics --save-val-test-metrics-file "$output_file"
 done

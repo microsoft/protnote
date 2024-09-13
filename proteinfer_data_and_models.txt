@@ -1,7 +1,0 @@
-
-#Models#
-https://storage.googleapis.com/brain-genomics-public/research/proteins/proteinfer/models/zipped_models/noxpd2_cnn_swissprot_go_random_swiss-cnn_for_swissprot_go_random-13703706.tar.gz
-https://storage.googleapis.com/brain-genomics-public/research/proteins/proteinfer/models/zipped_models/noxpd2_cnn_swissprot_ec_random_swiss-cnn_for_swissprot_ec_random-13703966.tar.gz
-
-#Data#
-https://console.cloud.google.com/storage/browser/brain-genomics-public/research/proteins/proteinfer/datasets/swissprot

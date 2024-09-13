@@ -40,7 +40,7 @@ def process_tfrecords(
     pattern_name: str,
 ):
     # Load all tfrecords from desired data split
-    datapipe1 = FileLister(input_dir, pattern)
+    datapipe1 = FileLister(str(input_dir), pattern)
     datapipe2 = FileOpener(datapipe1, mode="b")
     tfrecord_loader_dp = datapipe2.load_from_tfrecord()
 
@@ -68,7 +68,7 @@ def process_tfrecords(
 
 if __name__ == "__main__":
     """
-    Example usage: python make_proteinfer_dataset.py --dataset-type random --annotation-types GO
+    Example usage: python bin/make_proteinfer_dataset.py --dataset-type random --annotation-types GO
     """
     logging.basicConfig(
         format="%(asctime)s | %(levelname)s: %(message)s", level=logging.NOTSET

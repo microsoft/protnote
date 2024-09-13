@@ -48,6 +48,7 @@ Most hyperparameters and paths are managed through base_config.yaml. Whenever re
 ## Get model predictions for all datasets
 Get the predictions of the selected models for all the specified datasets. Useful to get the predictions of the same model with different seeds. Warning: the script is designed such that all models have the same hyperparameters but the only difference lies on the weights. 
 
+
 ```
 python test_models.py --model-paths \
     models/ProtNote/seed_replicates_v9_12_sum_last_epoch.pt \
@@ -58,3 +59,52 @@ python test_models.py --model-paths \
     --test-paths-names "TEST_DATA_PATH_ZERO_SHOT" "TEST_EC_DATA_PATH_ZERO_SHOT" \
     --save-prediction-results
 ```
+
+## Data
+
+
+
+## ProteInfer data
+ProteInfer models and datasets used
+
+
+## Reproducing 
+### Data
+We provide all the data required to run ProtNote and reproduce our results, but if you insist, this section explains how to download, process and create all the datasets. 
+
+### ProteInfer Data
+Perform the following stepts to download the original ProteInfer dataset TFRecords:
+
+Install gcloud:
+
+```
+sudo snap install google-cloud-cli --classic
+```
+
+Then, login with a google account (e.g., gmail). The following command with promp a browser window for authentication:
+
+```
+gcloud init
+```
+
+Download the data:
+
+```
+gsutil -m cp -r gs://brain-genomics-public/research/proteins/proteinfer/datasets/swissprot .
+```
+
+Move the random and clustered folders to the directory data/swissprot/proteinfer_splits/
+
+To create the fasta versions of these files run the following commands from root:
+
+```
+python bin/make_proteinfer_dataset.py --dataset-type random --annotation-types GO
+python bin/make_proteinfer_dataset.py --dataset-type random --annotation-types EC
+```
+
+
+### Models
+Example of two ProteInfer models. One is gor GO annotation prediction, the other is for EC number predictions. There are multiple models with this format in their cloud storage with different id's corresponding to distinct seeds. The seed is the 8-digit number before the file extension:
+
+https://storage.googleapis.com/brain-genomics-public/research/proteins/proteinfer/models/zipped_models/noxpd2_cnn_swissprot_go_random_swiss-cnn_for_swissprot_go_random-13703706.tar.gz
+https://storage.googleapis.com/brain-genomics-public/research/proteins/proteinfer/models/zipped_models/noxpd2_cnn_swissprot_ec_random_swiss-cnn_for_swissprot_ec_random-13703966.tar.gz

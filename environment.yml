@@ -1,4 +1,4 @@
-name: protein_functions_310
+name: protnote
 channels:
   - biobuilds
   - pytorch
@@ -21,6 +21,7 @@ dependencies:
   - sacremoses=0.0.53
   - pynvml=11.5.0
   - torchmetrics=1.2.0
+  - protobuf=3.20.3
   - pip:
     - pip
     - torcheval==0.0.7
@@ -31,4 +32,4 @@ dependencies:
     - obonet==1.0.0
     - blosum==2.0.2
     - biopython==1.84
-prefix: /anaconda/envs/protein_functions_310
+prefix: /anaconda/envs/protnote
