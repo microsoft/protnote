@@ -279,12 +279,12 @@ def update_config_paths(config, project_root):
 
     return config
 
-def load_config():
+def load_config(config_file:str = 'base_config.yaml'):
     """Load the environment variables and YAML configuration file."""
     project_root = get_project_root()
 
     # Load the YAML configuration file from the project root
-    config_file = project_root / 'configs' / 'base_config.yaml'
+    config_file = project_root / 'configs' / config_file
     config = update_config_paths(read_yaml(config_file),project_root) 
 
     return config, project_root

@@ -32,8 +32,12 @@ def download_and_extract_model(id):
         run_command(f"mv -f {model_id_dir} {model_dir}")
         
         # Run the export script
-        run_command(f"conda run -n proteinfer python bin/export_proteinfer.py --model-path {model_dir / model_id_dir} --model-name GO --add-model-id")
+        run_command(f"conda run -n proteinfer python bin/export_proteinfer.py --model-path {model_dir / model_id_dir} --output-dir {model_dir} --model-name GO --add-model-id")
+
+        #Clean up. Orginal weights are not needed.
         
+        run_command(f"rm -rf {model_dir / model_id_dir}")
+    
     else:
         print(f"{id} weights already exist")
 

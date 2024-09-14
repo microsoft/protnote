@@ -1,8 +1,10 @@
 import json
 import os
 import sys
-from protnote.utils.configs import get_project_root
-sys.path.append(str(get_project_root() / "proteinfer"))
+root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Construct the path to the proteinfer directory
+proteinfer_dir = os.path.join(root_dir, 'proteinfer')
+sys.path.append(proteinfer_dir)
 import inference
 import argparse
 import tensorflow as tf
@@ -11,8 +13,14 @@ import pickle
 
 
 def export_model_weights(
-    model_path: str, model_name: str, output_dir: str, add_model_id: bool = False
-):
+    model_path: str,
+    model_name: str,
+    output_dir: str,
+    add_model_id: bool = False
+):  
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        
     suffix = model_path.split("-")[-1] if add_model_id else ""
     output_path = os.path.join(
         output_dir, f"{model_name}_model_weights" + suffix + ".pkl"
@@ -70,27 +78,34 @@ if __name__ == "__main__":
         required=True,
         help="originally stored in cached_models after running install_models.py",
     )
-    parser.add_argument("--model-name", required=True, help="GO or EC")
     parser.add_argument(
-        "--add-model-id", action="store_true", default=False, required=False
+        "--output-dir",
+        required=True,
+        help="The directory to store the new ProteInfer weights",
+    )
+    parser.add_argument(
+        "--model-name",
+        required=True,
+        help="GO or EC"
+    )
+    parser.add_argument(
+        "--add-model-id",
+        action="store_true",
+        default=False,
+        required=False
     )
     args = parser.parse_args()
-
-    HOME = os.path.abspath(os.path.join(__file__, os.pardir))
-    export_folder = os.path.join(HOME, "export")
-    if not os.path.exists(export_folder):
-        os.mkdir(export_folder)
 
     # if os.path.exists('export')
     export_proteinfer_vocab(
         model_path=args.model_path,
         model_name=args.model_name,
-        output_dir=export_folder,
         add_model_id=args.add_model_id,
+        output_dir=args.output_dir
     )
     export_model_weights(
         model_path=args.model_path,
         model_name=args.model_name,
-        output_dir=export_folder,
         add_model_id=args.add_model_id,
+        output_dir=args.output_dir
     )

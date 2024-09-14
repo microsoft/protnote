@@ -1,8 +1,6 @@
 import torch
 import os
 import argparse
-import math
-import re
 import logging
 from tqdm import tqdm
 import numpy as np
@@ -16,7 +14,7 @@ from protnote.utils.data import (
     remove_obsolete_from_string,
     ensure_list,
 )
-
+from protnote.utils.configs import get_project_root
 
 logging.basicConfig(level=logging.INFO)
 
@@ -27,13 +25,6 @@ torch.cuda.empty_cache()
 def main():
     # ---------------------- HANDLE ARGUMENTS ----------------------#
     parser = argparse.ArgumentParser(description="Train and/or Test the ProtNote model.")
-
-    parser.add_argument(
-        "--config",
-        type=str,
-        default="configs/base_config.yaml",
-        help="(Relative) path to the configuration file.",
-    )
 
     parser.add_argument(
         "--pooling-method",
@@ -58,7 +49,7 @@ def main():
     parser.add_argument(
         "--account-for-sos",
         action="store_true",
-        help="Whether to ignore the SOS token. Set to True for BioGPT and False for E5. Doesn't make any difference if pooling method = last_token",
+        help="Whether to ignore the SOS token. Set to True for BioGPT and False for E5. Doesn't make any difference if pooling method = last_token.",
     )
 
     parser.add_argument(
@@ -79,15 +70,15 @@ def main():
 
     args = parser.parse_args()
 
-    ROOT_PATH = os.path.dirname(__file__)
-    CONFIG = read_yaml(os.path.join(ROOT_PATH, args.config))
+    ROOT_PATH =  get_project_root()
+    CONFIG = read_yaml(ROOT_PATH / "configs" / "base_config.yaml")
     TASK = "Identify the main categories, themes, or topics described in the following Gene Ontology (GO) term, which is used to detail a protein's function"
 
     # Overwrite config pooling method
     CONFIG["params"]["LABEL_EMBEDDING_POOLING_METHOD"] = args.pooling_method
     CONFIG["params"]["LABEL_ENCODER_CHECKPOINT"] = args.label_encoder_checkpoint
 
-    DATA_PATH = os.path.join(ROOT_PATH, "data")
+    DATA_PATH = ROOT_PATH / "data"
     OUTPUT_PATH = os.path.join(
         DATA_PATH,
         generate_label_embedding_path(
@@ -98,7 +89,6 @@ def main():
         ),
     )
 
-    print(OUTPUT_PATH)
     INDEX_OUTPUT_PATH = OUTPUT_PATH.split(".")
     INDEX_OUTPUT_PATH = (
         "_".join([INDEX_OUTPUT_PATH[0], "index"]) + "." + INDEX_OUTPUT_PATH[1]
@@ -175,4 +165,11 @@ def main():
 
 
 if __name__ == "__main__":
+    '''
+    Example usage: 
+     python generate_label_embeddings.py --base-label-embedding-path EC_BASE_LABEL_EMBEDDING_PATH --annotations-path-name EC_ANNOTATIONS_PATH --label-encoder-checkpoint microsoft/biogpt --account-for-sos
+     python generate_label_embeddings.py --base-label-embedding-path EC_BASE_LABEL_EMBEDDING_PATH --annotations-path-name EC_ANNOTATIONS_PATH --add-instruction --account-for-sos
+     python generate_label_embeddings.py --base-label-embedding-path GO_2024_BASE_LABEL_EMBEDDING_PATH --annotations-path-name GO_ANNOTATIONS_PATH --add-instruction --account-for-sos
+    
+    '''
     main()

@@ -65,10 +65,12 @@ python test_models.py --model-paths \
 
 
 ## ProteInfer data
-ProteInfer models and datasets used
+ProteInfer models and datasets
 
 
 ## Reproducing 
+Run the following instructions in order to avoid any dependency issues.
+
 ### Data
 We provide all the data required to run ProtNote and reproduce our results, but if you insist, this section explains how to download, process and create all the datasets. 
 
@@ -102,9 +104,30 @@ python bin/make_proteinfer_dataset.py --dataset-type random --annotation-types G
 python bin/make_proteinfer_dataset.py --dataset-type random --annotation-types EC
 ```
 
+### Zero Shot datasets, and few more
+Run ```python bin/create_test_sets.py``` to create all the remaining datasets used in the paper. The datasets are:
+
+*
+* 
+*
+*
+*
+*
+*
+* Fake zero shot datasets. Includes the train, val, and test sets with the prefix "fake_"
+
+
+### Cached embeddings
+
 
 ### Models
 Example of two ProteInfer models. One is gor GO annotation prediction, the other is for EC number predictions. There are multiple models with this format in their cloud storage with different id's corresponding to distinct seeds. The seed is the 8-digit number before the file extension:
 
-https://storage.googleapis.com/brain-genomics-public/research/proteins/proteinfer/models/zipped_models/noxpd2_cnn_swissprot_go_random_swiss-cnn_for_swissprot_go_random-13703706.tar.gz
-https://storage.googleapis.com/brain-genomics-public/research/proteins/proteinfer/models/zipped_models/noxpd2_cnn_swissprot_ec_random_swiss-cnn_for_swissprot_ec_random-13703966.tar.gz
+* https://storage.googleapis.com/brain-genomics-public/research/proteins/proteinfer/models/zipped_models/noxpd2_cnn_swissprot_go_random_swiss-cnn_for_swissprot_go_random-13703706.tar.gz
+* https://storage.googleapis.com/brain-genomics-public/research/proteins/proteinfer/models/zipped_models/noxpd2_cnn_swissprot_ec_random_swiss-cnn_for_swissprot_ec_random-13703966.tar.gz
+
+To dowlnoad and get the predictions for five ProteInfer seeds, run:
+
+```
+python bin/download_and_test_proteinfer_seeds.py --get-predictions
+```

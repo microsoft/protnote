@@ -8,7 +8,6 @@ from protnote.utils.data import (
 from protnote.utils.configs import get_project_root
 
 def main():
-
     output_dir = get_project_root() / 'data' / 'annotations'
     ec_classes_data = "https://ftp.expasy.org/databases/enzyme/enzclass.txt"
     ec_numbers_data = "https://ftp.expasy.org/databases/enzyme/enzyme.dat"
