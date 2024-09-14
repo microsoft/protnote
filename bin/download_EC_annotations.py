@@ -1,5 +1,6 @@
 import pandas as pd
 import wget
+import os
 from protnote.utils.data import (
     save_to_pickle,
     get_ec_class_descriptions,
@@ -14,9 +15,11 @@ def main():
     enzclass_output_path = output_dir / "enzclass.txt"
     enzyme_dat_output_path = output_dir / "enzyme.dat"
     annotations_output_path = output_dir / "ec_annotations.pkl"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
-    wget.download(ec_classes_data, out=enzclass_output_path)
-    wget.download(ec_numbers_data, out=enzyme_dat_output_path)
+    wget.download(ec_classes_data, out=str(enzclass_output_path))
+    wget.download(ec_numbers_data, out=str(enzyme_dat_output_path))
 
     ec_classes = get_ec_class_descriptions(enzclass_output_path)
     ec_numbers = get_ec_number_description(enzyme_dat_output_path, ec_classes)

@@ -35,10 +35,13 @@ Any use of third-party trademarks or logos are subject to those third-party's po
 
 ## Instalation
 ```
+git clone https://github.com/microsoft/protnote.git
+cd protnote
 conda env create -f environment.yml
 conda activate protnote
 pip install -e ./  # make sure ./ is the dir including setup.py
 ```
+
 ## Config
 Most hyperparameters and paths are managed through base_config.yaml. Whenever reasonable we enforce certain files to be in specific directories to increase consistency and reproducibility. In general, we adhere to the following data argument naming conventions in scripts: 
 * Argument ending in "dir" corresponds to the full path of the folder where a file is located. E.g., data/swissprot/
@@ -103,6 +106,23 @@ To create the fasta versions of these files run the following commands from root
 python bin/make_proteinfer_dataset.py --dataset-type random --annotation-types GO
 python bin/make_proteinfer_dataset.py --dataset-type random --annotation-types EC
 ```
+
+### Download annotations
+Download GO and EC annotations.
+
+TODO: 
+
+Need to add command to download go annotations. Are the go annotations from Jul 2023 or Jul 2024?? need to clarify this.
+
+I believe I downloaded not from the releases, but whatever was latest on Jul 2024. Currently as of Sept 9 2024, the latest version in releases is of 06/17/2024. Maybe, my latest download of Jul 2024 corresponds to this June release. Otherwise, I might need to just provide the file i used since it wouldn't be possible to reproduce if the same file can't be downloaded from go.
+
+Need to fix problem of wget not having permission to retrieve data from the website.
+
+
+```
+python bin/download_EC_annotations.py
+```
+
 
 ### Zero Shot datasets, and few more
 Run ```python bin/create_test_sets.py``` to create all the remaining datasets used in the paper. The datasets are:

@@ -105,7 +105,7 @@ if __name__ == "__main__":
         help="URL to the OBO file.",
     )
     parser.add_argument(
-        "--output_file", type=str
+        "--output-file", type=str
     )
     args = parser.parse_args()
 
