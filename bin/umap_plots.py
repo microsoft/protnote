@@ -123,11 +123,11 @@ if __name__ == "__main__":
 
     print("running umap plots...")
     for n_neighbors, min_dist in tqdm(combos, total=num_combinations):
-        title = f"match vs unmatch n_neighbors={n_neighbors}, min_dist={min_dist}"
+        
         X_r = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist).fit(X_s).embedding_
 
         fig = plt.figure(figsize=(7, 7))
-
+        title = f"match vs unmatch n_neighbors={n_neighbors}, min_dist={min_dist}, n = {len(X_r)}"
         # output layer showing separation between matching and un-matching protein-function pairs
         palette_ = palette[7:8] + palette[6:7]
         sns.scatterplot(
@@ -152,7 +152,7 @@ if __name__ == "__main__":
 
         # Output layer colored by GO Top hierarchy
         fig = plt.figure(figsize=(7, 7))
-        title = f"top hierarchy n_neighbors={n_neighbors}, min_dist={min_dist}"
+        
         palette_ = palette[4:5] + palette[8:10]
         match_binary_mask = match_binary_mask.astype(bool) & mask
         X_r = (
@@ -160,6 +160,7 @@ if __name__ == "__main__":
             .fit(X_s[match_binary_mask])
             .embedding_
         )
+        title = f"top hierarchy n_neighbors={n_neighbors}, min_dist={min_dist}, , n = {len(X_r)}"
         sns.scatterplot(
             x=X_r[:, 0],
             y=X_r[:, 1],

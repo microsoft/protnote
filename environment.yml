@@ -22,6 +22,11 @@ dependencies:
   - pynvml=11.5.0
   - torchmetrics=1.2.0
   - protobuf=3.20.3
+  - scipy=1.13.1 
+  - seaborn=0.13.2
+  - scikit-learn=1.3.0
+  - matplotlib=3.9.2
+  - umap-learn=0.5.4
   - pip:
     - pip
     - torcheval==0.0.7
@@ -32,4 +37,5 @@ dependencies:
     - obonet==1.0.0
     - blosum==2.0.2
     - biopython==1.84
+    - ipykernel==6.29.5
 prefix: /anaconda/envs/protnote

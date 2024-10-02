@@ -161,7 +161,7 @@ paths:
     PROTEINFER_EC_WEIGHTS_PATH: models/proteinfer/EC_model_weights.pkl
 
     #SwissProt
-    LATEST_SWISSPROT_DAT_PATH: swissprot/uniprot_sprot_jul_2024.dat
+    LATEST_SWISSPROT_DATA_PATH: swissprot/uniprot_sprot_jul_2024.dat
     
   # Paths referenced relative to OUTPUT_PATH (will have "outputs" prepended)
   output_paths:

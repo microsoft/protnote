@@ -8,9 +8,10 @@ import os
 from tqdm import tqdm
 from typing import Literal
 import collections
-from protnote.utils.configs import get_project_root,construct_absolute_paths, load_config
+from protnote.utils.configs import get_project_root,construct_absolute_paths, load_config, get_logger
 from protnote.utils.data import read_json, read_fasta, generate_vocabularies, COMMON_AMINOACIDS
 
+logger = get_logger()
 
 def reverse_map(applicable_label_dict, label_vocab=None):
     """Flip parenthood dict to map parents to children.
@@ -60,18 +61,20 @@ def main(
     annotations_dir = project_root / 'data' / 'annotations'
     latest_swissprot_file = swissprot_dir / latest_swissprot_file
     
+    #Create the output directory from output_file_path if it does not exist
+    os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
 
     # Extract data from SwissProt records
 
     # See https://biopython.org/docs/1.75/api/Bio.SwissProt.html and https://web.expasy.org/docs/userman.html
 
-    if not ((swissprot_dir / args.parsed_latest_swissprot_file) & cache):
+    if not (os.path.exists(swissprot_dir / args.parsed_latest_swissprot_file) & cache):
         with open(latest_swissprot_file, "r") as f:
             data = []
 
             records = SwissProt.parse(f)
 
-            print("Extracting data from SwissProt records... This may take a while...")
+            logger.info("Extracting data from SwissProt records... This may take a while...")
             for record in tqdm(records, total=571609):
                 # Extract sequence ID
                 seq_id = record.accessions[0]
@@ -115,7 +118,7 @@ def main(
                     ]
                 )
 
-        print("Finished extracting data from SwissProt records.")
+        logger.info("Finished extracting data from SwissProt records.")
 
         # Convert data into a pandas DataFrame and create a new column with the subcellular location
         df_latest = pd.DataFrame(
@@ -202,7 +205,7 @@ def main(
     if label_vocabulary == "proteinfer":
         vocab = set(
             generate_vocabularies(
-                config['paths']['data_paths']['FULL_DATA_PATH']
+                str(config['paths']['data_paths']['FULL_DATA_PATH'])
             )["label_vocab"]
         )
     elif label_vocabulary == "new":
@@ -213,7 +216,7 @@ def main(
     if only_leaf_nodes:
         vocab &= leaf_nodes
 
-    print("filtering labels")
+    logger.info("filtering labels")
     # Find protein sequences with added labels
     df_latest["go_ids"] = df_latest.go_ids.apply(lambda x: (set(x) & vocab))
 
@@ -235,13 +238,13 @@ def main(
 
     # Rename columns
     final_labels = set([j for i in SwissProt_latest["go_ids"] for j in i])
-    print(
+    logger.info(
         "Number of sequences in dataframe: "
         + str(len(SwissProt_latest))
         + f" Number of labels in dataframe: {str(len(final_labels))}"
     )
 
-    print("Writting to FASTA...")
+    logger.info("Writting to FASTA...")
     # Convert dataframe to FASTA format and save to a file
     records = [
         SeqRecord(
@@ -250,7 +253,7 @@ def main(
         for _, row in SwissProt_latest.iterrows()
     ]
     SeqIO.write(records, output_file_path, "fasta")
-    print("Saved FASTA file to " + output_file_path)
+    logger.info("Saved FASTA file to " + output_file_path)
 
 
 if __name__ == "__main__":

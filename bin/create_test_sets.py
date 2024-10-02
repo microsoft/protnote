@@ -2,7 +2,10 @@ import subprocess
 from protnote.utils.notebooks import get_data_distributions
 from protnote.utils.data import read_fasta, save_to_fasta
 import pandas as pd
-from protnote.utils.configs import load_config
+from protnote.utils.configs import load_config, get_logger
+
+logger = get_logger()
+
 
 
 def create_smaller_test_sets(df,output_dir):
@@ -15,7 +18,7 @@ def create_smaller_test_sets(df,output_dir):
         ]
         save_to_fasta(
             temp,
-            output_file=output_dir / f"test_{n}_GO.fasta",
+            output_file=str(output_dir / f"test_{n}_GO.fasta"),
         )
         
 
@@ -39,7 +42,7 @@ def create_top_labels_test_set(df, output_path, go_term_distribution, k=3000):
         .sample(frac=0.1, random_state=42)
         .iterrows()
     ]
-    save_to_fasta(test_df_top_k,output_path)
+    save_to_fasta(test_df_top_k,str(output_path))
 
 
 if __name__ == "__main__":
@@ -49,96 +52,121 @@ if __name__ == "__main__":
     config, project_root = load_config()
     results_dir = config["paths"]["output_paths"]["RESULTS_DIR"]
     
+    #Create fake train,val,test sets for hparam tuning
+    logger.info("Creating fake train, val, test sets for hyperparameter tuning...")
+    subprocess.run(["python", "bin/make_zero_shot_datasets_from_proteinfer.py"],check=True,shell=False)
+    logger.info("Done.")
+
     # Updated Supervised Test Set. pinf test seqs + new labels + new vocab
-    subprocess(
+    logger.info("Updated Supervised Test Set. ProteInfer test seqs with new labels & new vocab...")
+    subprocess.run(
         [
             "python",
-            "make_dataset_from_swissprot.py",
-            "--data-file-path",
-            config["paths"]['data_paths']['LATEST_SWISSPROT_DAT_PATH'],
+            "bin/make_dataset_from_swissprot.py",
+            "--latest-swissprot-file",
+            config["paths"]['data_paths']['LATEST_SWISSPROT_DATA_PATH'],
             "--output-file-path",
             config["paths"]['data_paths']['TEST_2024_DATA_PATH'],
-            "--sequence-vocabulary=proteinfer_test",
-            "--label-vocabulary=all",
-            "--parenthood-file-path",
-            config["paths"]['data_paths']['PARENTHOOD_LIB_PATH']
+            "--sequence-vocabulary",
+            "proteinfer_test",
+            "--label-vocabulary",
+            "all",
+            "--parenthood-file",
+            "parenthood_jul_2024.json"
         ],
         check=True,
-        shell=True,
+        shell=False,
     )
+    logger.info("Done.")
 
     # Updated Supervised Test Set. pinf test seqs + new labels + pinf/old vocab
-    subprocess(
+    logger.info("Updated Supervised Test Set. ProteInfer test seqs with new labels & ProteInfer/old vocab...")
+    subprocess.run(
         [
             "python",
-            "make_dataset_from_swissprot.py",
-            "--data-file-path",
-            config["paths"]['data_paths']['LATEST_SWISSPROT_DAT_PATH'],
+            "bin/make_dataset_from_swissprot.py",
+            "--latest-swissprot-file",
+            config["paths"]['data_paths']['LATEST_SWISSPROT_DATA_PATH'],
             "--output-file-path",
             config["paths"]['data_paths']['TEST_2024_PINF_VOCAB_DATA_PATH'],
-            "--sequence-vocabulary=proteinfer_test",
-            "--label-vocabulary=proteinfer",
-            "--parenthood-file-path",
-            config["paths"]['data_paths']['PARENTHOOD_LIB_PATH']
+            "--sequence-vocabulary",
+            "proteinfer_test",
+            "--label-vocabulary",
+            "proteinfer",
+            "--parenthood-file",
+            "parenthood_jul_2024.json"
         ],
         check=True,
-        shell=True,
+        shell=False,
     )
+    logger.info("Done.")
 
     # GO Zero Shot 2024 Leaf Nodes. new seqs + new labels only leaf nodes + only added vocab terms
-    subprocess(
+    logger.info("GO Zero Shot 2024 Leaf Nodes. New seqs with new labels only leaf nodes & only added vocab terms")
+    subprocess.run(
         [
             "python",
-            "make_dataset_from_swissprot.py",
-            "--data-file-path",
-            config["paths"]['data_paths']['LATEST_SWISSPROT_DAT_PATH'],
+            "bin/make_dataset_from_swissprot.py",
+            "--latest-swissprot-file",
+            config["paths"]['data_paths']['LATEST_SWISSPROT_DATA_PATH'],
             "--output-file-path",
             config["paths"]['data_paths']['TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES'],
-            "--sequence-vocabulary=new",
+            "--sequence-vocabulary",
+            "new",
             "--only-leaf-nodes",
-            "--label-vocabulary=new",
-            "--parenthood-file-path",
-            config["paths"]['data_paths']['PARENTHOOD_LIB_PATH']
+            "--label-vocabulary",
+            "new",
+            "--parenthood-file",
+            "parenthood_jul_2024.json"
         ],
         check=True,
-        shell=True,
+        shell=False,
     )
+    logger.info("Done.")
 
     # GO Zero Shot 2024 new seqs + new labels + only added vocab terms
-    subprocess(
+    logger.info("GO Zero Shot 2024 new seqs with new labels & only added vocab terms")
+    subprocess.run(
         [
             "python",
-            "make_dataset_from_swissprot.py",
-            "--data-file-path",
-            config["paths"]['data_paths']['LATEST_SWISSPROT_DAT_PATH'],
+            "bin/make_dataset_from_swissprot.py",
+            "--latest-swissprot-file",
+            config["paths"]['data_paths']['LATEST_SWISSPROT_DATA_PATH'],
             "--output-file-path",
             config["paths"]['data_paths']['TEST_DATA_PATH_ZERO_SHOT'],
-            "--sequence-vocabulary=new",
-            "--label-vocabulary=new",
-            "--parenthood-file-path",
-            config["paths"]['data_paths']['PARENTHOOD_LIB_PATH']
+            "--sequence-vocabulary",
+            "new",
+            "--label-vocabulary",
+            "new",
+            "--parenthood-file",
+            "parenthood_jul_2024.json"
         ],
         check=True,
-        shell=True,
+        shell=False,
     )
+    logger.info("Done.")
 
     # Updated Supervised Train Set. pinf train seqs + all new & old labels.
-    subprocess(
+    logger.info("Updated Supervised Train Set. ProteInfer train seqs with all new & old labels.")
+    subprocess.run(
         [
             "python",
-            "make_dataset_from_swissprot.py",
-            "--data-file-path",
-            config["paths"]['data_paths']['LATEST_SWISSPROT_DAT_PATH'],
+            "bin/make_dataset_from_swissprot.py",
+            "--latest-swissprot-file",
+            config["paths"]['data_paths']['LATEST_SWISSPROT_DATA_PATH'],
             "--output-file-path",
             config["paths"]['data_paths']['TRAIN_2024_DATA_PATH'],
-            "--sequence-vocabulary=proteinfer_train",
-            "--label-vocabulary=all",
-            "--parenthood-file-path",
-            config["paths"]['data_paths']['PARENTHOOD_LIB_PATH']
+            "--sequence-vocabulary",
+            "proteinfer_train",
+            "--label-vocabulary",
+            "all",
+            "--parenthood-file",
+            "parenthood_jul_2024.json"
         ],
         check=True,
-        shell=True,
+        shell=False,
     )
+    logger.info("Done.")
 
     train = read_fasta(config["paths"]['data_paths']['TRAIN_DATA_PATH'])
     test = read_fasta(config["paths"]['data_paths']['TEST_DATA_PATH'])
@@ -156,11 +184,15 @@ if __name__ == "__main__":
         ascending=False
     )
 
+    logger.info("Create smaller test sets for BLAST runtime calculation...")
     create_smaller_test_sets(df = df,
                              output_dir = project_root / "data" / "swissprot" / "proteinfer_splits" / "random"
                              )
+    logger.info("Done.")
     
+    logger.info("Create top labels test set for embeddings analysis.")
     create_top_labels_test_set(df = df,
                                output_path= config["paths"]['data_paths']['TEST_TOP_LABELS_DATA_PATH'],
                                go_term_distribution=go_term_distribution
                                )
+    logger.info("Done.")

@@ -91,7 +91,7 @@ def main():
     val = read_fasta(args.val_path)
     test = read_fasta(args.test_path)
 
-    label_vocabulary = generate_vocabularies(file_path=config["paths"]['data_paths']['FULL_DATA_PATH'])["label_vocab"]
+    label_vocabulary = generate_vocabularies(file_path=str(config["paths"]['data_paths']['FULL_DATA_PATH']))["label_vocab"]
 
     train_labels, val_labels, test_labels = split_labels(label_vocabulary)
 
@@ -114,6 +114,6 @@ def main():
 if __name__ == "__main__":
     """
     Example usage:
-    python make_zero_shot_datasets_from_proteinfer.py --train_path data/swissprot/proteinfer_splits/random/train_GO.fasta --val_path data/swissprot/proteinfer_splits/random/dev_GO.fasta --test_path data/swissprot/proteinfer_splits/random/test_GO.fasta
+    python bin/make_zero_shot_datasets_from_proteinfer.py
     """
     main()

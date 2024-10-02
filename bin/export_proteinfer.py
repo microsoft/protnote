@@ -11,7 +11,6 @@ import tensorflow as tf
 import tensorflow_hub as hub
 import pickle
 
-
 def export_model_weights(
     model_path: str,
     model_name: str,

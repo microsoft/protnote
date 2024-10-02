@@ -2,7 +2,6 @@ import os
 import subprocess
 import argparse
 from pathlib import Path
-from protnote.utils.configs import get_project_root
 
 # Define the list of IDs
 def run_command(command):
@@ -12,7 +11,7 @@ def run_command(command):
 
 def download_and_extract_model(id):
     """Download, extract, and export the model if it doesn't exist"""
-    model_dir = get_project_root() / "data" / "models" / "proteinfer" 
+    model_dir = Path(__file__).resolve().parent.parent / "data" / "models" / "proteinfer" 
     model_file = model_dir / f"GO_model_weights{id}.pkl"
     if not os.path.exists(model_file):
         tar_file = f"noxpd2_cnn_swissprot_go_random_swiss-cnn_for_swissprot_go_random-{id}.tar.gz"

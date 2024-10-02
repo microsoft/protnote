@@ -3,6 +3,7 @@ import pandas as pd
 import argparse
 import logging
 import re
+import os
 import numpy as np
 from protnote.utils.configs import get_project_root
 
@@ -63,8 +64,19 @@ def main(url: str, output_file: str):
     logging.info("Downloading and processing OBO file...")
 
     output_file = get_project_root() / 'data' / 'annotations' / output_file
+    os.makedirs(get_project_root() / 'data' / 'annotations', exist_ok=True)
     # Load the .obo file directly from the URL into a networkx graph using obonet
-    graph = obonet.read_obo(url, ignore_obsolete=False)
+    
+    # Download from url if latest, otherwise download file with wget and read file with obonet
+    if url == "latest":
+        file = "https://purl.obolibrary.org/obo/go.obo"
+    else:
+        # Download the file, extract the date from the url and use date as suffix for temp .obo file
+        date = re.search(r"\d{4}-\d{2}-\d{2}", url).group()
+        file = get_project_root() / 'data' / 'annotations' / f"go_{date}.obo"
+        os.system(f"wget {url} -O {file}")
+
+    graph = obonet.read_obo(file, ignore_obsolete=False)
 
     # Convert the graph nodes (terms) into a pandas dataframe
     df = pd.DataFrame.from_dict(dict(graph.nodes(data=True)), orient="index")
