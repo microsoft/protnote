@@ -1,37 +1,20 @@
-# Project
+# ProtNote
 
-> This repo has been populated by an initial template to help get you started. Please
-> make sure to update the content to build a great experience for community-building.
+## Description
 
-As the maintainer of this project, please make a few updates:
+Understanding the protein sequence-function relationship is essential for advancing protein biology and engineering.
+However, fewer than 1% of known protein sequences have human-verified functions, and scientists continually update
+the set of possible functions. While deep learning methods have demonstrated promise for protein function prediction,
+current models are limited to predicting only those functions on which they were trained. Here, we introduce ProtNote,
+a multimodal deep learning model that leverages free-form text to enable both supervised and zero-shot protein function
+prediction. ProtNote not only maintains near state-of-the-art performance for annotations in its train set, but also
+generalizes to unseen and novel functions in zero-shot test settings. We envision that ProtNote will enhance protein
+function discovery by enabling scientists to use free text inputs, without restriction to predefined labels – a necessary
+capability for navigating the dynamic landscape of protein biology.
 
-- Improving this README.MD file to provide a great experience
-- Updating SUPPORT.MD with content about this project's support experience
-- Understanding the security reporting process in SECURITY.MD
-- Remove this section from the README
-
-## Contributing
-
-This project welcomes contributions and suggestions.  Most contributions require you to agree to a
-Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
-the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
-
-When you submit a pull request, a CLA bot will automatically determine whether you need to provide
-a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
-provided by the bot. You will only need to do this once across all repos using our CLA.
-
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
-For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
-contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
-
-## Trademarks
-
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft 
-trademarks or logos is subject to and must follow 
-[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
-Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
-Any use of third-party trademarks or logos are subject to those third-party's policies.
-
+<p align="center">
+<img src="img/main_fig.pdf>" />
+</p>
 
 ## Instalation
 ```
@@ -43,49 +26,60 @@ pip install -e ./  # make sure ./ is the dir including setup.py
 ```
 
 ## Config
-Most hyperparameters and paths are managed through base_config.yaml. Whenever reasonable we enforce certain files to be in specific directories to increase consistency and reproducibility. In general, we adhere to the following data argument naming conventions in scripts: 
+Most hyperparameters and paths are managed through the base_config.yaml. Whenever reasonable, we enforce certain files to be in specific directories to increase consistency and reproducibility. In general, we adhere to the following data argument naming conventions in scripts: 
 * Argument ending in "dir" corresponds to the full path of the folder where a file is located. E.g., data/swissprot/
 * Argument ending in "path" corresponds to the full file path. E.g., data/swissprot/myfile.fasta
 * Argument ending in "file" corresponds to the full file name alone (including the extension). E.g., myfile.fasta. This is used for files with enforced location within the data folder structure
 
 
 ## Data
-TODO: improve explanation of datasets and include the name of the dataset in the config yml.
 
-* fake_*_GO_zero_shot.fasta. Creating fake train, val, test sets for hyperparameter tuning...
-* test_GO_jul_2024.fasta. Updated ProteInfer Supervised Test Set. ProteInfer test seqs with new labels & new vocab. 
-* test_GO_jul_2024_pinf_vocab.fasta. Updated Supervised Test Set. ProteInfer test seqs with new labels & ProteInfer/old vocab.
-* GO_swissprot_leaf_nodes_jul_2024.fasta. GO Zero Shot 2024 Leaf Nodes. New seqs with new labels only leaf nodes
-* GO_swissprot_jul_2024.fasta. GO Zero Shot 2024. New seqs with new labels, all nodes.
-* train_GO_jul_2024.fasta. Updated Supervised Train Set. ProteInfer train seqs with all new & old labels
-* test_*_GO.fasta .Create smaller test sets for BLAST runtime calculation.
-* test_top_labels_GO.fasta. Create top labels test set for embeddings analysis
+We train and test ProtNote with sequences from the SwissProt section of UniProt, corresponding to sequences human-verified funcitons. Further, we evaluate ProtNote on different zero shot scenarios, including prediction of unseen/novel GO terms, and EC Numbers - a type of annotations the model was not trained on.
 
-
-### Protnote predictions on test sets using five different seeds
-Get the predictions of the selected models for all the specified datasets. Useful to get the predictions of the same model with different seeds. Warning: the script is designed such that all models have the same hyperparameters but the only difference lie on the weights. 
+All the data to train and run inference with ProtNote can be downloaded using the following command:
 
 ```
-python test_models.py --model-paths \
-    models/ProtNote/seed_replicates_v9_12_sum_last_epoch.pt \
-    models/ProtNote/seed_replicates_v9_22_sum_last_epoch.pt \
-    models/ProtNote/seed_replicates_v9_32_sum_last_epoch.pt \
-    models/ProtNote/seed_replicates_v9_42_sum_last_epoch.pt \
-    models/ProtNote/seed_replicates_v9_52_sum_last_epoch.pt \
-    --test-paths-names "TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES" "TEST_DATA_PATH_ZERO_SHOT" "TEST_EC_DATA_PATH_ZERO_SHOT" "TEST_DATA_PATH"\
-    --save-prediction-results
+TODO: Add command
 ```
+
+* data
+    * annotations: contains the text descriptions of all the GO and EC annotations for 2019 and 2024.
+    * embeddings: stores the text description embeddings that are cached during training.
+    * models: holds ProtNote and ProteInfer weights for multiple seeds.
+    * swissprot: where all SwissProt fasta files are contained. 
+    * vocabularies: holds the 2019 and 2024 GO graphs in a simple json format, which relates each annotation with its parents.
+    * zero_shot: location of the datasets used for the zero-shot setting.
+
+
+The names of the main datasets used in the paper are in the list below. These names correspond (in most cases) to the keys in paths/data_pahts in the base_config.yaml.
+
+* **{TRAIN,VAL,TEST}_DATA_PATH**: correspond to the train, validation, and test sets used for training ProtNote. Thes are consistent with ProteInfer datasets.
+* **TEST_DATA_PATH_ZERO_SHOT**: zero-shot dataset for unseen, novel GO terms.
+* **TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES**: zero-shot dataset for unseen, novel GO terms, but only for the leaf nodes of the GO graph.
+* **TEST_EC_DATA_PATH_ZERO_SHOT**: zero-shot dataset of EC numbers, a data ProtNote was not trained on.
+* **TEST_2024_PINF_VOCAB_DATA_PATH**: TEST_DATA_PATH updated with the July 2024 GO annoations, but only including GO terms in the ProteInfer vocabulary. This dataset was used to isolate and quantify the impact of the changes in GO.
+* **test_*_GO.fasta**: Create smaller test sets for BLAST runtime calculation.
+* **TEST_TOP_LABELS_DATA_PATH**: a subset of TEST_DATA_PATH based on a sample of sequences and only the most frequent GO terms. This dataset was used for the embedding space analysis.
+
+
+
+## Inference with ProtNote
+
+
+
+## Train ProtNote
+
 
 ### 
 ## ProteInfer data
 ProteInfer models and datasets
 
 
-## Reproducing 
+## Reproducing paper results
 Run the following instructions in order to avoid any dependency issues.
 
-### Data
-We provide all the data required to run ProtNote and reproduce our results, but if you insist, this section explains how to download, process and create all the datasets. 
+### Data (warning: long section)
+We provide all the data required to run ProtNote and reproduce our results, but if you insist, this section explains how to download, process and create all the datasets **from scratch**
 
 ### ProteInfer Data
 Perform the following stepts to download the original ProteInfer dataset TFRecords:
@@ -115,6 +109,7 @@ To create the fasta versions of these files run the following commands from root
 ```
 python bin/make_proteinfer_dataset.py --dataset-type random --annotation-types GO
 python bin/make_proteinfer_dataset.py --dataset-type random --annotation-types EC
+cp data/swissprot/proteinfer_splits/random/test_EC.fasta data/zero_shot/
 ```
 
 ### Download annotations
@@ -123,15 +118,31 @@ Download GO annotations and EC numbers.
 ```
 python bin/download_GO_annotations.py --url https://release.geneontology.org/2019-07-01/ontology/go.obo --output-file go_annotations_2019_07_01.pkl
 python bin/download_GO_annotations.py --url https://release.geneontology.org/2024-06-17/ontology/go.obo --output-file go_annotations_jul_2024.pkl
+python bin/update_go_annotations.py --old-annotations-file-path data/annotations/go_annotations_2019_07_01.pkl --new-annotations-file-path data/annotations/go_annotations_jul_2024.pkl --output-file-path data/annotations/go_annotations_2019_07_01_updated.pkl
 python bin/download_EC_annotations.py
 ```
 
+WARNING: we download EC number data from Expasy, but they don't provide the data from different releases, so only the **latest** files can be downloaded. The download_EC_annotations.py script therefore will download the latest EC annoatations, which may not match exactly the annotations we used for testing. Therefore. to reproduce our EC numbers results we recommend using the files we provide in Zenodo.
 
 ### Zero Shot datasets, and few more
 Run ```python bin/create_test_sets.py``` to create all the remaining datasets used in the paper.
 
 
 ### Generate and cache embeddings
+
+We cached the text embeddings of annotation text descriptions under five scenarios: GO_2019 annotations with BioGPT, GO_2019 annotations with E5, EC numbers with BioGPT, EC numbers and E5, and GO_2024 annotations with E5. The following code generates the embeddings for these scenarios:
+
+```
+python bin/generate_label_embeddings.py --add-instruction --account-for-sos
+python bin/generate_label_embeddings.py --label-encoder-checkpoint microsoft/biogpt --account-for-sos
+
+python bin/generate_label_embeddings.py --base-label-embedding-path EC_BASE_LABEL_EMBEDDING_PATH --annotations-path-name EC_ANNOTATIONS_PATH --label-encoder-checkpoint microsoft/biogpt --account-for-sos
+python bin/generate_label_embeddings.py --base-label-embedding-path EC_BASE_LABEL_EMBEDDING_PATH --annotations-path-name EC_ANNOTATIONS_PATH --add-instruction --account-for-sos
+
+python bin/generate_label_embeddings.py --base-label-embedding-path GO_2024_BASE_LABEL_EMBEDDING_PATH --annotations-path-name GO_ANNOTATIONS_PATH --add-instruction --account-for-sos
+python bin/generate_label_embeddings.py --base-label-embedding-path GO_2024_BASE_LABEL_EMBEDDING_PATH --annotations-path-name GO_ANNOTATIONS_PATH --label-encoder-checkpoint microsoft/biogpt --account-for-sos
+
+```
 
 
 
@@ -152,34 +163,88 @@ python bin/download_and_test_proteinfer_seeds.py --get-predictions
 conda activate protnote
 ```
 
-
-## Data for Results notebook
-
-Run the following commands to generate all the data necessary for the "Results" notebook.
-
-
 ### ProtNote predictions on all test sets
 
-To generate all the predictions used in the Results notebook, run the following commands
+To generate all the predictions used in the Results notebook, you will need ProtNote's weights for the five different we used available in Zenodo (TODO: specify. Dump the models in the following directory: protnote/data/models/ProtNote ) or by directly training the models, then, run the following commands:
 
 ```
-python test_models.py --model-paths \
-    models/ProtNote/seed_replicates_v9_12_sum_last_epoch.pt \
-    models/ProtNote/seed_replicates_v9_22_sum_last_epoch.pt \
-    models/ProtNote/seed_replicates_v9_32_sum_last_epoch.pt \
-    models/ProtNote/seed_replicates_v9_42_sum_last_epoch.pt \
-    models/ProtNote/seed_replicates_v9_52_sum_last_epoch.pt \
-    --test-paths-names "TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES" "TEST_DATA_PATH_ZERO_SHOT" "TEST_EC_DATA_PATH_ZERO_SHOT" "TEST_DATA_PATH"\
-    --save-prediction-results
+python bin/test_models.py --model-files \
+    seed_replicates_v9_12_sum_last_epoch.pt \
+    seed_replicates_v9_22_sum_last_epoch.pt \
+    seed_replicates_v9_32_sum_last_epoch.pt \
+    seed_replicates_v9_42_sum_last_epoch.pt \
+    seed_replicates_v9_52_sum_last_epoch.pt \
+    --test-paths-names "TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES" "TEST_DATA_PATH_ZERO_SHOT" "TEST_EC_DATA_PATH_ZERO_SHOT" "TEST_DATA_PATH" --save-prediction-results
 
-python test_models.py --model-paths \
-    models/ProtNote/seed_replicates_v9_42_sum_last_epoch.pt \
+python bin/test_models.py --model-files \
+    seed_replicates_v9_42_sum_last_epoch.pt \
     --test-paths-names "TEST_2024_PINF_VOCAB_DATA_PATH" "TEST_2024_DATA_PATH" \
-    --save-prediction-results
+    --save-prediction-results \
+    --test-type model
 
-python test_models.py --model-paths \
-    models/ProtNote/seed_replicates_v9_42_sum_last_epoch.pt \
+
+python bin/test_models.py --model-files \
+    seed_replicates_v9_42_sum_last_epoch.pt \
     --test-paths-names "TEST_TOP_LABELS_DATA_PATH" \
     --save-prediction-results \
-    --save-embeddings
+    --save-embeddings \
+    --test-type model
 ```
+
+### BLAST-based predictions
+
+To get BLAST-based predictions on the supervised setting, use the following code:
+
+```
+python bin/run_blast.py --test-data-path data/swissprot/proteinfer_splits/random/test_GO.fasta --train-data-path data/swissprot/proteinfer_splits/random/train_GO.fasta
+```
+
+The same command can be used to run the BLAST-based inference on subset query sets of different sizes. The runtime logged in the terminal was used in the runtime comparison figure of the paper in the Supplementary Information. The file names of the query subsets of different sizes follow the pattern test_*_GO.fasta. For example, to log the runtime in the terminal for 1 query sequence run:
+
+```
+python bin/run_blast.py --test-data-path data/swissprot/proteinfer_splits/random/test_1_GO.fasta --train-data-path data/swissprot/proteinfer_splits/random/train_GO.fasta
+```
+
+### Calculate supervised metrics
+
+To calculate the supervised metrics for all models using the previously generated prediction files, run the following command:
+
+```
+python bin/calculate_supervised_metrics.py 
+```
+
+This script calculates the mAP Micro and mAP macro metrics for ProtNote and ProteInfer (both for five seeds), and the BLAST basline. It takes about 45min to run on an A100 GPU.
+
+## Other useful scripts
+
+### Latest SwissProt data
+To download the **latest** SwissProt file run
+
+```
+python bin/download_swissprot.py --url "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.dat.gz" --output-file "uniprot_sprot_latest.dat"
+```
+
+In general, we recommend downloading the SwissProt data directly from the release archive (here: https://ftp.ebi.ac.uk/pub/databases/uniprot/previous_releases/) for reproducibility
+
+
+## Contributing
+
+This project welcomes contributions and suggestions.  Most contributions require you to agree to a
+Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
+the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
+
+When you submit a pull request, a CLA bot will automatically determine whether you need to provide
+a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
+provided by the bot. You will only need to do this once across all repos using our CLA.
+
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
+For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
+contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft 
+trademarks or logos is subject to and must follow 
+[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
+Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
+Any use of third-party trademarks or logos are subject to those third-party's policies.

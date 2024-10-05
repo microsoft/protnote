@@ -46,7 +46,7 @@ params:
   EXTRACT_VOCABULARIES_FROM: FULL_DATA_PATH # Can be any predefined path (e.g., FULL_DATA_PATH) or null. Null means generate vocab from scratch with dataset. Must set to null for zero-shot
   OPTIMIZATION_METRIC_NAME: f1_macro # Only micro metrics are supported if sampling labels in validation
   DECISION_TH_METRIC_NAME: f1_macro
-  ESTIMATE_MAP: True
+  ESTIMATE_MAP: False
   NUM_EPOCHS: 46
 
   # Memory optimizations
@@ -135,7 +135,6 @@ paths:
     # Zero-shot data paths 
     TRAIN_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/fake_train_GO_zero_shot.fasta
     VAL_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/fake_dev_GO_zero_shot.fasta
-    VAL_DATA_PATH_ZERO_SHOT: swissprot/proteinfer_splits/random/fake_dev_GO_zero_shot.fasta
     TEST_DATA_PATH_ZERO_SHOT: zero_shot/GO_swissprot_jul_2024.fasta
     TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES: zero_shot/GO_swissprot_leaf_nodes_jul_2024.fasta
 
@@ -143,11 +142,11 @@ paths:
     VAL_EC_DATA_PATH_ZERO_SHOT: zero_shot/dev_EC.fasta
     TEST_EC_DATA_PATH_ZERO_SHOT: zero_shot/test_EC.fasta
     FULL_EC_DATA_PATH: swissprot/proteinfer_splits/random/full_EC.fasta
-    INFERENCE_DATA_PATH: zero_shot/inference.fasta
 
     # Vocabulary paths
     VOCABULARIES_DIR: vocabularies/proteinfer
-    GO_ANNOTATIONS_PATH: annotations/go_annotations_jul_2024.pkl #annotations/go_annotations_2019_07_01_updated.pkl # Original: go_annotations_2019_07_01.pkl Preprocessed with GPT-3.5: go_annotations_2019_07_01_condensed.pkl
+    GO_ANNOTATIONS_PATH: annotations/go_annotations_jul_2024.pkl
+    GO_ANNOTATIONS_2019_UPDATED_PATH: annotations/go_annotations_2019_07_01_updated.pkl
     EC_ANNOTATIONS_PATH: annotations/ec_annotations.pkl
 
     # Embeddings paths (if using frozen pre-trained models)
@@ -157,8 +156,8 @@ paths:
 
     # ProteInfer paths
     PARENTHOOD_LIB_PATH: vocabularies/parenthood_jul_2024.json
-    PROTEINFER_GO_WEIGHTS_PATH: models/proteinfer/GO_model_weights.pkl
-    PROTEINFER_EC_WEIGHTS_PATH: models/proteinfer/EC_model_weights.pkl
+    PROTEINFER_GO_WEIGHTS_PATH: models/proteinfer/GO_model_weights13703706.pkl
+    PROTEINFER_EC_WEIGHTS_PATH: models/proteinfer/EC_model_weights13703966.pkl
 
     #SwissProt
     LATEST_SWISSPROT_DATA_PATH: swissprot/uniprot_sprot_jul_2024.dat

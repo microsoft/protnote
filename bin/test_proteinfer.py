@@ -348,9 +348,9 @@ for loader_name, loader in loaders.items():
             save_evaluation_results(
                 results=test_results,
                 label_vocabulary=loader[0].dataset.label_vocabulary,
-                run_name=f"{task}_{args.name}" + str(args.model_weights_id)
+                run_name=f"{task}_{args.name}" + (str(args.model_weights_id)
                 if args.model_weights_id is not None
-                else "",
+                else ""),
                 output_dir=config["paths"]["RESULTS_DIR"],
                 data_split_name=loader_name,
                 save_as_h5=True,

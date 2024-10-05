@@ -42,7 +42,7 @@ def main():
     parser.add_argument(
         "--annotations-path-name",
         type=str,
-        default="GO_ANNOTATIONS_PATH",
+        default="GO_ANNOTATIONS_2019_UPDATED_PATH",
         help="Name of the annotation path. Defaults to GO.",
     )
 
@@ -88,6 +88,8 @@ def main():
             ],
         ),
     )
+    #Create output path dir if it doesn't exist
+    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
 
     INDEX_OUTPUT_PATH = OUTPUT_PATH.split(".")
     INDEX_OUTPUT_PATH = (
@@ -168,13 +170,14 @@ if __name__ == "__main__":
     '''
     Example usage: 
 
-     python bin/generate_label_embeddings.py --add-instruction --account-for-sos
-     python bin/generate_label_embeddings.py --label-encoder-checkpoint microsoft/biogpt --account-for-sos
+python bin/generate_label_embeddings.py --add-instruction --account-for-sos
+python bin/generate_label_embeddings.py --label-encoder-checkpoint microsoft/biogpt --account-for-sos
 
-     python bin/generate_label_embeddings.py --base-label-embedding-path EC_BASE_LABEL_EMBEDDING_PATH --annotations-path-name EC_ANNOTATIONS_PATH --label-encoder-checkpoint microsoft/biogpt --account-for-sos
-     python bin/generate_label_embeddings.py --base-label-embedding-path EC_BASE_LABEL_EMBEDDING_PATH --annotations-path-name EC_ANNOTATIONS_PATH --add-instruction --account-for-sos
-     python bin/generate_label_embeddings.py --base-label-embedding-path GO_2024_BASE_LABEL_EMBEDDING_PATH --annotations-path-name GO_ANNOTATIONS_PATH --add-instruction --account-for-sos
+python bin/generate_label_embeddings.py --base-label-embedding-path EC_BASE_LABEL_EMBEDDING_PATH --annotations-path-name EC_ANNOTATIONS_PATH --label-encoder-checkpoint microsoft/biogpt --account-for-sos
+python bin/generate_label_embeddings.py --base-label-embedding-path EC_BASE_LABEL_EMBEDDING_PATH --annotations-path-name EC_ANNOTATIONS_PATH --add-instruction --account-for-sos
 
+python bin/generate_label_embeddings.py --base-label-embedding-path GO_2024_BASE_LABEL_EMBEDDING_PATH --annotations-path-name GO_ANNOTATIONS_PATH --add-instruction --account-for-sos
+python bin/generate_label_embeddings.py --base-label-embedding-path GO_2024_BASE_LABEL_EMBEDDING_PATH --annotations-path-name GO_ANNOTATIONS_PATH --label-encoder-checkpoint microsoft/biogpt --account-for-sos
 
     
     '''

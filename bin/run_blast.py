@@ -126,14 +126,14 @@ def main():
         result.set_index("sequence_name", inplace=True)
         result.index.name = None
         result.to_parquet(
-            pivot_parsed_results_output_path + f"_batch_{batch}", index=True
+            str(pivot_parsed_results_output_path).replace('.parquet','') + f"_batch_{batch}.parquet", index=True
         )
 
     logger.info(f"Merging batched results.")
     batch_results = []
     for batch in tqdm(range(num_pivoting_baches)):
         batch_results.append(
-            pd.read_parquet(pivot_parsed_results_output_path + f"_batch_{batch}")
+            pd.read_parquet(str(pivot_parsed_results_output_path).replace('.parquet','') + f"_batch_{batch}.parquet")
         )
     pd.concat(batch_results).to_parquet(pivot_parsed_results_output_path, index=True)
 

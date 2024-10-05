@@ -5,8 +5,8 @@ from protnote.data.datasets import (
     create_multiple_loaders,
     calculate_sequence_weights,
 )
-from ProteinFunctions.protnote.models.ProtNoteTrainer import ProtNoteTrainer
-from ProteinFunctions.protnote.models.ProtNote import ProtNote
+from protnote.models.ProtNoteTrainer import ProtNoteTrainer
+from protnote.models.ProtNote import ProtNote
 from protnote.models.protein_encoders import ProteInfer
 from protnote.utils.losses import get_loss
 from protnote.utils.evaluation import EvalMetrics
@@ -172,6 +172,7 @@ def main():
         "--save-val-test-metrics-file",
         help="json file name to append val/test metrics",
         type=str,
+        default="val_test_metrics.json"
     )
 
     args = parser.parse_args()

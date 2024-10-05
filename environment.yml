@@ -1,6 +1,7 @@
 name: protnote
 channels:
   - biobuilds
+  - bioconda
   - pytorch
   - huggingface
   - nvidia
@@ -27,6 +28,8 @@ dependencies:
   - scikit-learn=1.3.0
   - matplotlib=3.9.2
   - umap-learn=0.5.4
+  - blast=2.12.0
+  - openpyxl=3.1.5
   - pip:
     - pip
     - torcheval==0.0.7

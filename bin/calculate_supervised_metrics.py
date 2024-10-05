@@ -28,14 +28,14 @@ def main():
     parser.add_argument(
         "--proteinfer-prediction-files",
         nargs="+",
-        default=['test_logits_GO_TEST_DATA_PATH_proteinfer{id}.h5' for id in pinf_model_ids],
+        default=[f'test_logits_GO_TEST_DATA_PATH_proteinfer{id}.h5' for id in pinf_model_ids],
         required=False,
         help="List of Proteinfer prediction files, potentially from different seeds",
     )
     parser.add_argument(
         "--protnote-prediction-files",
         nargs="+",
-        default=[f'test_1_logits_TEST_DATA_PATH_seed_replicates_v9_{seed}_sum_last_epoch.parquet' for seed in seeds],
+        default=[f'test_1_logits_TEST_DATA_PATH_seed_replicates_v9_{seed}_sum_last_epoch.h5' for seed in seeds],
         required=False,
         help="List of ProtNote prediction files, potentially from different seeds",
     )
@@ -59,7 +59,7 @@ def main():
     parser.add_argument(
         "--go-graph-file",
         type=str,
-        default="go_jul_2019.obo",
+        default="go_2019-07-01.obo",
         required=False,
         help="the file of the appropriate go graph. The version/date of the go graph should match the date of the test set",
     )
@@ -96,16 +96,17 @@ def main():
         "baseline_blast": args.blast_predictions_file
     }
 
-    models_labels = pd.read_parquet(args.protnote_prediction_files[0].replace('logits','labels'))
+    models_labels = pd.read_hdf(str(args.protnote_prediction_files[0]).replace('logits','labels'), key="labels_df", mode="r").astype("float32")
 
     metrics_df = []
     models = list(models_logits.keys())
     for model in tqdm(models):
+        print(model)
         for file in models_logits[model]:
             print(file)
-            if file.endswith(".parquet"):
+            if str(file).endswith(".parquet"):
                 logits_df = pd.read_parquet(file)
-            elif file.endswith(".h5"):
+            elif str(file).endswith(".h5"):
                 logits_df = pd.read_hdf(file, key="logits_df", mode="r").astype(
                     "float32"
                 )
@@ -117,13 +118,14 @@ def main():
 
             metrics = pd.DataFrame(metrics)
             metrics["model"] = model
-            metrics["test_name"] = args.args.test_set_name
+            metrics["test_name"] = args.test_set_name
             metrics.index.name = "metric"
             metrics = metrics.set_index(["model", "test_name"], append=True)
             metrics_df.append(metrics)
 
             del logits_df
             gc.collect()
+        print('-----------------')
 
     metrics_df = pd.concat(metrics_df)
     metrics_df.columns = metrics_df.columns.map(ontology2alias)

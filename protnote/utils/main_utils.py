@@ -22,7 +22,7 @@ def validate_arguments(args, parser):
             )
 
     # Raise error if no train path is provided and no model is loaded
-    if (args.train_path_name is None) and (args.load_model is None):
+    if (args.train_path_name is None) and (args.model_file is None):
         parser.error(
             "You must provide --load-model if no --train-path-names is provided"
         )

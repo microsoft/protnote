@@ -4,7 +4,19 @@ names=(
     "2024-08-21_06-12-36_SEED_42_LOSS_FN_BCE_SEQUENCE_WEIGHT_AGG_sum_last_epoch.pt" \
     "2024-08-21_06-33-42_SEED_42_LABEL_AUGMENTATION_DESCRIPTIONS_name_SEQUENCE_WEIGHT_AGG_sum_last_epoch.pt" \
     "2024-08-21_06-43-50_SEED_42_LABEL_ENCODER_CHECKPOINT_biogpt_SEQUENCE_WEIGHT_AGG_sum_last_epoch.pt" \
-    "2024-08-21_06-00-52_SEED_42_AUGMENT_RESIDUE_PROBABILITY_0_SEQUENCE_WEIGHT_AGG_sum_last_epoch.pt"
+    "2024-08-21_06-00-52_SEED_42_AUGMENT_RESIDUE_PROBABILITY_0_SEQUENCE_WEIGHT_AGG_sum_last_epoch.pt" \
+    "2024-09-09_19-34-44_seed_12_ablations_OVERRIDE_LABEL_AUGMENTATION_DESCRIPTIONS_name_last_epoch.pt" \
+    "2024-09-09_19-48-03_seed_12_ablations_OVERRIDE_LABEL_ENCODER_CHECKPOINT_biogpt_last_epoch.pt" \
+    "2024-09-09_19-47-36_seed_12_ablations_OVERRIDE_WEIGHTED_SAMPLING_False_last_epoch.pt" \
+    "2024-09-09_19-48-10_seed_12_ablations_OVERRIDE_AUGMENT_RESIDUE_PROBABILITY_0_last_epoch.pt" \
+    "2024-09-09_19-48-17_seed_12_ablations_OVERRIDE_LABEL_EMBEDDING_NOISING_ALPHA_0_last_epoch.pt" \
+    "2024-09-09_19-43-24_seed_12_ablations_OVERRIDE_LOSS_FN_BCE_last_epoch.pt" \
+    "2024-09-09_19-48-10_seed_22_ablations_OVERRIDE_LOSS_FN_BCE_last_epoch.pt" \
+    "2024-09-09_19-44-01_seed_22_ablations_OVERRIDE_WEIGHTED_SAMPLING_False_last_epoch.pt" \
+    "2024-09-09_19-43-36_seed_22_ablations_OVERRIDE_LABEL_ENCODER_CHECKPOINT_biogpt_last_epoch.pt" \
+    "2024-09-09_19-48-59_seed_22_ablations_OVERRIDE_AUGMENT_RESIDUE_PROBABILITY_0_last_epoch.pt" \
+    "2024-09-09_19-44-49_seed_22_ablations_OVERRIDE_LABEL_AUGMENTATION_DESCRIPTIONS_name_last_epoch.pt" \
+    "2024-09-09_19-47-49_seed_22_ablations_OVERRIDE_LABEL_EMBEDDING_NOISING_ALPHA_0_last_epoch.pt"
     ) 
 
 output_file='final_model_ablations.json'

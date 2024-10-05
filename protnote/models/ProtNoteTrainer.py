@@ -630,6 +630,7 @@ class ProtNoteTrainer:
                         run_name=self.run_name,
                         output_dir=self.config["paths"]["RESULTS_DIR"],
                         data_split_name=data_loader_name,
+                        save_as_h5=True
                     )
 
             # Aggregate the TP, FN, FP across all GPUs

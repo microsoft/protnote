@@ -4,7 +4,7 @@ from protnote.utils.configs import get_project_root
 if __name__ == "__main__":
     """
     Example usage:
-    python download_dataset.py --url "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.dat.gz" --output-file "uniprot_sprot_latest.dat"
+    python download_swissprot.py --url "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.dat.gz" --output-file "uniprot_sprot_latest.dat"
     """
     parser = argparse.ArgumentParser(
         description="Download and unzip swissprot file from a given link."
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    args.output_file = get_project_root() / 'data' / 'swissprot' / args.output_file
+    args.output_file = str(get_project_root() / 'data' / 'swissprot' / args.output_file)
 
     print("Downloading and unzipping file...")
     download_and_unzip(args.url, args.output_file)

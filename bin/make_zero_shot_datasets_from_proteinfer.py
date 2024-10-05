@@ -17,6 +17,8 @@ def split_labels(label_vocabulary):
     Returns:
     - tuple of lists, containing train_labels, val_labels, and test_labels.
     """
+    #set seed as 42 for random.shuffle
+    random.seed(42)
     random.shuffle(label_vocabulary)
     train_size = len(label_vocabulary) * 80 // 100
     val_size = len(label_vocabulary) * 10 // 100

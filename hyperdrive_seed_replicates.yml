@@ -37,7 +37,7 @@ search:
       --train-path-name TRAIN_DATA_PATH
       --validation-path-name VAL_DATA_PATH
       --name "{experiment_name}_{SEED}_{SEQUENCE_WEIGHT_AGG}"
-      --override ESTIMATE_MAP True OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 VALIDATION_BATCH_SIZE 8 TEST_BATCH_SIZE 8 NUM_EPOCHS 46 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label
+      --override ESTIMATE_MAP True
       --amlt
       --use-wandb
     submit_args:

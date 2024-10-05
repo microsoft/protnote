@@ -12,14 +12,14 @@ MODEL_NAME_TOKEN = "<MODEL_NAME>"
 
 #TODO: Simplify the overrides to only the needed ones
 TEST_COMMANDS = {
-    "TEST_DATA_PATH_ZERO_SHOT": f"python main.py --test-paths-names TEST_DATA_PATH_ZERO_SHOT --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.3 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label --model-file {MODEL_PATH_TOKEN} --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH --name TEST_DATA_PATH_ZERO_SHOT_{MODEL_NAME_TOKEN}",
-    "TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES": f"python main.py --test-paths-names TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.3 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label --model-file {MODEL_PATH_TOKEN} --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH --name TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES_{MODEL_NAME_TOKEN}",
-    "TEST_EC_DATA_PATH_ZERO_SHOT": f"python main.py --test-paths-names TEST_EC_DATA_PATH_ZERO_SHOT --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct DECISION_TH .3 --model-file {MODEL_PATH_TOKEN} --annotations-path-name EC_ANNOTATIONS_PATH --base-label-embedding-name EC_BASE_LABEL_EMBEDDING_PATH --name TEST_EC_DATA_PATH_ZERO_SHOT_{MODEL_NAME_TOKEN}",
-    "TEST_2024_DATA_PATH": f"python main.py --test-paths-names TEST_2024_DATA_PATH --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label --model-file {MODEL_PATH_TOKEN} --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH --name TEST_2024_DATA_PATH_{MODEL_NAME_TOKEN}",
-    "TEST_2024_PINF_VOCAB_DATA_PATH": f"python main.py --test-paths-names TEST_2024_PINF_VOCAB_DATA_PATH --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label --model-file {MODEL_PATH_TOKEN} --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH --name TEST_2024_PINF_VOCAB_DATA_PATH_{MODEL_NAME_TOKEN}",
-    "TEST_DATA_PATH": f"python main.py --test-paths-names TEST_DATA_PATH --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label --model-file {MODEL_PATH_TOKEN} --name TEST_DATA_PATH_{MODEL_NAME_TOKEN}",
-    "VAL_DATA_PATH": f"python main.py --test-paths-names VAL_DATA_PATH --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label --model-file {MODEL_PATH_TOKEN} --name VAL_DATA_PATH_{MODEL_NAME_TOKEN}",
-    "TEST_TOP_LABELS_DATA_PATH": f"python main.py --test-paths-names TEST_TOP_LABELS_DATA_PATH --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label --model-file {MODEL_PATH_TOKEN} --name TEST_DATA_PATH_{MODEL_NAME_TOKEN}"
+    "TEST_DATA_PATH_ZERO_SHOT": f"python bin/main.py --test-paths-names TEST_DATA_PATH_ZERO_SHOT --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.3 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label --model-file {MODEL_PATH_TOKEN} --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH --name TEST_DATA_PATH_ZERO_SHOT_{MODEL_NAME_TOKEN}",
+    "TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES": f"python bin/main.py --test-paths-names TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.3 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label --model-file {MODEL_PATH_TOKEN} --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH --name TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES_{MODEL_NAME_TOKEN}",
+    "TEST_EC_DATA_PATH_ZERO_SHOT": f"python bin/main.py --test-paths-names TEST_EC_DATA_PATH_ZERO_SHOT --override EXTRACT_VOCABULARIES_FROM null ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct DECISION_TH .3 --model-file {MODEL_PATH_TOKEN} --annotations-path-name EC_ANNOTATIONS_PATH --base-label-embedding-name EC_BASE_LABEL_EMBEDDING_PATH --name TEST_EC_DATA_PATH_ZERO_SHOT_{MODEL_NAME_TOKEN}",
+    "TEST_2024_DATA_PATH": f"python bin/main.py --test-paths-names TEST_2024_DATA_PATH --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label --model-file {MODEL_PATH_TOKEN} --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH --name TEST_2024_DATA_PATH_{MODEL_NAME_TOKEN}",
+    "TEST_2024_PINF_VOCAB_DATA_PATH": f"python bin/main.py --test-paths-names TEST_2024_PINF_VOCAB_DATA_PATH --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label --model-file {MODEL_PATH_TOKEN} --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH --name TEST_2024_PINF_VOCAB_DATA_PATH_{MODEL_NAME_TOKEN}",
+    "TEST_DATA_PATH": f"python bin/main.py --test-paths-names TEST_DATA_PATH --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label --model-file {MODEL_PATH_TOKEN} --name TEST_DATA_PATH_{MODEL_NAME_TOKEN}",
+    "VAL_DATA_PATH": f"python bin/main.py --test-paths-names VAL_DATA_PATH --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label --model-file {MODEL_PATH_TOKEN} --name VAL_DATA_PATH_{MODEL_NAME_TOKEN}",
+    "TEST_TOP_LABELS_DATA_PATH": f"python bin/main.py --test-paths-names TEST_TOP_LABELS_DATA_PATH --override EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label --model-file {MODEL_PATH_TOKEN} --name TEST_TOP_LABELS_DATA_PATH_{MODEL_NAME_TOKEN}"
 }
 
 #TODO: Change print for logger
@@ -49,6 +49,7 @@ def main():
         "--save-val-test-metrics-file",
         help="json file name to append val/test metrics",
         type=str,
+        default="val_test_metrics.json"
     )
 
     parser.add_argument(
@@ -62,6 +63,7 @@ def main():
 
     #Calculate baseline outputs if specified. Only runs once.
     aux_model_name = args.model_files[0].split(".pt")[0]
+
     if args.test_type in ["all", "baseline"]:
         print("Running baselines")
         for label_encoder, test_set in list(
@@ -70,14 +72,14 @@ def main():
                 ["TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES", "TEST_DATA_PATH_ZERO_SHOT"],
             )
         ):
-            command = f"python run_baseline.py --test-name {test_set} --cache --model-name {aux_model_name} --label-embedding-model {label_encoder} --annotation-type GO"
+            command = f"python bin/run_baseline.py --test-name {test_set} --cache --model-name {aux_model_name} --label-embedding-model {label_encoder} --annotation-type GO"
             print(f"Running command: {command}")
             subprocess.run(command, shell=True)
 
         for label_encoder, test_set in list(
             product(["BioGPT", "E5"], ["TEST_EC_DATA_PATH_ZERO_SHOT"])
         ):
-            command = f"python run_baseline.py --test-name {test_set} --cache --model-name {aux_model_name} --label-embedding-model {label_encoder} --annotation-type EC"
+            command = f"python bin/run_baseline.py --test-name {test_set} --cache --model-name {aux_model_name} --label-embedding-model {label_encoder} --annotation-type EC"
             print(f"Running command: {command}")
             subprocess.run(command, shell=True)
             
@@ -120,3 +122,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

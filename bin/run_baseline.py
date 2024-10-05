@@ -27,9 +27,9 @@ def main(
     config, project_root = load_config()
     results_dir = config["paths"]["output_paths"]["RESULTS_DIR"]
     full_data_path = config["paths"]['data_paths']['FULL_DATA_PATH']
-    proteinfer_predictions_path = results_dir / f"test_logits_{annotation_type}_{test_name}_proteinfer.parquet"
-    protnote_labels_path = results_dir / f"test_1_labels_{test_name}_{model_name}.parquet"
-    output_file = results_dir / f"test_logits_{annotation_type}_{test_name}_{label_embedding_model}_baseline.parquet"
+    proteinfer_predictions_path = results_dir / f"test_logits_{annotation_type}_{test_name}_proteinfer.h5"
+    protnote_labels_path = results_dir / f"test_1_labels_{test_name}_{model_name}.h5"
+    output_file = results_dir / f"test_logits_{annotation_type}_{test_name}_{label_embedding_model}_baseline.h5"
     
 
     logger = logging.getLogger()
@@ -57,12 +57,12 @@ def main(
         if annotation_type == "GO":
             logger.info("Running inference with Proteinfer...")
             subprocess.run(
-                f"python test_proteinfer.py --test-paths-names {test_name} --only-inference --override EXTRACT_VOCABULARIES_FROM null --save-prediction-results --name {test_name}_proteinfer --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH",
+                f"python bin/test_proteinfer.py --test-paths-names {test_name} --only-inference --override EXTRACT_VOCABULARIES_FROM null --save-prediction-results --name {test_name}_proteinfer --base-label-embedding-name GO_2024_BASE_LABEL_EMBEDDING_PATH",
                 shell=True,
             )
         elif annotation_type == "EC":
             subprocess.run(
-                f"python test_proteinfer.py --test-paths-names {test_name} --only-inference --override EXTRACT_VOCABULARIES_FROM null --save-prediction-results --name {test_name}_proteinfer --base-label-embedding-name EC_BASE_LABEL_EMBEDDING_PATH --annotations-path-name EC_ANNOTATIONS_PATH",
+                f"python bin/test_proteinfer.py --test-paths-names {test_name} --only-inference --override EXTRACT_VOCABULARIES_FROM null --save-prediction-results --name {test_name}_proteinfer --base-label-embedding-name EC_BASE_LABEL_EMBEDDING_PATH --annotations-path-name EC_ANNOTATIONS_PATH",
                 shell=True,
             )
     else:
@@ -77,13 +77,13 @@ def main(
         subprocess.run(
             TEST_COMMANDS[test_name]
             .replace(MODEL_PATH_TOKEN, f"{model_name}.pt")
-            .replace(MODEL_NAME_TOKEN, model_name),
+            .replace(MODEL_NAME_TOKEN, model_name) + " --save-prediction-results",
             shell=True,
         )
 
-    zero_shot_pinf_logits = pd.read_parquet(proteinfer_predictions_path)
-    zero_shot_labels = pd.read_parquet(protnote_labels_path)
-    vocabularies = generate_vocabularies(file_path=full_data_path)
+    zero_shot_pinf_logits = pd.read_hdf(proteinfer_predictions_path,key="logits_df").astype("float32")
+    zero_shot_labels = pd.read_hdf(protnote_labels_path, key="labels_df")
+    vocabularies = generate_vocabularies(file_path=str(full_data_path))
     zero_shot_pinf_logits.columns = vocabularies["label_vocab"]
 
     embeddings = torch.load(base_embeddings_path)
@@ -154,7 +154,7 @@ def main(
     ]
     zero_shot_pinf_baseline_logits.columns = zero_shot_labels.columns
 
-    zero_shot_pinf_baseline_logits.to_parquet(output_file)
+    zero_shot_pinf_baseline_logits.to_hdf(output_file,key='logits_df')
 
     # Evaluate performance of baseline
     eval_metrics = EvalMetrics(device="cuda")
@@ -221,3 +221,5 @@ if __name__ == "__main__":
         label_embedding_model=args.label_embedding_model,
         cache=args.cache,
     )
+
+

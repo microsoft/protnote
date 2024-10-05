@@ -195,13 +195,9 @@ def download_and_unzip(url, output_file):
         link (str): The URL to download the file from.
         filename (str): The absolute path to save the downloaded file.
     """
-    filename = output_file + ".gz"
 
     # Download the file from the web
-    zip_name = wget.download(url)
-
-    # Move the file to data/swissprot
-    os.rename(zip_name, filename)
+    zip_name = wget.download(url,out=os.path.dirname(output_file))
 
     # Unzip the downloaded file
     with gzip.open(zip_name, "rb") as f_in:
