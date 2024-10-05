@@ -42,13 +42,13 @@ All the data to train and run inference with ProtNote can be downloaded using th
 TODO: Add command
 ```
 
-* data
-    * annotations: contains the text descriptions of all the GO and EC annotations for 2019 and 2024.
-    * embeddings: stores the text description embeddings that are cached during training.
-    * models: holds ProtNote and ProteInfer weights for multiple seeds.
-    * swissprot: where all SwissProt fasta files are contained. 
-    * vocabularies: holds the 2019 and 2024 GO graphs in a simple json format, which relates each annotation with its parents.
-    * zero_shot: location of the datasets used for the zero-shot setting.
+* **data/**
+    * **annotations/**: contains the text descriptions of all the GO and EC annotations for 2019 and 2024.
+    * **embeddings/**: stores the text description embeddings that are cached during training.
+    * **models/**: holds ProtNote and ProteInfer weights for multiple seeds.
+    * **swissprot/**: where all SwissProt fasta files are contained. 
+    * **vocabularies/**: holds the 2019 and 2024 GO graphs in a simple json format, which relates each annotation with its parents.
+    * **zero_shot/**: location of the datasets used for the zero-shot setting.
 
 
 The names of the main datasets used in the paper are in the list below. These names correspond (in most cases) to the keys in paths/data_pahts in the base_config.yaml.
