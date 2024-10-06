@@ -129,12 +129,14 @@ The test set is specified via the --test-paths-names argument, and the argument 
 To run inference, simply run:
 
 ```
-python bin/main.py --test-paths-names {YOUR_TEST_SET_CONFIG_KEY} --model-file {MODEL_WEIGHTS_FILE}  --name {MODEL_RUN_NAME} --base-label-embedding-path {EMBEDDING_PATH_CONFIG_KEY} --annotations-path-name {ANNOTATIONS_PATH_CONFIG_KEY}
+python bin/main.py --test-paths-names {YOUR_TEST_SET_CONFIG_KEY} --model-file {MODEL_WEIGHTS_FILE}  --name {MODEL_RUN_NAME} --base-label-embedding-path {EMBEDDING_PATH_CONFIG_KEY} --annotations-path-name {ANNOTATIONS_PATH_CONFIG_KEY} --save-prediction-results --save-val-test-metrics --save-val-test-metrics-file {OUT_METRICS_FILE}
 ```
 
-* {YOUR_TEST_SET_CONFIG_KEY}:
-* {MODEL_WEIGHTS_FILE}: [ProtNote's weights](#protnotes-weights)
-* {MODEL_RUN_NAME}: 
+* **{YOUR_TEST_SET_CONFIG_KEY}**: the name of the test set path in the base_config.yaml (e.g., `TEST_DATA_PATH`)
+* **{MODEL_WEIGHTS_FILE}**: the file for [ProtNote's weights](#protnotes-weights) (e.g., seed_replicates_v9_42_sum_last_epoch.pt) 
+* **{MODEL_RUN_NAME}**: a name used to save predictions.
+* **--save-prediction-results**: optional flag to save the predictions in outputs/results/
+* **--save-val-test-metrics-file {OUT_METRICS_FILE}**: optional argument to specify a json to store test metrics (e.g.,prediction_metrics.json). This file will be stored in outputs/results/
 * {EMBEDDING_PATH_CONFIG_KEY} and {ANNOTATIONS_PATH_CONFIG_KEY}: please refer to [Function Description Text Embeddings](#function-description-text-embeddings) for descriptions of these.
 
 
@@ -142,17 +144,11 @@ python bin/main.py --test-paths-names {YOUR_TEST_SET_CONFIG_KEY} --model-file {M
 
 To train, simply add ```--train-path-name  {YOUR_TEST_SET_CONFIG_KEY}``` to the main.py command from [Inference](#inference).
 
+There are other training/testing arguments that can be modified in the base_config.yaml, some of the important ones are:
+* `DECISION_TH`: the decision threshold to turn probabilities into binary predictions. This is necessary to calculate threshold-dependent metrics like f1-score.
+* `OPTIMIZATION_METRIC_NAME`: the metric used to select the best model based on validation set performance. Defaults to f1_macro, but can also be f1_micro.
+* `{TRAIN,VAL,TEST}_BATCH_SIZE`: the train, val, test batch sizes.
 
-EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label 
-
-
-
-## Train ProtNote
-
-
-### 
-## ProteInfer data
-ProteInfer models and datasets
 
 
 ## Reproducing paper results
