@@ -68,60 +68,79 @@ The names of the main datasets used in the paper are in the list below. These na
 
 
 
-## Inference with ProtNote
-To run inference with ProtNote you will need:
+## Train and run nference with ProtNote
+To train and test with ProtNote you will need: the [ProtNote's weights](#protnotes-weights), an [Annotations File](#annotations-file), generated [Function Description Text Embeddings](#function-description-text-embeddings), and train/validation/test [Datasets](#datasets)
 
-* **ProtNote's weights**: There are five weights available in data/models/ProtNote (one for each seed) with the pattern data/models/ProtNote/seed_replicates_v9_{SEED}_sum_last_epoch.pt, where {SEED} can be any of 12,22,32,42,52.
-    * The model weights are passed through the argument --model-file
-    
-* **Test set**: a fasta with the following format:
+Both for training and inference you can use the main.py script. Refer to [Inference](#inference) and [Training](#training) for details.
 
-    ```
-    >{SEQUENCE_ID} {SPACE_SEPARATED_ANNOTATIONS}
-    {PROTEIN_AMINO_ACID_SEQUENCE}
-    ```
-
-    For example, two entries of the file may look like this:
-    ```
-    >SEQ456 GO:0006412 GO:0003735 GO:0005840
-    MAKQKTEVVRIVGRPFAYTL
-    >SEQ123 GO:0008150 GO:0003674
-    MKTFFSTVSAIVVLAVGLTLAG
-    ```
-
-    * The test set is specified via the --test-paths-names argument. Multiple test sets can be specified separated by space.
-
-* **Annotations File**: A pickle storing a pandas dataframe with the annotations and their text descriptions. The dataframe's index should be the function ID's, and the dataframe should have at least three columns: "label", "name", "synonym_exact". In the Gene Ontology, each term has a short description called "name", a long description called "label" and a list of equivalent descriptions called "synonym_exact". If using ProtNote for zero-shot inference on annotations other than GO annotations, the values of "label" and "name" columns can be identical, while the values for the "synonym_exact" column can be empty lists.
-
-    To seamlessly create the annotations file for GO annotations or EC numbers, we provie the download_GO_annotations.py and download_EC_annotations.py scripts. To get the GO annotations run:
-
-    ```
-    python bin/download_GO_annotations.py --url {GO_ANNOTATIONS_RELEASE_URL} --output-file {OUTPUT_FILE_NAME}
-    ```
-
-    Where {GO_ANNOTATIONS_RELEASE_URL} is a specific GO release (e.g., https://release.geneontology.org/2024-06-17/ontology/go.obo) and {OUTPUT_FILE_NAME} is the name of the annotations file that will be stored in data/annotations/ (e.g., go_annotations_jul_2024.pkl)
-
-    To download the *latest* EC annotations, run ``` python bin/download_EC_annotations.py ```
+### ProtNote's weights
+There are five weights available in data/models/ProtNote (one for each seed) with the pattern data/models/ProtNote/seed_replicates_v9_{SEED}_sum_last_epoch.pt, where {SEED} can be any of 12,22,32,42,52. The model weights are passed through the argument --model-file.
 
 
-* **Function description text embeddings**: For each sequence, ProtNote computes the likelihood that it is annotated with any of the available functional annotations in the dataset. To avoid repeatedly embedding the same functional text descriptions for every sequence, we calculate the text embeddings once and cache them for use during inference and training. This allows us to perform only *num_labels* forward passes through the text encoder, instead of *num_sequences × num_labels*.  
-    * To generate the embeddings that we used to train ProtNote, execute the following code:
+### Annotations File
+A pickle storing a pandas dataframe with the annotations and their text descriptions. The dataframe's index should be the function ID's, and the dataframe should have at least three columns: "label", "name", "synonym_exact". In the Gene Ontology, each term has a short description called "name", a long description called "label" and a list of equivalent descriptions called "synonym_exact". If using ProtNote for zero-shot inference on annotations other than GO annotations, the values of "label" and "name" columns can be identical, while the values for the "synonym_exact" column can be empty lists.
 
-    ```
-    python bin/generate_label_embeddings.py --base-label-embedding-path {EMBEDDING_PATH_CONFIG_KEY} --annotations-path-name {ANNOTATIONS_PATH_CONFIG_KEY} --add-instruction --account-for-sos
-    ```
+To seamlessly create the annotations file for GO annotations or EC numbers, we provie the download_GO_annotations.py and download_EC_annotations.py scripts. To get the GO annotations run:
 
-    * {EMBEDDING_PATH_CONFIG_KEY}: should be a key from the config that specifies the "base" path name where the embeddings will be stored. It's called "base" because {EMBEDDING_PATH_CONFIG_KEY} will be modified based on some of the arguments passed to script, such as the pooling method.
-    * {ANNOTATIONS_PATH_CONFIG_KEY}: the pkl file in data/annotations/ containing the text descriptions and creted in the previous **Annotations File** step.
+```
+python bin/download_GO_annotations.py --url {GO_ANNOTATIONS_RELEASE_URL} --output-file {OUTPUT_FILE_NAME}
+```
 
-    There are other arguments set to the following defaults we used during training/inference:
-        * **--label-encoder-checkpoint**:  defaults to intfloat/multilingual-e5-large-instruct, which is the Multilingual E5 Text ebeddings from HuggingFace.
-        * **--pooling-method**: the pooling strategy to summarize token embeddings into a sentence embedding. Defaults to mean pooling.
+Where {GO_ANNOTATIONS_RELEASE_URL} is a specific GO release (e.g., https://release.geneontology.org/2024-06-17/ontology/go.obo) and {OUTPUT_FILE_NAME} is the name of the annotations file that will be stored in data/annotations/ (e.g., go_annotations_jul_2024.pkl)
+
+To download the *latest* EC annotations, run ``` python bin/download_EC_annotations.py ```
 
 
-    
+### Function description text embeddings
+For each sequence, ProtNote computes the likelihood that it is annotated with any of the available functional annotations in the dataset. To avoid repeatedly embedding the same functional text descriptions for every sequence, we calculate the text embeddings once and cache them for use during inference and training. This allows us to perform only *num_labels* forward passes through the text encoder, instead of *num_sequences × num_labels*.  
 
-python bin/main.py --test-paths-names TEST_DATA_PATH --model-file  --name my_model_run
+To generate the embeddings that we used to train ProtNote, execute the following code:
+
+```
+python bin/generate_label_embeddings.py --base-label-embedding-path {EMBEDDING_PATH_CONFIG_KEY} --annotations-path-name {ANNOTATIONS_PATH_CONFIG_KEY} --add-instruction --account-for-sos
+```
+
+* {EMBEDDING_PATH_CONFIG_KEY}: should be a key from the config that specifies the "base" path name where the embeddings will be stored. It's called "base" because {EMBEDDING_PATH_CONFIG_KEY} will be modified based on some of the arguments passed to script, such as the pooling method.
+* {ANNOTATIONS_PATH_CONFIG_KEY}: the pkl file in data/annotations/ containing the text descriptions and creted in the previous **Annotations File** step.
+
+There are other arguments set to the following defaults we used during training/inference:
+    * **--label-encoder-checkpoint**:  defaults to intfloat/multilingual-e5-large-instruct, which is the Multilingual E5 Text ebeddings from HuggingFace.
+    * **--pooling-method**: the pooling strategy to summarize token embeddings into a sentence embedding. Defaults to mean pooling.
+
+### Datasets
+To run train you will need a training and validation datasets, and for inference you will need a test set. All of these datasets must be fasta files with the following format:
+
+```
+>{SEQUENCE_ID} {SPACE_SEPARATED_ANNOTATIONS}
+{PROTEIN_AMINO_ACID_SEQUENCE}
+```
+
+For example, two entries of the file may look like this:
+```
+>SEQ456 GO:0006412 GO:0003735 GO:0005840
+MAKQKTEVVRIVGRPFAYTL
+>SEQ123 GO:0008150 GO:0003674
+MKTFFSTVSAIVVLAVGLTLAG
+```
+
+The test set is specified via the --test-paths-names argument, and the argument allows for multiple test sets to be specified. 
+
+### Inference
+To run inference, simply run:
+
+```
+python bin/main.py --test-paths-names {YOUR_TEST_SET_CONFIG_KEY} --model-file {MODEL_WEIGHTS_FILE}  --name {MODEL_RUN_NAME} --base-label-embedding-path {EMBEDDING_PATH_CONFIG_KEY} --annotations-path-name {ANNOTATIONS_PATH_CONFIG_KEY}
+```
+
+* {YOUR_TEST_SET_CONFIG_KEY}:
+* {MODEL_WEIGHTS_FILE}: [ProtNote's weights](#protnotes-weights)
+* {MODEL_RUN_NAME}: 
+* {EMBEDDING_PATH_CONFIG_KEY} and {ANNOTATIONS_PATH_CONFIG_KEY}: please refer to [Function Description Text Embeddings](#function-description-text-embeddings) for descriptions of these.
+
+
+### Training
+
+To train, simply add ```--train-path-name  {YOUR_TEST_SET_CONFIG_KEY}``` to the main.py command from [Inference](#inference).
 
 
 EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label 
