@@ -13,7 +13,7 @@ function discovery by enabling scientists to use free text inputs, without restr
 capability for navigating the dynamic landscape of protein biology.
 
 <p align="center">
-<img src="img/main_fig.pdf" />
+<img src="img/main_fig.jpg" />
 </p>
 
 
