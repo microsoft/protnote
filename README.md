@@ -93,15 +93,15 @@ To run inference with ProtNote you will need:
 
 * **Annotations File**: A pickle storing a pandas dataframe with the annotations and their text descriptions. The dataframe's index should be the function ID's, and the dataframe should have at least three columns: "label", "name", "synonym_exact". In the Gene Ontology, each term has a short description called "name", a long description called "label" and a list of equivalent descriptions called "synonym_exact". If using ProtNote for zero-shot inference on annotations other than GO annotations, the values of "label" and "name" columns can be identical, while the values for the "synonym_exact" column can be empty lists.
 
-To seamlessly create the annotations file for GO annotations or EC numbers, we provie the download_GO_annotations.py and download_EC_annotations.py scripts. To get the GO annotations run:
+    To seamlessly create the annotations file for GO annotations or EC numbers, we provie the download_GO_annotations.py and download_EC_annotations.py scripts. To get the GO annotations run:
 
-```
-python bin/download_GO_annotations.py --url {GO_ANNOTATIONS_RELEASE_URL} --output-file {OUTPUT_FILE_NAME}
-```
+    ```
+    python bin/download_GO_annotations.py --url {GO_ANNOTATIONS_RELEASE_URL} --output-file {OUTPUT_FILE_NAME}
+    ```
 
-Where {GO_ANNOTATIONS_RELEASE_URL} is a specific GO release (e.g., https://release.geneontology.org/2024-06-17/ontology/go.obo) and {OUTPUT_FILE_NAME} is the name of the annotations file that will be stored in data/annotations/ (e.g., go_annotations_jul_2024.pkl)
+    Where {GO_ANNOTATIONS_RELEASE_URL} is a specific GO release (e.g., https://release.geneontology.org/2024-06-17/ontology/go.obo) and {OUTPUT_FILE_NAME} is the name of the annotations file that will be stored in data/annotations/ (e.g., go_annotations_jul_2024.pkl)
 
-To download the *latest* EC annotations, run ``` python bin/download_EC_annotations.py ```
+    To download the *latest* EC annotations, run ``` python bin/download_EC_annotations.py ```
 
 
 * **Function description text embeddings**: For each sequence, ProtNote computes the likelihood that it is annotated with any of the available functional annotations in the dataset. To avoid repeatedly embedding the same functional text descriptions for every sequence, we calculate the text embeddings once and cache them for use during inference and training. This allows us to perform only *num_labels* forward passes through the text encoder, instead of *num_sequences × num_labels*.  
