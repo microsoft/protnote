@@ -32,9 +32,13 @@ Most hyperparameters and paths are managed through the base_config.yaml. Wheneve
 * Argument ending in "path" corresponds to the full file path. E.g., data/swissprot/myfile.fasta
 * Argument ending in "file" corresponds to the full file name alone (including the extension). E.g., myfile.fasta. This is used for files with enforced location within the data folder structure
 
+## Notation
+The following notes will make it easier to navigate these instructions::
+* We denote user-defined inputs using all-caps text surrounded by curly braces. For example, {DATA_SET_PATH}, should be replaced by the user with a dataset path like path/to/dataset, without the curly braces.
+* We refer to specific keys in the base_config.yaml file using this format: `KEY_NAME`. For example, `TRAIN_DATA_PATH` and `TEST_DATA_PATH` refer to the paths for the datasets used to train and test ProtNote in the supervised setting.
+
 
 ## Data
-
 We train and test ProtNote with sequences from the SwissProt section of UniProt, corresponding to sequences human-verified funcitons. Further, we evaluate ProtNote on different zero shot scenarios, including prediction of unseen/novel GO terms, and EC Numbers - a type of annotations the model was not trained on.
 
 All the data to train and run inference with ProtNote can be downloaded using the following command:
@@ -54,17 +58,73 @@ TODO: Add command
 
 The names of the main datasets used in the paper are in the list below. These names correspond (in most cases) to the keys in paths/data_pahts in the base_config.yaml.
 
-* **{TRAIN,VAL,TEST}_DATA_PATH**: correspond to the train, validation, and test sets used for training ProtNote. Thes are consistent with ProteInfer datasets.
-* **TEST_DATA_PATH_ZERO_SHOT**: zero-shot dataset for unseen, novel GO terms.
-* **TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES**: zero-shot dataset for unseen, novel GO terms, but only for the leaf nodes of the GO graph.
-* **TEST_EC_DATA_PATH_ZERO_SHOT**: zero-shot dataset of EC numbers, a data ProtNote was not trained on.
-* **TEST_2024_PINF_VOCAB_DATA_PATH**: TEST_DATA_PATH updated with the July 2024 GO annoations, but only including GO terms in the ProteInfer vocabulary. This dataset was used to isolate and quantify the impact of the changes in GO.
+* `{TRAIN,VAL,TEST}_DATA_PATH`: correspond to the train, validation, and test sets used for training ProtNote. Thes are consistent with ProteInfer datasets.
+* `TEST_DATA_PATH_ZERO_SHOT`: zero-shot dataset for unseen, novel GO terms.
+* `TEST_DATA_PATH_ZERO_SHOT_LEAF_NODES`: zero-shot dataset for unseen, novel GO terms, but only for the leaf nodes of the GO graph.
+* `TEST_EC_DATA_PATH_ZERO_SHOT`: zero-shot dataset of EC numbers, a data ProtNote was not trained on.
+* `TEST_2024_PINF_VOCAB_DATA_PATH`: `TEST_DATA_PATH` updated with the July 2024 GO annoations, but only including GO terms in the ProteInfer vocabulary. This dataset was used to isolate and quantify the impact of the changes in GO.
 * **test_*_GO.fasta**: Create smaller test sets for BLAST runtime calculation.
-* **TEST_TOP_LABELS_DATA_PATH**: a subset of TEST_DATA_PATH based on a sample of sequences and only the most frequent GO terms. This dataset was used for the embedding space analysis.
+* TEST_TOP_LABELS_DATA_PATH: a subset of `TEST_DATA_PATH` based on a sample of sequences and only the most frequent GO terms. This dataset was used for the embedding space analysis.
 
 
 
 ## Inference with ProtNote
+To run inference with ProtNote you will need:
+
+* **ProtNote's weights**: There are five weights available in data/models/ProtNote (one for each seed) with the pattern data/models/ProtNote/seed_replicates_v9_{SEED}_sum_last_epoch.pt, where {SEED} can be any of 12,22,32,42,52.
+    * The model weights are passed through the argument --model-file
+    
+* **Test set**: a fasta with the following format:
+
+    ```
+    >{SEQUENCE_ID} {SPACE_SEPARATED_ANNOTATIONS}
+    {PROTEIN_AMINO_ACID_SEQUENCE}
+    ```
+
+    For example, two entries of the file may look like this:
+    ```
+    >SEQ456 GO:0006412 GO:0003735 GO:0005840
+    MAKQKTEVVRIVGRPFAYTL
+    >SEQ123 GO:0008150 GO:0003674
+    MKTFFSTVSAIVVLAVGLTLAG
+    ```
+
+    * The test set is specified via the --test-paths-names argument. Multiple test sets can be specified separated by space.
+
+* **Annotations File**: A pickle storing a pandas dataframe with the annotations and their text descriptions. The dataframe's index should be the function ID's, and the dataframe should have at least three columns: "label", "name", "synonym_exact". In the Gene Ontology, each term has a short description called "name", a long description called "label" and a list of equivalent descriptions called "synonym_exact". If using ProtNote for zero-shot inference on annotations other than GO annotations, the values of "label" and "name" columns can be identical, while the values for the "synonym_exact" column can be empty lists.
+
+To seamlessly create the annotations file for GO annotations or EC numbers, we provie the download_GO_annotations.py and download_EC_annotations.py scripts. To get the GO annotations run:
+
+```
+python bin/download_GO_annotations.py --url {GO_ANNOTATIONS_RELEASE_URL} --output-file {OUTPUT_FILE_NAME}
+```
+
+Where {GO_ANNOTATIONS_RELEASE_URL} is a specific GO release (e.g., https://release.geneontology.org/2024-06-17/ontology/go.obo) and {OUTPUT_FILE_NAME} is the name of the annotations file that will be stored in data/annotations/ (e.g., go_annotations_jul_2024.pkl)
+
+To download the *latest* EC annotations, run ``` python bin/download_EC_annotations.py ```
+
+
+* **Function description text embeddings**: For each sequence, ProtNote computes the likelihood that it is annotated with any of the available functional annotations in the dataset. To avoid repeatedly embedding the same functional text descriptions for every sequence, we calculate the text embeddings once and cache them for use during inference and training. This allows us to perform only *num_labels* forward passes through the text encoder, instead of *num_sequences × num_labels*.  
+    * To generate the embeddings that we used to train ProtNote, execute the following code:
+
+    ```
+    python bin/generate_label_embeddings.py --base-label-embedding-path {EMBEDDING_PATH_CONFIG_KEY} --annotations-path-name {ANNOTATIONS_PATH_CONFIG_KEY} --add-instruction --account-for-sos
+    ```
+
+    * {EMBEDDING_PATH_CONFIG_KEY}: should be a key from the config that specifies the "base" path name where the embeddings will be stored. It's called "base" because {EMBEDDING_PATH_CONFIG_KEY} will be modified based on some of the arguments passed to script, such as the pooling method.
+    * {ANNOTATIONS_PATH_CONFIG_KEY}: the pkl file in data/annotations/ containing the text descriptions and creted in the previous **Annotations File** step.
+
+    There are other arguments set to the following defaults we used during training/inference:
+        * **--label-encoder-checkpoint**:  defaults to intfloat/multilingual-e5-large-instruct, which is the Multilingual E5 Text ebeddings from HuggingFace.
+        * **--pooling-method**: the pooling strategy to summarize token embeddings into a sentence embedding. Defaults to mean pooling.
+
+
+    
+
+python bin/main.py --test-paths-names TEST_DATA_PATH --model-file  --name my_model_run
+
+
+EXTRACT_VOCABULARIES_FROM null DECISION_TH 0.5 ESTIMATE_MAP False OPTIMIZATION_METRIC_NAME f1_macro LABEL_ENCODER_CHECKPOINT intfloat/multilingual-e5-large-instruct AUGMENT_RESIDUE_PROBABILITY 0.1 LABEL_EMBEDDING_NOISING_ALPHA 20 TEST_BATCH_SIZE 8 LABEL_AUGMENTATION_DESCRIPTIONS name+label INFERENCE_GO_DESCRIPTIONS name+label 
 
 
 
@@ -125,7 +185,7 @@ python bin/download_EC_annotations.py
 
 WARNING: we download EC number data from Expasy, but they don't provide the data from different releases, so only the **latest** files can be downloaded. The download_EC_annotations.py script therefore will download the latest EC annoatations, which may not match exactly the annotations we used for testing. Therefore. to reproduce our EC numbers results we recommend using the files we provide in Zenodo.
 
-### Zero Shot datasets, and few more
+### Create Zero Shot datasets, and a few more
 Run ```python bin/create_test_sets.py``` to create all the remaining datasets used in the paper.
 
 
