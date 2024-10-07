@@ -154,10 +154,13 @@ There are other training/testing arguments that can be modified in the base_conf
 ## Reproducing paper results
 Run the following instructions in order to avoid any dependency issues.
 
+### Results Notebook
+TODO: fill this part
+
 ### Data (warning: long section)
 We provide all the data required to run ProtNote and reproduce our results, but if you insist, this section explains how to download, process and create all the datasets **from scratch**
 
-### ProteInfer Data
+#### ProteInfer Data
 Perform the following stepts to download the original ProteInfer dataset TFRecords:
 
 Install gcloud:
@@ -188,7 +191,7 @@ python bin/make_proteinfer_dataset.py --dataset-type random --annotation-types E
 cp data/swissprot/proteinfer_splits/random/test_EC.fasta data/zero_shot/
 ```
 
-### Download annotations
+#### Download annotations
 Download GO annotations and EC numbers.
 
 ```
@@ -200,11 +203,11 @@ python bin/download_EC_annotations.py
 
 WARNING: we download EC number data from Expasy, but they don't provide the data from different releases, so only the **latest** files can be downloaded. The download_EC_annotations.py script therefore will download the latest EC annoatations, which may not match exactly the annotations we used for testing. Therefore. to reproduce our EC numbers results we recommend using the files we provide in Zenodo.
 
-### Create Zero Shot datasets, and a few more
+#### Create Zero Shot datasets, and a few more
 Run ```python bin/create_test_sets.py``` to create all the remaining datasets used in the paper.
 
 
-### Generate and cache embeddings
+#### Generate and cache embeddings
 
 We cached the text embeddings of annotation text descriptions under five scenarios: GO_2019 annotations with BioGPT, GO_2019 annotations with E5, EC numbers with BioGPT, EC numbers and E5, and GO_2024 annotations with E5. The following code generates the embeddings for these scenarios:
 
@@ -222,7 +225,7 @@ python bin/generate_label_embeddings.py --base-label-embedding-path GO_2024_BASE
 
 
 
-### ProteInfer Models
+#### ProteInfer Models
 Example of two ProteInfer models. One is gor GO annotation prediction, the other is for EC number predictions. There are multiple models with this format in their cloud storage with different id's corresponding to distinct seeds. The seed is the 8-digit number before the file extension:
 
 * https://storage.googleapis.com/brain-genomics-public/research/proteins/proteinfer/models/zipped_models/noxpd2_cnn_swissprot_go_random_swiss-cnn_for_swissprot_go_random-13703706.tar.gz
@@ -239,7 +242,7 @@ python bin/download_and_test_proteinfer_seeds.py --get-predictions
 conda activate protnote
 ```
 
-### ProtNote predictions on all test sets
+#### ProtNote predictions on all test sets
 
 To generate all the predictions used in the Results notebook, you will need ProtNote's weights for the five different we used available in Zenodo (TODO: specify. Dump the models in the following directory: protnote/data/models/ProtNote ) or by directly training the models, then, run the following commands:
 
@@ -267,7 +270,7 @@ python bin/test_models.py --model-files \
     --test-type model
 ```
 
-### BLAST-based predictions
+#### BLAST-based predictions
 
 To get BLAST-based predictions on the supervised setting, use the following code:
 
@@ -281,7 +284,7 @@ The same command can be used to run the BLAST-based inference on subset query se
 python bin/run_blast.py --test-data-path data/swissprot/proteinfer_splits/random/test_1_GO.fasta --train-data-path data/swissprot/proteinfer_splits/random/train_GO.fasta
 ```
 
-### Calculate supervised metrics
+#### Calculate supervised metrics
 
 To calculate the supervised metrics for all models using the previously generated prediction files, run the following command:
 
