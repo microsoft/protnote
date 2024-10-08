@@ -56,14 +56,14 @@ if __name__ == "__main__":
         "--embeddings-path",
         type=str,
         required=False,
-        default= results_dir / "test_1_embeddings_TEST_TOP_LABELS_DATA_PATH_normal_test_label_aug_v4/batches_0_99.pt",
+        default= results_dir / "test_1_embeddings_TEST_TOP_LABELS_DATA_PATH_seed_replicates_v9_42_sum_last_epoch/batches_0_99.pt",
         help="The .pt path of the embeddings to perform umap on.",
     )
 
     parser.add_argument(
         "--go-graph-file",
         type=str,
-        default="go_jul_2019.obo",
+        default="go_2019-07-01.obo", #TODO: change to the appropriate go graph file
         required=False,
         help="the file of the appropriate go graph. The version/date of the go graph should match the date of the test set used to generate --embeddings-path",
     )
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    figures_dir = results_dir / "figures"
+    figures_dir = results_dir.parents[0] / "figures"
     plt.rcParams["font.size"] = 14
 
     if not os.path.exists(figures_dir):
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     embeddings = torch.load(args.embeddings_path,map_location="cpu")
     joint_embedding_dim = embeddings["joint_embeddings"].shape[-1]
     num_labels = embeddings["labels"].shape[-1]
-    vocab = generate_vocabularies(config['paths']['data_paths'][args.test_data_path])["label_vocab"]
+    vocab = generate_vocabularies(str(config['paths']['data_paths'][args.test_data_path]))["label_vocab"]
     graph = obonet.read_obo(project_root / 'data' / 'annotations' / args.go_graph_file)
     vocab_parents = [
         (graph.nodes[go_term]["namespace"] if go_term in graph.nodes else "missing")
@@ -115,8 +115,6 @@ if __name__ == "__main__":
     print(f"Testing {num_combinations} hparam combinations")
 
     hue = vocab_parents * (args.num_seqs)
-    mask = [i != "missing" for i in hue]
-    hue_masked = [hue_val for hue_val, mask_val in zip(hue, mask) if mask_val]
     match_binary_mask = embeddings["labels"][: args.num_seqs, :].flatten()
 
     palette = sns.color_palette("tab10")
@@ -129,7 +127,8 @@ if __name__ == "__main__":
         fig = plt.figure(figsize=(7, 7))
         title = f"match vs unmatch n_neighbors={n_neighbors}, min_dist={min_dist}, n = {len(X_r)}"
         # output layer showing separation between matching and un-matching protein-function pairs
-        palette_ = palette[7:8] + palette[6:7]
+        palette_ = palette[7:8] + [(227/255,179/255,51/255)] #palette[6:7]
+        print(X_r.shape,num_labels)
         sns.scatterplot(
             x=X_r[:, 0],
             y=X_r[:, 1],
@@ -154,12 +153,13 @@ if __name__ == "__main__":
         fig = plt.figure(figsize=(7, 7))
         
         palette_ = palette[4:5] + palette[8:10]
-        match_binary_mask = match_binary_mask.astype(bool) & mask
+        match_binary_mask = match_binary_mask.astype(bool)
         X_r = (
             umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist)
             .fit(X_s[match_binary_mask])
             .embedding_
         )
+        print(X_r.shape,num_labels)
         title = f"top hierarchy n_neighbors={n_neighbors}, min_dist={min_dist}, , n = {len(X_r)}"
         sns.scatterplot(
             x=X_r[:, 0],
@@ -167,10 +167,10 @@ if __name__ == "__main__":
             marker=".",
             hue=[
                 hue_val
-                for hue_val, mask_val, binary_mask_val in zip(
-                    hue, mask, match_binary_mask
+                for hue_val, binary_mask_val in zip(
+                    hue, match_binary_mask
                 )
-                if mask_val & binary_mask_val
+                if binary_mask_val
             ],
             s=15,
             edgecolor=None,

@@ -17,6 +17,39 @@ capability for navigating the dynamic landscape of protein biology.
 </p>
 
 
+## Table of Contents
+
+<!-- toc -->
+
+- [Instalation](#instalation)
+- [Config](#config)
+- [Notation](#notation)
+- [Data](#data)
+- [Train and run nference with ProtNote](#train-and-run-nference-with-protnote)
+  * [ProtNote's weights](#protnotes-weights)
+  * [Annotations File](#annotations-file)
+  * [Function description text embeddings](#function-description-text-embeddings)
+  * [Datasets](#datasets)
+  * [Inference](#inference)
+  * [Training](#training)
+- [Reproducing paper results](#reproducing-paper-results)
+  * [Using our provided Zenodo data](#using-our-provided-zenodo-data)
+  * [Downloading and pre-processing the data from scratch (warning: long section)](#downloading-and-pre-processing-the-data-from-scratch-warning-long-section)
+    + [ProteInfer Data](#proteinfer-data)
+    + [Download annotations](#download-annotations)
+    + [Create Zero Shot datasets, and a few more](#create-zero-shot-datasets-and-a-few-more)
+    + [Generate and cache embeddings](#generate-and-cache-embeddings)
+    + [ProteInfer Models](#proteinfer-models)
+    + [ProtNote predictions on all test sets](#protnote-predictions-on-all-test-sets)
+    + [BLAST-based predictions](#blast-based-predictions)
+    + [Calculate supervised metrics](#calculate-supervised-metrics)
+- [Other useful scripts](#other-useful-scripts)
+  * [Latest SwissProt data](#latest-swissprot-data)
+- [Contributing](#contributing)
+- [Trademarks](#trademarks)
+
+<!-- tocstop -->
+
 ## Instalation
 ```
 git clone https://github.com/microsoft/protnote.git
@@ -152,13 +185,26 @@ There are other training/testing arguments that can be modified in the base_conf
 
 
 ## Reproducing paper results
-Run the following instructions in order to avoid any dependency issues.
+Run the Results.ipynb notebook in the notebooks folder to reproduce all the results shown in the paper. This notebook reads the data from folders called "data" and "outputs". Because of their size, this folders are not included in the repo, but are available in Zenodo and can also be generated from scratch using the scripts in this repo.
 
-### Results Notebook
-TODO: fill this part
+The following two sections explain how get the data to run the notebook successullfy either by 1. using the data we provide in Zenodo (short way) , or 2. downloading and preprocessing all the data from scratch using our scripts. 
 
-### Data (warning: long section)
-We provide all the data required to run ProtNote and reproduce our results, but if you insist, this section explains how to download, process and create all the datasets **from scratch**
+*With the "data" and "outputs" folders inplace using any of the two methods, reproducing our results is as simple as running the Results.ipynb notebook end-to-end.*
+
+### Using our provided Zenodo data
+
+Download the data, ablation_models and outputs folders. *Make sure you are in the root repo directory. The data, ablation_models, and outputs folders weight X,Y, and Z GB, respectively*:
+
+TODO: add commands here, includding downloading the ablation_models into the correct path and with all ablation models out of the ablation_models folder and inside the models folder.
+
+```
+```
+
+By the end of the download, you should have new "data" and "outputs" folders. Fin
+
+
+### Downloading and pre-processing the data from scratch (warning: long section)
+We provide all the data required to run ProtNote and reproduce our results, but if you insist, this section explains how to download, process and create all the datasets **from scratch**. Run the following instructions in order to avoid any dependency issues.
 
 #### ProteInfer Data
 Perform the following stepts to download the original ProteInfer dataset TFRecords:
