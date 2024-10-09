@@ -200,7 +200,7 @@ TODO: add commands here, includding downloading the ablation_models into the cor
 ```
 ```
 
-By the end of the download, you should have new "data" and "outputs" folders. Fin
+By the end of the download, you should have new "data" and "outputs" folders. 
 
 
 ### Downloading and pre-processing the data from scratch (warning: long section)
