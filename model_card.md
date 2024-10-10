@@ -14,14 +14,11 @@ Understanding the protein sequence-function relationship is essential for advanc
 ProtNote is a multimodal deep learning model that leverages free-form text to enable both supervised and zero-shot protein function prediction. ProtNote not only maintains near state-of-the-art performance for annotations in its train set, but also generalizes to unseen and novel functions in zero-shot test settings.
 
 - **Developed by:** Samir Char, Nathaniel Corley, Sarah Alamdari, Kevin K. Yang, Ava P. Amini
-- **Shared by [optional]:** Microsoft Research New England
+- **Shared by:** Microsoft Research New England
 - **Model type:** ProtNote is two tower Deep Learning model for protein funciton prediction. The first tower is a Convolutional Neural Network that encodes protein sequences, while the second is a Transformer used to encode protein function text descriptions. These two representations are combined through and output Multi Layer Perceptron that computes the final predictions.
 - **Language(s) (NLP):** English
 - **License:** [MIT License](https://opensource.org/licenses/MIT)
-- **Finetuned from model [optional]:** 
-    -  https://huggingface.co/intfloat/multilingual-e5-large-instruct
-    - https://github.com/google-research/proteinfer/tree/master
-
+  
 ### Model Sources [optional]
 
 <!-- Provide the basic links for the model. -->
