@@ -18,6 +18,7 @@ capability for navigating the dynamic landscape of protein biology.
 
 
 ## Table of Contents
+ <!-- markdown-toc -i README.md -->
 
 <!-- toc -->
 
@@ -26,7 +27,7 @@ capability for navigating the dynamic landscape of protein biology.
 - [Notation](#notation)
 - [Data](#data)
 - [Train and run inference with ProtNote](#train-and-run-inference-with-protnote)
-  * [ProtNote weights](#protnotes-weights)
+  * [ProtNote weights](#protnote-weights)
   * [Annotations file](#annotations-file)
   * [Function description text embeddings](#function-description-text-embeddings)
   * [Datasets](#datasets)
@@ -34,12 +35,12 @@ capability for navigating the dynamic landscape of protein biology.
   * [Training](#training)
 - [Reproducing paper results](#reproducing-paper-results)
   * [Using our provided Zenodo data](#using-our-provided-zenodo-data)
-  * [Downloading and pre-processing the data from scratch (warning: long section)](#downloading-and-pre-processing-the-data-from-scratch-warning-long-section)
-    + [ProteInfer data](#proteinfer-data)
+  * [Complete Data Workflow: Download, Preprocess, and Model Output (warning: long section)](#complete-data-workflow-download-preprocess-and-model-output-warning-long-section)
+    + [ProteInfer Data](#proteinfer-data)
     + [Download annotations](#download-annotations)
     + [Create zero-shot datasets, and a few more](#create-zero-shot-datasets-and-a-few-more)
     + [Generate and cache embeddings](#generate-and-cache-embeddings)
-    + [ProteInfer models](#proteinfer-models)
+    + [ProteInfer Models](#proteinfer-models)
     + [ProtNote predictions on all test sets](#protnote-predictions-on-all-test-sets)
     + [BLAST-based predictions](#blast-based-predictions)
     + [Calculate supervised metrics](#calculate-supervised-metrics)
@@ -179,7 +180,7 @@ python bin/main.py --test-paths-names {YOUR_TEST_SET_CONFIG_KEY} --model-file {M
 
 ### Training
 
-To train, simply add ```--train-path-name  {YOUR_TEST_SET_CONFIG_KEY}``` to the `main.py` command from [Inference](#inference).
+To train, simply add ```--train-path-name  {YOUR_TRAIN_SET_CONFIG_KEY}``` to the `main.py` command from [Inference](#inference).
 
 There are other training/testing arguments that can be modified in the `base_config.yaml`, some of the important ones are:
 * `DECISION_TH`: the decision threshold to turn probabilities into binary predictions. This is necessary to calculate threshold-dependent metrics like f1-score.
@@ -207,8 +208,8 @@ TODO: add commands here, includding downloading the ablation_models into the cor
 By the end of the download, you should have new "data" and "outputs" folders. *TODO: finish this section*
 
 
-### Downloading and pre-processing the data from scratch (warning: long section)
-We provide all the data required to run ProtNote and reproduce our results, but if you insist, this section explains how to download, process, and create all the datasets **from scratch**. Run the following instructions in order to avoid any dependency issues.
+### Complete Data Workflow: Download, Preprocess, and Model Output (warning: long section)
+We provide all the data required to run ProtNote and reproduce our results, but if you insist, this section explains how to download, process, and create all the datasets **from scratch**. Moreover, the section explains how to use these datasets to generate all the model outputs and metrics analyzed in the `Results.ipynb` notebook. Run the following instructions in order to avoid any dependency issues.
 
 #### ProteInfer Data
 Perform the following stepts to download the original ProteInfer dataset TFRecords:
