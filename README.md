@@ -75,12 +75,15 @@ The following notes will make it easier to navigate these instructions:
 ## Data
 We train and test ProtNote with protein sequences from the SwissProt section of UniProt, corresponding to sequences with human-verified funcitons. Further, we evaluate ProtNote on different zero shot scenarios, including prediction of unseen/novel GO terms and of EC Numbers -- a type of annotation which the model was not trained on.
 
-All the data to train and run inference with ProtNote can be downloaded using the following command:
+All the data to train and run inference with ProtNote can is available in the data.zip file (17.6 GB) that can be downloaded from Zenodo using the following command *from the protnote root folder*:
 
 ```
-TODO: Add command
+sudo apt-get install unzip
+curl -O https://zenodo.org/records/13897920/files/data.zip?download=1
+unzip data.zip
 ```
 
+The data folder has the following structure:
 * **data/**
     * **annotations/**: contains the text descriptions of all the GO and EC annotations for the 2019 and 2024 releases used for ProtNote.
     * **embeddings/**: stores the text description embeddings that are cached during training.
@@ -198,12 +201,21 @@ The following two sections explain how to get the data to run the notebook succe
 
 ### Using our provided Zenodo data
 
-Download the data, ablation_models, and outputs folders. *Make sure you are in the root repo directory. The data, ablation_models, and outputs folders are X, Y, and Z GB in size, respectively*:
+Download the data, ablation_models, and outputs folders. *Make sure you are in the root repo directory. The data, ablation_models, and outputs folders are 17.6, 41.4, and 18.7 GB in size, respectively*.
 
 TODO: add commands here, includding downloading the ablation_models into the correct path and with all ablation models out of the ablation_models folder and inside the models folder.
 
 ```
+sudo apt-get install unzip
+curl -O https://zenodo.org/records/13897920/files/data.zip?download=1
+curl -O https://zenodo.org/records/13897920/files/ablation_models.zip?download=1
+curl -O https://zenodo.org/records/13897920/files/outputs.zip?download=1
+unzip data.zip
+unzip outputs.zip
+cd 
+unzip data.zip
 ```
+
 
 By the end of the download, you should have new "data" and "outputs" folders. *TODO: finish this section*
 
