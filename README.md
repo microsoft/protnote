@@ -203,21 +203,20 @@ The following two sections explain how to get the data to run the notebook succe
 
 Download the data, ablation_models, and outputs folders. *Make sure you are in the root repo directory. The data, ablation_models, and outputs folders are 17.6, 41.4, and 18.7 GB in size, respectively*.
 
-TODO: add commands here, includding downloading the ablation_models into the correct path and with all ablation models out of the ablation_models folder and inside the models folder.
-
 ```
-sudo apt-get install unzip
+sudo apt-get install unzip # Install unzip if necessary
+#Download files from zenodo
 curl -O https://zenodo.org/records/13897920/files/data.zip?download=1
 curl -O https://zenodo.org/records/13897920/files/ablation_models.zip?download=1
 curl -O https://zenodo.org/records/13897920/files/outputs.zip?download=1
+#Unzip files in the correct directories
 unzip data.zip
 unzip outputs.zip
-cd 
-unzip data.zip
+unzip -j ablation_models.zip -d data/models/ProtNote/ 
 ```
 
 
-By the end of the download, you should have new "data" and "outputs" folders. *TODO: finish this section*
+By the end of the download, you should have new "data" and "outputs" folders, in which the contents of ablation_models.zip would be inside of data/models/ProtNote.
 
 
 ### Complete Data Workflow: Download, Preprocess, and Model Output (warning: long section)
@@ -307,7 +306,7 @@ conda activate protnote
 
 #### ProtNote predictions on all test sets
 
-To generate all the predictions shown in the Results notebook, you will need ProtNote's weights for the five different seeds we used, available in Zenodo (TODO: specify). Dump the downloaded models in the following directory: protnote/data/models/ProtNote; or directly train the models. Then, run the following commands:
+To generate all the predictions shown in the Results notebook, you will need ProtNote's weights for the five different seeds we used, available in Zenodo (https://zenodo.org/records/13897920/files/data.zip in the directory data/models/ProtNote/). Dump the downloaded models in the following directory: protnote/data/models/ProtNote; or directly train the models. Then, run the following commands:
 
 ```
 python bin/test_models.py --model-files \
