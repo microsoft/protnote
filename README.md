@@ -302,6 +302,7 @@ git clone https://github.com/google-research/proteinfer.git ../proteinfer
 conda activate proteinfer
 python bin/download_and_test_proteinfer_seeds.py --get-predictions
 conda activate protnote
+python bin/test_proteinfer.py --test-paths-names TEST_2024_PINF_VOCAB_DATA_PATH --only-inference --only-represented-labels --save-prediction-results --name TEST_2024_PINF_VOCAB_DATA_PATH_proteinfer --model-weights-id 13703706
 ```
 
 #### ProtNote predictions on all test sets
@@ -319,7 +320,7 @@ python bin/test_models.py --model-files \
 
 python bin/test_models.py --model-files \
     seed_replicates_v9_42_sum_last_epoch.pt \
-    --test-paths-names "TEST_2024_PINF_VOCAB_DATA_PATH" "TEST_2024_DATA_PATH" \
+    --test-paths-names "TEST_2024_PINF_VOCAB_DATA_PATH" \
     --save-prediction-results \
     --test-type model
 

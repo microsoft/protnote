@@ -8,6 +8,7 @@ import numpy as np
 from tqdm import tqdm
 import argparse
 import os
+import re
 from collections import defaultdict
 from protnote.utils.losses import FocalLoss
 from torcheval.metrics import MultilabelAUPRC, BinaryAUPRC
@@ -214,7 +215,8 @@ loaders = create_multiple_loaders(
 
 model_weights = paths[f"PROTEINFER_{args.proteinfer_weights}_WEIGHTS_PATH"]
 if args.model_weights_id is not None:
-    model_weights = model_weights.replace(".pkl", f"{args.model_weights_id}.pkl")
+    model_weights = re.sub(r'(\d+)\.pkl$', str(args.model_weights_id) + '.pkl', model_weights)
+    
 
 model = ProteInfer.from_pretrained(
     weights_path=model_weights,
