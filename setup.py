@@ -36,7 +36,7 @@ setup(
         "ipykernel==6.29.5", #Jupyter notebook
         "scipy==1.13.1", # Viz
         "seaborn==0.13.2", # Viz
-        "scikit-learn==1.3.0",
+        "scikit-learn==1.5.0",
         "matplotlib==3.9.2", # Viz
         "umap-learn==0.5.4" # Viz
     ],
