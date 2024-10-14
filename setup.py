@@ -18,7 +18,7 @@ setup(
         "torchvision==0.15.2",  # TorchVision
         # "pytorch-cuda==11.8", #PyTorch CUDA
         "pandas==1.5.2",  # Pandas
-        "joblib==1.1.1",  # Joblib
+        "joblib==1.2.0",  # Joblib
         "transformers==4.32.1",  # Huggingface Transformers
         "torchmetrics==1.2.0",  # PyTorch metrics
         "torchdata==0.7.1",  # PyTorch Data
