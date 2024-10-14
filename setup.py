@@ -14,7 +14,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/microsoft/ProteinFunctions", #TODO: Change repo name
     install_requires=[
-        "torch==2.0.1",  # PyTorch
+        "torch==2.2.0",  # PyTorch
         "torchvision==0.15.2",  # TorchVision
         # "pytorch-cuda==11.8", #PyTorch CUDA
         "pandas==1.5.2",  # Pandas
