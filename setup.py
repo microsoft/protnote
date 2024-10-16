@@ -14,12 +14,12 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/microsoft/ProteinFunctions", #TODO: Change repo name
     install_requires=[
-        "torch==2.0.1",  # PyTorch
+        "torch==2.2.0",  # PyTorch
         "torchvision==0.15.2",  # TorchVision
         # "pytorch-cuda==11.8", #PyTorch CUDA
         "pandas==1.5.2",  # Pandas
-        "joblib==1.1.1",  # Joblib
-        "transformers==4.32.1",  # Huggingface Transformers
+        "joblib==1.2.0",  # Joblib
+        "transformers==4.38.0",  # Huggingface Transformers
         "torchmetrics==1.2.0",  # PyTorch metrics
         "torchdata==0.7.1",  # PyTorch Data
         "wandb==0.15.11",  # Weights and Biases
@@ -36,7 +36,7 @@ setup(
         "ipykernel==6.29.5", #Jupyter notebook
         "scipy==1.13.1", # Viz
         "seaborn==0.13.2", # Viz
-        "scikit-learn==1.3.0",
+        "scikit-learn==1.5.0",
         "matplotlib==3.9.2", # Viz
         "umap-learn==0.5.4" # Viz
     ],
