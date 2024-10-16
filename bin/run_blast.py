@@ -56,6 +56,13 @@ def main():
         help="Whether to cache results if available",
     )
 
+    parser.add_argument(
+        "--save-runtime-info",
+        action="store_true",
+        default=False,
+        help="Whether to save runtime information"
+    )
+
     args = parser.parse_args()
 
     # Suppress all Biopython warnings
@@ -67,6 +74,7 @@ def main():
     raw_results_output_path = results_dir / f"blast_raw_{test_name}_{train_name}_results.tsv"
     parsed_results_output_path = results_dir / f"blast_parsed_{test_name}_{train_name}_results.parquet"
     pivot_parsed_results_output_path = results_dir / f"blast_pivot_parsed_{test_name}_{train_name}_results.parquet"
+    runtime_info_output_path = results_dir / f"blast_runtime_info_{test_name}_{train_name}.csv"
 
     bth = BlastTopHits(
         db_fasta_path=args.train_data_path, queries_fasta_path=args.test_data_path
@@ -141,7 +149,54 @@ def main():
     logger.info(f"Search Duration: {bth.run_duration_seconds}")
     logger.info(f"Parse Duration: {bth.parse_results_duration_seconds}")
 
+    # Save the search and parse duration in a csv file, along with the size of query set
+    
+    if args.save_runtime_info:
+        search_parse_duration = pd.DataFrame(
+            {
+                "search_duration": [bth.run_duration_seconds],
+                "parse_duration": [bth.parse_results_duration_seconds],
+                "query_size": [len(read_fasta(args.test_data_path))]
+            }
+        )
+        search_parse_duration.to_csv(runtime_info_output_path, index=False)
+
+
 
 if __name__ == "__main__":
-    "sample usage: python run_blast.py --test-data-path data/swissprot/proteinfer_splits/random/test_GO.fasta --train-data-path data/swissprot/proteinfer_splits/random/train_GO.fasta" 
+    """
+    sample usage: 
+    
+    python run_blast.py --test-data-path data/swissprot/proteinfer_splits/random/test_GO.fasta --train-data-path data/swissprot/proteinfer_splits/random/train_GO.fasta
+    
+
+    # List of numbers to iterate over
+    numbers=(1 10 100 1000 5000 10000 20000)  # Modify this list with your actual numbers
+
+    # Loop through each number in the list
+    for num in "${numbers[@]}"; do
+        # Run the python script with the current number in the file path
+        python bin/run_blast.py --test-data-path data/swissprot/proteinfer_splits/random/test_${num}_GO.fasta --train-data-path data/swissprot/proteinfer_splits/random/train_GO.fasta --save-runtime-info;
+    done
+
+    python bin/run_blast.py --test-data-path data/swissprot/proteinfer_splits/random/test_GO.fasta --train-data-path data/swissprot/proteinfer_splits/random/train_GO.fasta --save-runtime-info;
+
+    
+
+
+
+
+    numbers=(20000)  # Modify this list with your actual numbers
+
+    # Loop through each number in the list
+    for num in "${numbers[@]}"; do
+        # Run the python script with the current number in the file path
+        python bin/run_blast.py --test-data-path data/swissprot/proteinfer_splits/random/test_${num}_GO.fasta --train-data-path data/swissprot/proteinfer_splits/random/train_GO.fasta --save-runtime-info;
+    done
+
+    python bin/run_blast.py --test-data-path data/swissprot/proteinfer_splits/random/test_GO.fasta --train-data-path data/swissprot/proteinfer_splits/random/train_GO.fasta --save-runtime-info;
+    """
     main()
+
+#!/bin/bash
+
