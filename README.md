@@ -341,19 +341,10 @@ To get BLAST-based predictions on the supervised setting, use the following code
 python bin/run_blast.py --test-data-path data/swissprot/proteinfer_splits/random/test_GO.fasta --train-data-path data/swissprot/proteinfer_splits/random/train_GO.fasta
 ```
 
-The same command can be used to run the BLAST-based inference on subset query sets of different sizes. The runtime logged in the terminal was used in the runtime comparison figure of the paper in the Supplementary Information. The file names of the query subsets of different sizes follow the pattern: `test_*_GO.fasta` where `*` refers to the number of sequences. For example, run the following command to log the runtime in the terminal for all the query set sizes and save the stats in csv's:
+The same command can be used to run the BLAST-based inference on subset query sets of different sizes. The runtime logged in the terminal was used in the runtime comparison figure of the paper in the Supplementary Information. The file names of the query subsets of different sizes follow the pattern: `test_*_GO.fasta` where `*` refers to the number of sequences. For example, to log the runtime in the terminal for 1 query sequence run:
 
 ```
-numbers=(1 10 100 1000 5000 10000 20000)  
-
-# Loop through each number in the list
-for num in "${numbers[@]}"; do
-    # Run the python script with the current number in the file path
-    python bin/run_blast.py --test-data-path data/swissprot/proteinfer_splits/random/test_${num}_GO.fasta --train-data-path data/swissprot/proteinfer_splits/random/train_GO.fasta --save-runtime-info;
-done
-
-python bin/run_blast.py --test-data-path data/swissprot/proteinfer_splits/random/test_GO.fasta --train-data-path data/swissprot/proteinfer_splits/random/train_GO.fasta --save-runtime-info;
-
+python bin/run_blast.py --test-data-path data/swissprot/proteinfer_splits/random/test_1_GO.fasta --train-data-path data/swissprot/proteinfer_splits/random/train_GO.fasta
 ```
 
 #### Calculate supervised metrics
