@@ -74,3 +74,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     main(ids = args.ids, get_predictions = args.get_predictions)
+

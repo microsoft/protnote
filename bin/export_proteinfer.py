@@ -1,7 +1,7 @@
 import json
 import os
 import sys
-root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Construct the path to the proteinfer directory
 proteinfer_dir = os.path.join(root_dir, 'proteinfer')
 sys.path.append(proteinfer_dir)
