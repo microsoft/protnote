@@ -41,4 +41,5 @@ dependencies:
     - blosum==2.0.2
     - biopython==1.84
     - ipykernel==6.29.5
+    - statsmodels==0.14.4
 prefix: /anaconda/envs/protnote

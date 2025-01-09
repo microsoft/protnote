@@ -26,14 +26,14 @@ def complete_blast_preds(blast_df: pd.DataFrame, labels: list, seqs: list):
     return blast_df
 
 
-def get_metrics(logits_df, labels_df, device, threshold):
+def get_metrics(logits_df, labels_df, device, threshold,pattern="f1_m.*"):
     logits = torch.tensor(logits_df.values, device=device)
     labels = torch.tensor(labels_df.values, device=device)
     probabilities = torch.sigmoid(logits)
 
     eval_metrics = EvalMetrics(device)
     selected_eval_metrics = eval_metrics.get_metric_collection_with_regex(
-        pattern="f1_m.*", threshold=threshold, num_labels=labels.shape[-1]
+        pattern=pattern, threshold=threshold, num_labels=labels.shape[-1]
     )
     mAP_micro = BinaryAUPRC(device=device)
     mAP_macro = MultilabelAUPRC(device=device, num_labels=labels.shape[-1])
