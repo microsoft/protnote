@@ -22,8 +22,8 @@ from google.cloud import storage
 import json
 from sklearn.metrics import precision_recall_curve
 
-BUCKET_NAME = "protex"
-PREDICTIONS_DIR = "predictions"
+PROTEX_BUCKET_NAME = "protex"
+PROTEX_PREDICTIONS_DIR = "predictions"
 NEG_INF = -1e9
 
 def read_jsonl_from_gcs(bucket_name, file_name):

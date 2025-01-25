@@ -138,8 +138,8 @@ def metrics_by_ec_level_1(
     return results
 
 
-def save_fig(name):
-    plt.savefig(f"{name}.pdf", format="pdf", dpi=1200, bbox_inches="tight")
+def save_fig(name,extension="pdf"):
+    plt.savefig(f"{name}.{extension}", format=extension, dpi=1200, bbox_inches="tight")
 
 
 def plot_axes_add_letter_index(axes, loc=(0.1, 0.9)):
