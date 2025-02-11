@@ -19,7 +19,7 @@ setup(
         # "pytorch-cuda==11.8", #PyTorch CUDA
         "pandas==1.5.2",  # Pandas
         "joblib==1.2.0",  # Joblib
-        "transformers==4.38.0",  # Huggingface Transformers
+        "transformers==4.48.0",  # Huggingface Transformers
         "torchmetrics==1.2.0",  # PyTorch metrics
         "torchdata==0.7.1",  # PyTorch Data
         "wandb==0.15.11",  # Weights and Biases
