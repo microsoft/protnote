@@ -167,7 +167,10 @@ def plot_category_performance(
     ax=None,
     figsize=None,
     palette=None,
-):
+    points_palette=None
+):  
+    points_palette = points_palette if points_palette is not None else palette
+    
     plot_df = (
         metrics_df.query("metric == @metric and test_name == @test_name")
         .melt(ignore_index=False, var_name=[category_name], value_name=metric)
